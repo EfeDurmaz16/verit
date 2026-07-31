@@ -2,16 +2,18 @@
   "name": "@cyclops/adapter-pi",
   "version": "0.0.1",
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@cyclops/adapter-memory": "workspace:*",
     "@cyclops/ports": "workspace:*",
-    "effect": "^3.14.14"
+    "effect": "^3.14.14",
+    "@cyclops/domain": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.8.3",
