@@ -64,7 +64,13 @@ export interface VcsPort {
     repo: string,
     number: number,
   ) => Effect.Effect<
-    { pr: PullRequest; closingNumbers: readonly number[]; changedPaths: readonly string[] },
+    {
+      pr: PullRequest;
+      closingNumbers: readonly number[];
+      changedPaths: readonly string[];
+      /** Unified patch when available (may be truncated by host). */
+      patch: string;
+    },
     StoreError
   >;
 }
@@ -79,6 +85,9 @@ export interface ClassifierPort {
 
 export interface HarnessPort {
   readonly runUnderstand: (input: {
+    title: string;
+    body: string;
+    paths: readonly string[];
     diff: string;
     context: ReviewContext;
     role: "implement" | "review";
@@ -102,5 +111,8 @@ export interface ProofRenderPort {
     understanding: Understanding;
     context: ReviewContext;
     risksReviewer: Understanding["risks"];
+    archNodes?: Array<{ id: string; label: string }>;
+    archEdges?: Array<{ from: string; to: string; kind?: string }>;
+    suggestedPatch?: string;
   }) => unknown;
 }

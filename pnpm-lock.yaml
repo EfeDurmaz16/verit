@@ -143,9 +143,9 @@ importers:
 
   packages/adapters/pi:
     dependencies:
-      '@cyclops/adapter-memory':
+      '@cyclops/domain':
         specifier: workspace:*
-        version: link:../memory
+        version: link:../../domain
       '@cyclops/ports':
         specifier: workspace:*
         version: link:../../ports

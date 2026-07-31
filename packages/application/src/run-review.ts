@@ -42,6 +42,9 @@ export const runReviewUnderstand = (deps: {
     const compiled = compileReviewPack(presets);
     const context = { ...input.context, domain, focus };
     const understanding = yield* deps.harness.runUnderstand({
+      title: input.title,
+      body: input.body,
+      paths: input.paths,
       diff: input.diff,
       context,
       role: "review",
@@ -57,10 +60,24 @@ export const runReviewUnderstand = (deps: {
       createdAt: input.nowIso,
     });
     yield* deps.docs.saveUnderstandingJson(runId, understanding);
+    const archNodes = input.paths.slice(0, 24).map((p) => ({
+      id: p,
+      label: p.split("/").pop() ?? p,
+    }));
+    const archEdges =
+      archNodes.length > 1
+        ? archNodes.slice(1).map((n, i) => ({
+            from: archNodes[0]!.id,
+            to: n.id,
+            kind: i === 0 ? "touches" : "co-changed",
+          }))
+        : [];
     const spec = deps.render.toSpec({
       understanding,
       context,
       risksReviewer: understanding.risks.filter((r) => r.source === "reviewer"),
+      archNodes,
+      archEdges,
     });
     const body = JSON.stringify(spec);
     yield* deps.docs.upsertProofArtifact({

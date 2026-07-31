@@ -21,6 +21,15 @@ export const makeGithubVcs = (token?: string): VcsPort => {
           for (const m of body.matchAll(/(?:closes|fixes|resolves)\s+#(\d+)/gi)) {
             closingNumbers.push(Number(m[1]));
           }
+          const patchParts: string[] = [];
+          for (const f of files) {
+            if (f.patch) {
+              patchParts.push(`diff --git a/${f.filename} b/${f.filename}\n${f.patch}`);
+            } else {
+              patchParts.push(`# ${f.status ?? "changed"}: ${f.filename}`);
+            }
+          }
+          const patch = patchParts.join("\n\n");
           return {
             pr: {
               id: `pr:${owner}/${repo}#${number}`,
@@ -35,6 +44,7 @@ export const makeGithubVcs = (token?: string): VcsPort => {
             },
             closingNumbers,
             changedPaths: files.map((f) => f.filename),
+            patch,
           };
         },
         catch: (e) => new StoreError("github fetch PR", e),

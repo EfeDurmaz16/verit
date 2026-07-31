@@ -57,4 +57,7 @@ export const applySpecStream = (spec: Spec, ops: readonly SpecStreamOp[]): Spec 
 };
 
 export const catalogPrompt = (): string =>
-  `You may only emit json-render elements of types: ${PROOF_CATALOG.join(", ")}. Root must be Workspace.`;
+  `You may only emit json-render elements of types: ${PROOF_CATALOG.join(", ")}. Root must be Workspace. Understanding must include what/why/how. RisksList must separate authorDeclared (hints) from reviewerFound. Do not invent proof — empty ProofEvidence is honest.`;
+
+/** Author hints vs reviewer findings — never treat author list as an allowlist. */
+export type RiskRow = { area: string; note: string; source?: string };

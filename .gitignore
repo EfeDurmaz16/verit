@@ -10,3 +10,6 @@ dist/
 coverage/
 .data/
 tmp/
+packages/web/public/fixtures/latest.spec.json
+packages/web/public/fixtures/solana-foundation-pay-415.spec.json
+packages/web/public/fixtures/dry-run.spec.json

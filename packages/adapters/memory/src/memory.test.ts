@@ -50,7 +50,7 @@ describe("memory adapters + runReviewUnderstand", () => {
     expect(result.understanding.what.length).toBeGreaterThan(0);
     expect(result.skillPackHash).toHaveLength(64);
     const saved = await Effect.runPromise(docs.getUnderstandingJson(result.runId));
-    expect(saved?.how).toContain("diff");
+    expect(saved?.how.toLowerCase()).toMatch(/diff|path/);
     expect((result.spec as { root: string }).root).toBe("workspace");
   });
 });

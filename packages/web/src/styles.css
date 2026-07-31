@@ -1,0 +1,259 @@
+:root {
+  color-scheme: light;
+  --bg: #f3efe6;
+  --ink: #1a1a18;
+  --muted: #5c5a52;
+  --line: #d4cfc2;
+  --panel: #fffdf8;
+  --accent: #0f5c4c;
+  --warn: #8a4b12;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: "IBM Plex Sans", "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(1200px 600px at 10% -10%, #e7f0ec 0%, transparent 55%),
+    linear-gradient(180deg, #efe9dc 0%, var(--bg) 40%, #ebe4d6 100%);
+  color: var(--ink);
+  font-family: var(--sans);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 1.25rem 1.25rem 3rem;
+}
+
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.brand {
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.topbar select,
+.topbar button {
+  font: inherit;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 0.35rem 0.6rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.status {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.section {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 1rem 1.1rem 1.15rem;
+}
+
+.section h2 {
+  margin: 0 0 0.75rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.understanding h1 {
+  margin: 0.15rem 0 0.85rem;
+  font-size: clamp(1.35rem, 2.4vw, 1.85rem);
+  line-height: 1.25;
+  font-weight: 650;
+}
+
+.kicker {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.wwih {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.85rem;
+}
+
+.wwih p {
+  margin: 0.35rem 0 0;
+  color: var(--ink);
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.proof-refs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.proof-refs li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 0.6rem;
+  align-items: baseline;
+  padding: 0.45rem 0.55rem;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+}
+
+.proof-refs .kind {
+  grid-row: 1 / 3;
+  align-self: center;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.proof-refs .label {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.proof-refs code {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  word-break: break-all;
+}
+
+.risks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.risk-col h3 {
+  margin: 0 0 0.25rem;
+  font-size: 0.95rem;
+}
+
+.hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  color: var(--warn);
+}
+
+.risk-col ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
+.arch-nodes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.node {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  padding: 0.25rem 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #f7f3ea;
+}
+
+.arch-edges {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+}
+
+.arch-edges .kind {
+  color: var(--muted);
+}
+
+.meta .sep {
+  margin: 0 0.45rem;
+  color: var(--line);
+}
+
+.meta ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.patch {
+  margin: 0;
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  background: #1a1a18;
+  color: #f3efe6;
+  padding: 0.75rem;
+  border-radius: 8px;
+}
+
+.callout {
+  border-left: 3px solid var(--accent);
+  padding: 0.5rem 0.75rem;
+  background: #eef6f3;
+}
+
+@media (max-width: 720px) {
+  .wwih,
+  .risks {
+    grid-template-columns: 1fr;
+  }
+}
