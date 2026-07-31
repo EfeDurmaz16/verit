@@ -1,0 +1,21 @@
+{
+  "name": "@cyclops/adapter-treesitter",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cyclops/ports": "workspace:*",
+    "@cyclops/adapter-memory": "workspace:*",
+    "effect": "^3.14.14",
+    "web-tree-sitter": "^0.25.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.2"
+  }
+}

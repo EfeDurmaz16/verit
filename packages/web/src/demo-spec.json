@@ -1,0 +1,72 @@
+{
+  "root": "workspace",
+  "elements": {
+    "workspace": {
+      "type": "Workspace",
+      "props": {},
+      "children": ["overview", "proof", "risks", "arch", "meta"]
+    },
+    "overview": {
+      "type": "Section",
+      "props": { "id": "overview", "title": "Understanding" },
+      "children": ["summary"]
+    },
+    "summary": {
+      "type": "Understanding",
+      "props": {
+        "headline": "Demo: pay gate CLI",
+        "what": "Demo: pay gate CLI",
+        "why": "operators need gated flows",
+        "how": "new subcommands under cli",
+        "body": "Why: operators need gated flows.\n\nHow: new subcommands under cli."
+      }
+    },
+    "proof": {
+      "type": "Section",
+      "props": { "id": "proof", "title": "Proof" },
+      "children": ["proofList"]
+    },
+    "proofList": {
+      "type": "ProofEvidence",
+      "props": {
+        "refs": [{ "kind": "command", "label": "test", "value": "pnpm test" }]
+      }
+    },
+    "risks": {
+      "type": "Section",
+      "props": { "id": "risks", "title": "Risks" },
+      "children": ["riskList"]
+    },
+    "riskList": {
+      "type": "RisksList",
+      "props": {
+        "authorDeclared": [{ "area": "auth", "note": "token scope" }],
+        "reviewerFound": [{ "area": "stub", "note": "wire Pi" }]
+      }
+    },
+    "arch": {
+      "type": "Section",
+      "props": { "id": "arch", "title": "Architecture" },
+      "children": ["archGraph"]
+    },
+    "archGraph": {
+      "type": "ArchGraph",
+      "props": {
+        "nodes": [
+          { "id": "cli", "label": "pay CLI" },
+          { "id": "gate", "label": "gate service" }
+        ],
+        "edges": [{ "from": "cli", "to": "gate", "kind": "calls" }]
+      }
+    },
+    "meta": {
+      "type": "Section",
+      "props": { "id": "meta", "title": "Meta" },
+      "children": ["metaRow"]
+    },
+    "metaRow": {
+      "type": "Meta",
+      "props": { "domain": "CRYPTO", "focus": "SECURITY", "outOfScope": [] }
+    }
+  }
+}

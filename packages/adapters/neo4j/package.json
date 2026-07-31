@@ -1,0 +1,22 @@
+{
+  "name": "@cyclops/adapter-neo4j",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cyclops/domain": "workspace:*",
+    "@cyclops/ports": "workspace:*",
+    "@cyclops/adapter-memory": "workspace:*",
+    "effect": "^3.14.14",
+    "neo4j-driver": "^5.28.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.2"
+  }
+}

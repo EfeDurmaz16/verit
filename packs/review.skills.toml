@@ -1,0 +1,60 @@
+# GENERATED — golden fixture; do not hand-edit as product truth.
+# Change presets.json instead; re-emit via pure compiler when implemented.
+# skill_pack_hash = "sha256:fixture-review-payments-security-v0"
+# Paths reference the shared catalog (Decision 24 / AB) — no duplicated skill bodies.
+
+[defaults]
+agent_model_env = "BYOK_MODEL"
+min_confidence_inline = 0.85
+max_inline_findings = 5
+proof = "behavior_changing_default"
+
+[identity]
+tone = "harsh"
+narrative = "direct"
+
+[domain]
+primary = "PAYMENTS"
+focus = "SECURITY"
+
+[[skills]]
+id = "understand"
+path = "skills/understand/SKILL.md"
+append = """
+role=review
+domain=PAYMENTS
+focus=SECURITY
+Prefer payment flows, money movement, and authz boundaries; elevate security-sensitive paths.
+"""
+on = ["pull_request", "local_diff"]
+
+[[skills]]
+id = "prove"
+path = "skills/prove/SKILL.md"
+on = ["pull_request", "local_diff"]
+when_proof = ["behavior_changing_default", "every_pr"]
+requires = ["sandbox"]
+
+[[skills]]
+id = "risk"
+path = "skills/risk/SKILL.md"
+on = ["pull_request", "local_diff"]
+
+[[skills]]
+id = "patch"
+path = "skills/patch/SKILL.md"
+on = ["pull_request", "local_diff"]
+# phase a: unified diff / short suggestion (default)
+# phase b: apply_patch CLI = dogfood / opt-in
+# phase c: autofix_open_pr = customer opt-in later only
+
+[[skills]]
+id = "render"
+path = "skills/render/SKILL.md"
+on = ["always"]
+
+[[skills]]
+id = "post"
+path = "skills/post/SKILL.md"
+on = ["pull_request"]
+inline_policy = "high_confidence_only"

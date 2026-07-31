@@ -1,0 +1,12 @@
+# Cyclops domain language
+
+| Term | Meaning |
+|---|---|
+| Understanding | Canonical what/why/how JSON (+ proof_refs, risks, out_of_scope) |
+| ReviewDomain | Closed enum of review specialties (not tech stacks) |
+| Focus | Optional second lens; must differ from primary domain |
+| Proof page | json-render Spec within fixed catalog — primary human surface |
+| GraphStore | Neo4j ontology + PR/git memory |
+| DocumentStore | SQLite runs, proof blobs, FTS |
+| skill_pack_hash | Content hash of compiled pack |
+| author risks | Hints only — never allowlist for reviewers |

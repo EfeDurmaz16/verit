@@ -1,0 +1,36 @@
+name: cyclops-dogfood
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "owner/repo#number (default solana-foundation/pay#415)"
+        required: false
+        default: "solana-foundation/pay#415"
+  pull_request:
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install
+      - run: pnpm test
+      - name: Run cyclops review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_SPEC: ${{ github.event.inputs.pr || 'solana-foundation/pay#415' }}
+          CYCLOPS_SQLITE_PATH: .data/cyclops.db
+        run: pnpm --filter @cyclops/action exec tsx src/run.ts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cyclops-proof
+          path: .data/proofs/
+          if-no-files-found: warn

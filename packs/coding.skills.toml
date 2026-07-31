@@ -1,0 +1,39 @@
+# GENERATED — golden fixture; do not hand-edit as product truth.
+# skill_pack_hash = "sha256:fixture-coding-implement-v0"
+# Same catalog paths as review where shared (Decision 24 / AB).
+
+[defaults]
+agent_model_env = "BYOK_MODEL"
+
+[identity]
+tone = "harsh"
+narrative = "direct"
+
+[[skills]]
+id = "understand"
+path = "skills/understand/SKILL.md"
+append = """
+role=implement
+Draft Understanding for the change you are about to make; risks[] are author hypothesis only.
+"""
+
+[[skills]]
+id = "plan"
+path = "skills/plan/SKILL.md"
+
+[[skills]]
+id = "build"
+path = "skills/build/SKILL.md"
+
+[[skills]]
+id = "verify"
+path = "skills/verify/SKILL.md"
+
+[[skills]]
+id = "review"
+path = "skills/review/SKILL.md"
+# pre-PR internal-reviewer identity (Decision 16 / M)
+
+[[skills]]
+id = "render"
+path = "skills/render/SKILL.md"

@@ -1,0 +1,21 @@
+{
+  "name": "@cyclops/adapter-memory",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cyclops/domain": "workspace:*",
+    "@cyclops/ports": "workspace:*",
+    "@cyclops/application": "workspace:*",
+    "effect": "^3.14.14"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.2"
+  }
+}

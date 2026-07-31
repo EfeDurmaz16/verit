@@ -1,0 +1,21 @@
+{
+  "name": "@cyclops/adapter-github",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cyclops/domain": "workspace:*",
+    "@cyclops/ports": "workspace:*",
+    "effect": "^3.14.14",
+    "@octokit/rest": "^21.1.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.2"
+  }
+}

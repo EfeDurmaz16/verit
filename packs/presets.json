@@ -1,0 +1,8 @@
+{
+  "reviewer_identity": "harsh",
+  "proof_frequency": "behavior_changing_default",
+  "codebase_automation": "off",
+  "inline_comments": "high_confidence_only",
+  "domain": "PAYMENTS",
+  "focus": "SECURITY"
+}

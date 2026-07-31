@@ -1,0 +1,18 @@
+{
+  "name": "@cyclops/action",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": { ".": "./src/run.ts" },
+  "scripts": {
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cyclops/cli": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.2"
+  }
+}

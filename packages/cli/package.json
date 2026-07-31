@@ -1,0 +1,30 @@
+{
+  "name": "@cyclops/cli",
+  "version": "0.0.1",
+  "type": "module",
+  "bin": { "cyclops": "./src/main.ts" },
+  "exports": { ".": "./src/main.ts" },
+  "scripts": {
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cyclops/adapter-fs-ingest": "workspace:*",
+    "@cyclops/adapter-github": "workspace:*",
+    "@cyclops/adapter-local-blob": "workspace:*",
+    "@cyclops/adapter-memory": "workspace:*",
+    "@cyclops/adapter-neo4j": "workspace:*",
+    "@cyclops/adapter-pi": "workspace:*",
+    "@cyclops/adapter-sqlite": "workspace:*",
+    "@cyclops/adapter-treesitter": "workspace:*",
+    "@cyclops/application": "workspace:*",
+    "@cyclops/domain": "workspace:*",
+    "effect": "^3.14.14"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.2",
+    "tsx": "^4.19.4"
+  }
+}
