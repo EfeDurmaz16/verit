@@ -1,7 +1,7 @@
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { Effect } from "effect";
-import { runAgent, watchBlocks, type Send } from "./codex";
+import { runAgent, watchBlocks, type Send } from "./lane";
 import { prefetchPR } from "./prefetch";
 import { PROMPT_VERSION, understandPrompt } from "./prompt";
 import { proveActionPatches, proveOffer } from "./prove";

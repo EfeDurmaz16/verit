@@ -1,6 +1,6 @@
 import { OUTPUT_STYLE } from "@cyclops/domain";
 import { catalog } from "./catalog";
-import { BLOCKS_FILE } from "./codex";
+import { BLOCKS_FILE } from "./lane";
 import type { PRMeta } from "./schema";
 import { SECTION, UNDERSTANDING_FILE } from "./understanding";
 

@@ -1,4 +1,4 @@
-import { runAgent, sseStream, SSE_HEADERS, watchBlocks } from "@/lib/codex";
+import { runAgent, sseStream, SSE_HEADERS, watchBlocks } from "@/lib/lane";
 import { commandPrompt } from "@/lib/prompt";
 import { isWorkspaceDir } from "@/lib/sessions";
 import { existsSync } from "node:fs";
@@ -29,6 +29,9 @@ export async function POST(req: NextRequest) {
       prompt: commandPrompt(command.slice(0, 2000)),
       label: "command",
       lead: false,
+      // honoured only by harnesses that can resume a session by id; the others
+      // ignore it and answer from commandPrompt plus the PR files on disk
+      resumeThreadId: threadId,
       signal: req.signal,
       send,
     });

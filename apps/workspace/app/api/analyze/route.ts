@@ -1,4 +1,4 @@
-import { SSE_HEADERS } from "@/lib/codex";
+import { SSE_HEADERS } from "@/lib/lane";
 import { fetchPR, parsePrUrl } from "@/lib/gh";
 import {
   attachStream,

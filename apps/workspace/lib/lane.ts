@@ -2,11 +2,13 @@ import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { open, stat } from "node:fs/promises";
 import path from "node:path";
+import { laneAdapter } from "./harness";
 import type { StreamEvent } from "./schema";
 
-/* Headless codex plumbing: N parallel `codex exec` lanes append SpecStream
-   lines to one blocks.ndjson; a single watcher tails the file; each lane's
-   stdout JSONL provides activity/session events. */
+/* Headless lane plumbing: N parallel coding-CLI lanes append SpecStream lines
+   to one blocks.ndjson; a single watcher tails the file; each lane's stdout
+   JSONL provides activity/session events. Which CLI runs is harness.ts's
+   business, this file only spawns it and forwards what it says. */
 
 export const BLOCKS_FILE = "blocks.ndjson";
 
@@ -113,17 +115,9 @@ export function watchBlocks(
   };
 }
 
-const BASE_FLAGS = [
-  "--json",
-  "-s",
-  "workspace-write",
-  "-c",
-  "sandbox_workspace_write.network_access=true",
-  "--skip-git-repo-check",
-];
-
-/* Spawn one codex lane; resolves when the process exits. Only the lead lane
-   reports its thread id (that session is the resume target for commands). */
+/* Spawn one lane on the selected harness; resolves when the process exits.
+   Only the lead lane reports its session id (that session is the resume target
+   for commands, on the harnesses that can resume). */
 export function runAgent(opts: {
   cwd: string;
   prompt: string;
@@ -136,16 +130,21 @@ export function runAgent(opts: {
 }): Promise<void> {
   return new Promise((resolve) => {
     const { send } = opts;
-    const flags = [...BASE_FLAGS];
-    if (opts.model) flags.push("-m", opts.model);
-    const args = opts.resumeThreadId
-      ? ["exec", ...flags, "resume", opts.resumeThreadId, opts.prompt]
-      : ["exec", ...flags, opts.prompt];
-
-    const child = spawn("codex", args, {
-      cwd: opts.cwd,
-      stdio: ["ignore", "pipe", "pipe"],
+    const adapter = laneAdapter();
+    const spec = adapter.spawn({
+      prompt: opts.prompt,
+      // a resume id from a harness that cannot resume would land as a stray arg
+      resumeSessionId: adapter.supportsResume ? opts.resumeThreadId : undefined,
+      model: opts.model,
     });
+
+    const child = spawn(spec.bin, [...spec.args], {
+      cwd: opts.cwd,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    // the harnesses that take the prompt on argv still need stdin closed, or
+    // they sit waiting on a pipe nobody writes to
+    child.stdin.end(spec.promptOnStdin ? opts.prompt : undefined);
 
     opts.signal?.addEventListener("abort", () => child.kill("SIGTERM"));
 
@@ -156,29 +155,12 @@ export function runAgent(opts: {
 
     const rl = createInterface({ input: child.stdout });
     rl.on("line", (line) => {
-      let ev: {
-        type?: string;
-        thread_id?: string;
-        item?: { type?: string; command?: string; text?: string };
-      };
-      try {
-        ev = JSON.parse(line);
-      } catch {
-        return;
-      }
-      if (ev.type === "thread.started" && ev.thread_id && opts.lead) {
-        send({ kind: "session", threadId: ev.thread_id, workdir: opts.cwd });
-      } else if (ev.type === "item.completed" && ev.item) {
-        if (ev.item.type === "command_execution" && ev.item.command) {
-          const cmd = ev.item.command.replace(/\s+/g, " ").slice(0, 160);
-          if (!/blocks[\w-]*\.ndjson/.test(cmd))
-            send({ kind: "activity", text: `[${opts.label}] ${cmd}` });
-        } else if (ev.item.type === "reasoning" && ev.item.text) {
-          send({
-            kind: "activity",
-            text: `[${opts.label}] ${ev.item.text.split("\n")[0].slice(0, 160)}`,
-          });
+      for (const ev of adapter.parse(line)) {
+        if (ev.sessionId && opts.lead) {
+          send({ kind: "session", threadId: ev.sessionId, workdir: opts.cwd });
         }
+        if (ev.activity) send({ kind: "activity", text: `[${opts.label}] ${ev.activity}` });
+        if (ev.error) send({ kind: "error", text: `[${opts.label}] ${ev.error}` });
       }
     });
 
@@ -192,7 +174,7 @@ export function runAgent(opts: {
       resolve();
     });
     child.on("error", (err) => {
-      send({ kind: "error", text: `failed to spawn codex: ${err.message}` });
+      send({ kind: "error", text: `failed to spawn ${spec.bin}: ${err.message}` });
       resolve();
     });
   });
