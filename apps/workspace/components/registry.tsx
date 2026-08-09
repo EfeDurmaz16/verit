@@ -80,7 +80,7 @@ function Text({ props }: { props: P }) {
   return (
     <p
       className={clsx(
-        "max-w-[72ch] text-[13px]",
+        "max-w-[72ch] whitespace-pre-line text-[13px]",
         str(props.tone) === "muted" ? "text-ink-3" : "text-ink-2",
       )}
     >
