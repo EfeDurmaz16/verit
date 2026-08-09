@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { resolve, join } from "node:path";
+import { resolve } from "node:path";
 import { Effect } from "effect";
 import {
   buildReviewContext,
@@ -79,15 +79,6 @@ const writeProofArtifacts = async (
   await Effect.runPromise(blob.writeLocal("latest.spec.json", body));
   if (alias) {
     await Effect.runPromise(blob.writeLocal(alias, body));
-  }
-  // Also mirror under packages/web/public/fixtures for local Vite (gitignored copies ok)
-  try {
-    const fixtureDir = resolve("packages/web/public/fixtures");
-    await mkdir(fixtureDir, { recursive: true });
-    await writeFile(join(fixtureDir, "latest.spec.json"), body, "utf8");
-    if (alias) await writeFile(join(fixtureDir, alias), body, "utf8");
-  } catch {
-    /* optional */
   }
   return path;
 };

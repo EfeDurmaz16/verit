@@ -15,7 +15,7 @@ Cyclops builds a canonical **Understanding** (what / why / how + proof refs and 
 - **Neo4j** — ontology + PR/git graph (`GraphStore`; optional — memory fallback without Docker)
 - **tree-sitter** ingest with **regex fallback** until WASM grammars ship
 - **Pi harness** via `CYCLOPS_PI_BIN`, else deterministic stub Understanding
-- **json-render** proof UI (`@cyclops/web`)
+- **json-render** proof UI — the live review workspace (`@cyclops/workspace`, Next.js + SSE)
 
 Architecture notes: [`docs/architecture/`](docs/architecture/). Domain terms: [`CONTEXT.md`](CONTEXT.md).
 
@@ -52,10 +52,10 @@ pnpm cli understand --dry-run
 pnpm cli ingest-pr owner/repo#n
 pnpm cli review --pr=owner/repo#n
 pnpm cli dogfood solana-foundation/pay#415
-pnpm --filter @cyclops/web dev   # http://localhost:5173
+pnpm workspace                   # live review workspace on http://localhost:3000
 ```
 
-Artifacts land under `.data/proofs/` (gitignored) and are mirrored to `packages/web/public/fixtures/` for the Vite demo.
+Artifacts land under `.data/proofs/` (gitignored).
 
 ## Dogfood pay#415 (local = CI)
 
@@ -67,17 +67,16 @@ pnpm cli dogfood solana-foundation/pay#415
 # or Action mirror:
 PR_SPEC=solana-foundation/pay#415 CYCLOPS_SQLITE_PATH=.data/cyclops.db \
   pnpm --filter @cyclops/action exec tsx src/run.ts
-pnpm --filter @cyclops/web dev
-# open http://localhost:5173/?fixture=pay415
-# or http://localhost:5173/?spec=/fixtures/latest.spec.json
 ```
 
-Without a live fetch, the committed sample Spec is enough:
+To watch the same review assemble live instead of reading the artifact:
 
 ```bash
-pnpm --filter @cyclops/web dev
-# → http://localhost:5173/?fixture=pay415
+pnpm workspace
+# open http://localhost:3000 and paste https://github.com/solana-foundation/pay/pull/415
 ```
+
+Requires `gh` (authenticated) and the `codex` CLI on PATH.
 
 ## Packages
 
@@ -88,5 +87,5 @@ pnpm --filter @cyclops/web dev
 | `@cyclops/application` | Use-cases |
 | `@cyclops/adapters-*` | SQLite, Neo4j, tree-sitter, GitHub, Pi, … |
 | `@cyclops/cli` | `ingest` / `ingest-pr` / `understand` / `review` / `dogfood` |
-| `@cyclops/web` | json-render proof page |
+| `@cyclops/workspace` | Live review workspace (Next.js, SSE, json-render) |
 | `@cyclops/action` | GitHub Action entry (calls `dogfood`) |

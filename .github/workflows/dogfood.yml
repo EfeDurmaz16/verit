@@ -32,7 +32,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: cyclops-proof
-          path: |
-            .data/proofs/
-            packages/web/public/fixtures/
+          path: .data/proofs/
           if-no-files-found: warn
