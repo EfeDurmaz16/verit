@@ -309,6 +309,16 @@ export const ProveResult = S.Struct({
 });
 export type ProveResult = S.Schema.Type<typeof ProveResult>;
 
+/**
+ * The one rule that turns a prove run into a verdict. The Check Run
+ * conclusion and the dashboard row read it from here, so a run cannot be green
+ * on one surface and neutral on the other. No prove run is never a success.
+ */
+export const proofVerdict = (
+  outcome: { readonly exitCode: number } | null | undefined,
+): "success" | "failure" | "neutral" =>
+  outcome == null ? "neutral" : outcome.exitCode === 0 ? "success" : "failure";
+
 /** The pull request a run reviewed, as the dashboard lists it. */
 export const RunUploadPr = S.Struct({
   number: S.Number.pipe(S.int(), S.positive()),

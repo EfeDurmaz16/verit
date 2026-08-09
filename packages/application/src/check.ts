@@ -1,4 +1,4 @@
-import type { Understanding } from "@cyclops/domain";
+import { proofVerdict, type Understanding } from "@cyclops/domain";
 import type { CheckRunInput, ProveOutcome } from "@cyclops/ports";
 import { isProveRef } from "./prove";
 
@@ -32,7 +32,7 @@ export const behaviorProofCheck = (input: {
   runId?: string;
 }): Omit<CheckRunInput, "owner" | "repo" | "headSha"> => {
   const { understanding: u, outcome, proofPageUrl, runId } = input;
-  const conclusion = outcome === null ? "neutral" : outcome.exitCode === 0 ? "success" : "failure";
+  const conclusion = proofVerdict(outcome);
   const title =
     outcome === null
       ? "No proof was run. Understanding only."

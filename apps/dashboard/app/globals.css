@@ -1,0 +1,158 @@
+@import "tailwindcss";
+
+/* The shared proof registry lives outside this app, and Tailwind does not scan
+   node_modules. Name its source so its classes survive the build. */
+@source "../../../packages/proof-ui/src";
+
+:root {
+  --bg: #fdfdfd;
+  --surface: #ffffff;
+  --surface-2: #f4f4f4;
+  --surface-3: #ececec;
+  --border: #e8e8e8;
+  --border-strong: #d9d9d9;
+  --text-1: #171717;
+  --text-2: #545454;
+  --text-3: #818181;
+  --accent: #2563ff;
+  --accent-text: #1e56f0;
+  --accent-soft: #eef3ff;
+  --danger: #a5341e;
+  --danger-soft: #f8e9e6;
+  --warn: #8a5a10;
+  --warn-soft: #f7efe0;
+  --ok: #1d6f42;
+  --ok-soft: #e7f2ea;
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.5, 1);
+  --ease-smooth: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-ink: var(--text-1);
+  --color-ink-2: var(--text-2);
+  --color-ink-3: var(--text-3);
+  --color-accent: var(--accent);
+  --color-accent-text: var(--accent-text);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text-1);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+* {
+  min-width: 0;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- scrollbars ---- */
+.scroller {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+.scroller::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroller::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 4px;
+}
+.scroller::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---- motion ---- */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.rise-in {
+  animation: rise-in 0.32s var(--ease-smooth) both;
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(29, 111, 66, 0.35);
+  }
+  70% {
+    box-shadow: 0 0 0 5px rgba(29, 111, 66, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(29, 111, 66, 0);
+  }
+}
+.live-dot {
+  animation: pulse-ring 2.4s var(--ease-smooth) infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: 200px 0;
+  }
+}
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface-2) 25%,
+    var(--surface-3) 50%,
+    var(--surface-2) 75%
+  );
+  background-size: 400px 100%;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: 4px;
+}
+
+@keyframes flash-evidence {
+  0% {
+    background: var(--accent-soft);
+  }
+  100% {
+    background: transparent;
+  }
+}
+.flash-evidence {
+  animation: flash-evidence 1.6s var(--ease-smooth) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

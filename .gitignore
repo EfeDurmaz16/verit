@@ -14,3 +14,6 @@ tmp/
 out/
 next-env.d.ts
 *.tsbuildinfo
+
+# Dashboard blobs written by the filesystem object store adapter
+.data/dashboard-objects/

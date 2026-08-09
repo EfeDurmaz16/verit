@@ -10,5 +10,19 @@ services:
     volumes:
       - neo4j_data:/data
 
+  # The dashboard store. Neon hosts the same schema in production, so keep the
+  # major version in step with the Neon project.
+  postgres:
+    image: postgres:17-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: cyclops
+      POSTGRES_PASSWORD: cyclops-dev
+      POSTGRES_DB: cyclops
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
 volumes:
   neo4j_data:
+  postgres_data:
