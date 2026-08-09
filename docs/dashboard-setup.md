@@ -58,7 +58,12 @@ The run appears at `/r/EfeDurmaz16/cyclops`, and its proof page at
 | `GITHUB_CLIENT_ID` | dashboard | OAuth app client id |
 | `GITHUB_CLIENT_SECRET` | dashboard | OAuth app client secret |
 | `CYCLOPS_ACCESS_TTL_SECONDS` | dashboard | How long a cached "may read" answer is trusted. Default 600 |
-| `CYCLOPS_BLOB_DIR` | dashboard | Where the filesystem object store writes. Local only |
+| `CYCLOPS_BLOB_DIR` | dashboard | Where the filesystem object store writes. Local only, ignored once S3 is configured |
+| `CYCLOPS_S3_ENDPOINT` | dashboard | S3 endpoint origin, no bucket. R2: `https://<account-id>.r2.cloudflarestorage.com` |
+| `CYCLOPS_S3_BUCKET` | dashboard | Bucket name, e.g. `cyclops-proofs` |
+| `CYCLOPS_S3_ACCESS_KEY_ID` | dashboard | R2 API token access key id |
+| `CYCLOPS_S3_SECRET_ACCESS_KEY` | dashboard | R2 API token secret access key |
+| `CYCLOPS_S3_REGION` | dashboard | Optional. Defaults to `auto`, which is what R2 wants. MinIO wants a real region |
 | `CYCLOPS_DEV_USER` | dashboard | Local only. Skips login as that GitHub login. Never set in a deployment |
 | `CYCLOPS_DASHBOARD_URL` | Action | Base URL of the dashboard. Unset means no upload |
 | `CYCLOPS_INGEST_TOKEN` | Action | Per-repo token from `register-repo`. Unset means no upload |
@@ -106,20 +111,55 @@ app, so do not reuse the production one.
 
 ### 3. Cloudflare R2
 
-Not wired yet. The dashboard writes blobs through `ObjectStorePort`
-(`packages/ports/src/index.ts`) and the only implementation today is the
-filesystem one in `packages/adapters/local-blob`. Until an R2 adapter exists,
-a deployed dashboard on Vercel has no durable blob storage: the run row and its
-log tail survive, the full log does not.
-
-When you do create the bucket:
+Wired. `packages/adapters/s3-blob` implements `ObjectStorePort` against the S3
+API, and `apps/dashboard/lib/objects.ts` picks it whenever the four S3 variables
+are set. With none of them set the dashboard keeps writing to the filesystem, so
+local development needs no change. With only some of them set it refuses to
+start the request rather than falling back, because on Vercel a filesystem
+fallback loses every log while looking like it worked.
 
 1. Cloudflare, R2, create a bucket, e.g. `cyclops-proofs`.
 2. Create an R2 API token scoped to that bucket, read and write.
-3. Note the account id, access key id, secret access key, and the S3 endpoint
-   `https://<account-id>.r2.cloudflarestorage.com`.
-4. Add an adapter that implements `ObjectStorePort` against that endpoint and
-   select it in `apps/dashboard/lib/objects.ts`. Nothing else changes.
+3. Note the account id, access key id and secret access key. The S3 endpoint is
+   `https://<account-id>.r2.cloudflarestorage.com`, with no bucket in it: the
+   adapter addresses objects path style, as `<endpoint>/<bucket>/<key>`. A
+   bucket created in a jurisdiction has its own endpoint, `<account-id>.eu.` or
+   `<account-id>.fedramp.`, and can only be reached through it.
+4. Set these in Vercel:
+   ```
+   CYCLOPS_S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+   CYCLOPS_S3_BUCKET=cyclops-proofs
+   CYCLOPS_S3_ACCESS_KEY_ID=<access key id>
+   CYCLOPS_S3_SECRET_ACCESS_KEY=<secret access key>
+   ```
+   `CYCLOPS_S3_REGION` is optional and defaults to `auto`, which is the region
+   R2 expects. Leave it unset for R2.
+
+To exercise the same code path locally, run MinIO instead of R2:
+
+```bash
+docker compose up -d minio    # S3 on :9000, console on :9001
+cd apps/dashboard
+CYCLOPS_S3_ENDPOINT=http://localhost:9000 \
+CYCLOPS_S3_BUCKET=cyclops-proofs \
+CYCLOPS_S3_ACCESS_KEY_ID=cyclops \
+CYCLOPS_S3_SECRET_ACCESS_KEY=cyclops-dev-secret \
+CYCLOPS_S3_REGION=us-east-1 \
+pnpm dev
+```
+
+MinIO checks the region in the signature, which is why it needs
+`CYCLOPS_S3_REGION` and R2 does not. The adapter's own integration tests run
+against the same container when `CYCLOPS_S3_TEST_ENDPOINT` is set, and are
+skipped when it is not:
+
+```bash
+CYCLOPS_S3_TEST_ENDPOINT=http://localhost:9000 \
+CYCLOPS_S3_TEST_BUCKET=cyclops-proofs \
+CYCLOPS_S3_TEST_ACCESS_KEY_ID=cyclops \
+CYCLOPS_S3_TEST_SECRET_ACCESS_KEY=cyclops-dev-secret \
+pnpm --filter @cyclops/adapter-s3-blob test
+```
 
 ### 4. Vercel
 
@@ -130,6 +170,8 @@ When you do create the bucket:
    - `DATABASE_URL`, the Neon pooled string
    - `CYCLOPS_SESSION_SECRET`, from `openssl rand -base64 48`
    - `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`
+   - `CYCLOPS_S3_ENDPOINT`, `CYCLOPS_S3_BUCKET`, `CYCLOPS_S3_ACCESS_KEY_ID`,
+     `CYCLOPS_S3_SECRET_ACCESS_KEY`, from the R2 step
    - `CYCLOPS_ACCESS_TTL_SECONDS`, optional
    - Do NOT set `CYCLOPS_DEV_USER`
 4. Deploy, then update the OAuth app's callback URL to the real domain if you
@@ -156,7 +198,8 @@ by design, the same way its Check post degrades to a dry run.
   jsonb, the prove verdict, and the log tail.
 - `repo_access`: the cached answer to "may this user read this repo", with the
   time it was checked.
-- Object store: the full prove log, keyed `runs/<runId>/prove.log`.
+- Object store: the full prove log, keyed `runs/<runId>/prove.log`. R2 when the
+  S3 variables are set, the filesystem otherwise.
 
 The user's GitHub token lives only inside the sealed session cookie. It is never
 written to the database.
