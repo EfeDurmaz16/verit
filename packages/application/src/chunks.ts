@@ -1,5 +1,5 @@
 import type { IndexChunk, WikiPage } from "@cyclops/domain";
-import { contentHash } from "./hash.js";
+import { contentHash } from "./hash";
 
 /** Split text into overlapping IndexChunk rows for FTS / retrieval. */
 export const chunkText = (

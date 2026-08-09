@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { Effect } from "effect";
-import { makeSqliteDocumentStore } from "./index.js";
+import { makeSqliteDocumentStore } from "./index";
 
 describe("sqlite document store", () => {
   it("persists run + understanding", async () => {

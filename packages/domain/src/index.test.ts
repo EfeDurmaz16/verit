@@ -4,7 +4,7 @@ import {
   decodeUnderstanding,
   ReviewDomain,
   Understanding,
-} from "./index.js";
+} from "./index";
 import { Schema as S, Either } from "effect";
 
 describe("Understanding", () => {

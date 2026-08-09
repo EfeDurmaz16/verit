@@ -5,7 +5,7 @@ import {
   type ReviewPresets,
 } from "@cyclops/domain";
 import type { CompilerPort } from "@cyclops/ports";
-import { contentHash } from "./hash.js";
+import { contentHash } from "./hash";
 
 const skillBlock = (id: string, path: string, extra = ""): string =>
   `[[skills]]\nid = "${id}"\npath = "${path}"\n${extra}`.trimEnd();

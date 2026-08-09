@@ -8,9 +8,9 @@ import type {
   ProofRenderPort,
   StoreError,
 } from "@cyclops/ports";
-import { compileReviewPack } from "./compiler.js";
-import { contentHash } from "./edges.js";
-import { understandingToProofSpec } from "./proof-spec.js";
+import { compileReviewPack } from "./compiler";
+import { contentHash } from "./edges";
+import { understandingToProofSpec } from "./proof-spec";
 
 export const runReviewUnderstand = (deps: {
   docs: DocumentStore;

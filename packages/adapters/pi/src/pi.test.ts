@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Effect } from "effect";
-import { buildDeterministicUnderstanding, makePiHarness } from "./index.js";
+import { buildDeterministicUnderstanding, makePiHarness } from "./index";
 
 describe("pi adapter", () => {
   it("builds deterministic Understanding from ReviewContext", () => {

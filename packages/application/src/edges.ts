@@ -1,5 +1,5 @@
 import type { PREdge, PullRequest } from "@cyclops/domain";
-import { contentHash } from "./hash.js";
+import { contentHash } from "./hash";
 
 export { contentHash };
 

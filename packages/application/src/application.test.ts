@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { compileReviewPack } from "./compiler.js";
-import { buildWikiHits, buildReviewContext } from "./context.js";
-import { inferEmbeddingSimilarEdges, inferSameAuthorPathEdges } from "./edges.js";
-import { markdownToWikiPages } from "./ingest-wiki.js";
-import { understandingToProofSpec } from "./proof-spec.js";
+import { compileReviewPack } from "./compiler";
+import { buildWikiHits, buildReviewContext } from "./context";
+import { inferEmbeddingSimilarEdges, inferSameAuthorPathEdges } from "./edges";
+import { markdownToWikiPages } from "./ingest-wiki";
+import { understandingToProofSpec } from "./proof-spec";
 import type { ReviewPresets } from "@cyclops/domain";
 
 const basePresets: ReviewPresets = {

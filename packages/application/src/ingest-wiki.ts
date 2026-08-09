@@ -1,5 +1,5 @@
 import type { WikiPage } from "@cyclops/domain";
-import { contentHash } from "./hash.js";
+import { contentHash } from "./hash";
 
 /** Split markdown into WikiPage nodes by ATX headings. */
 export const markdownToWikiPages = (repoId: string, path: string, md: string): WikiPage[] => {

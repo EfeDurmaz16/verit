@@ -1,18 +1,27 @@
 {
-  "name": "lattice",
-  "version": "0.1.0",
+  "name": "@cyclops/workspace",
+  "version": "0.0.1",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@cyclops/adapter-memory": "workspace:*",
+    "@cyclops/adapter-sqlite": "workspace:*",
+    "@cyclops/application": "workspace:*",
+    "@cyclops/domain": "workspace:*",
+    "@cyclops/ports": "workspace:*",
     "@json-render/core": "^0.19.0",
     "@json-render/react": "^0.19.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "effect": "^3.14.14",
     "framer-motion": "^12.42.2",
     "geist": "^1.7.2",
     "lucide-react": "^1.24.0",
@@ -24,18 +33,11 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^22.15.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "tailwindcss": "^4",
-    "typescript": "^5"
-  },
-  "ignoreScripts": [
-    "sharp",
-    "unrs-resolver"
-  ],
-  "trustedDependencies": [
-    "sharp",
-    "unrs-resolver"
-  ]
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.2"
+  }
 }

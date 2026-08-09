@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Effect } from "effect";
-import { makeTreeSitterParser } from "./index.js";
+import { makeTreeSitterParser } from "./index";
 
 describe("treesitter parser seam", () => {
   it("extracts ts function names", async () => {

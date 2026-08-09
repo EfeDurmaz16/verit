@@ -9,7 +9,7 @@
     "test": "pnpm -r run test",
     "typecheck": "pnpm -r run typecheck",
     "cli": "tsx packages/cli/src/main.ts",
-    "web": "pnpm --filter @cyclops/web dev"
+    "workspace": "pnpm --filter @cyclops/workspace dev"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

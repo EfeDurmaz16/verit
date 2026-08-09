@@ -7,7 +7,7 @@ import {
   makeMemoryGraphStore,
   makeProofRender,
   makeStubHarness,
-} from "./index.js";
+} from "./index";
 
 describe("memory adapters + runReviewUnderstand", () => {
   it("writes run + understanding + spec", async () => {

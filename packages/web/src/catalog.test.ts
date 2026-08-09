@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applySpecStream, catalogPrompt, PROOF_CATALOG } from "./catalog.js";
+import { applySpecStream, catalogPrompt, PROOF_CATALOG } from "./catalog";
 
 describe("proof catalog", () => {
   it("lists fixed components", () => {
