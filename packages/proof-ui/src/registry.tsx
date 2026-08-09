@@ -1,9 +1,9 @@
 "use client";
 
-import { useWorkspace } from "@/lib/store";
 import { clsx } from "clsx";
 import type { ComponentRegistry, ComponentRenderer } from "@json-render/react";
 import { Children, type ReactNode } from "react";
+import { useProofUi } from "./host";
 import {
   Confidence,
   DiffStat,
@@ -38,7 +38,7 @@ function Workspace({ children }: { props: P; children?: ReactNode }) {
 }
 
 function Section({ props, children }: { props: P; children?: ReactNode }) {
-  const { status } = useWorkspace();
+  const { status } = useProofUi();
   const id = str(props.id, "section");
   const empty = Children.count(children) === 0;
   if (empty && status !== "streaming") return null;
@@ -143,7 +143,7 @@ function MetricRow({ props }: { props: P }) {
 }
 
 function ReviewPath({ props }: { props: P }) {
-  const { selection, select, flashFiles } = useWorkspace();
+  const { selection, select, flashFiles } = useProofUi();
   const steps = arr<P>(props.steps);
   return (
     <Panel>
@@ -267,7 +267,7 @@ function ProofEvidence({ props }: { props: P }) {
  * explanation whenever this checkout is not the repo under review.
  */
 function ProveAction({ props }: { props: P }) {
-  const { prove, proveBusy, status } = useWorkspace();
+  const { prove, proveBusy, status } = useProofUi();
   const allowed = props.allowed === true;
   const command = str(props.command);
   const cwd = str(props.cwd);
@@ -344,7 +344,7 @@ function RisksList({ props }: { props: P }) {
 }
 
 function RiskCluster({ props }: { props: P }) {
-  const { selection, select, flashFiles } = useWorkspace();
+  const { selection, select, flashFiles } = useProofUi();
   const sel = selection?.kind === "risk" && selection.payload.title === props.title;
   return (
     <Panel
@@ -376,7 +376,7 @@ const KIND_STYLE: Record<string, string> = {
 };
 
 function Insight({ props }: { props: P }) {
-  const { selection, select, flashFiles } = useWorkspace();
+  const { selection, select, flashFiles } = useProofUi();
   const sel = selection?.kind === "insight" && selection.payload.title === props.title;
   const evidence = arr<P>(props.evidence);
   return (
@@ -433,16 +433,17 @@ function Insight({ props }: { props: P }) {
   );
 }
 
+const keepAll = (): boolean => true;
 const FOCUS_FILTER: Record<string, (f: P) => boolean> = {
-  all: () => true,
+  all: keepAll,
   security: (f) => arr<string>(f.tags).includes("security"),
   protocol: (f) => arr<string>(f.tags).some((t) => t === "protocol" || t === "api"),
   risk: (f) => riskOf(f.risk) >= 2,
 };
 
 function FileGroup({ props }: { props: P }) {
-  const { selection, select, highlight, flashFiles, focus } = useWorkspace();
-  const files = arr<P>(props.files).filter(FOCUS_FILTER[focus] ?? FOCUS_FILTER.all);
+  const { selection, select, highlight, flashFiles, focus } = useProofUi();
+  const files = arr<P>(props.files).filter(FOCUS_FILTER[focus] ?? keepAll);
   if (!files.length) return null;
   const adds = files.reduce((a, f) => a + num(f.additions), 0);
   const dels = files.reduce((a, f) => a + num(f.deletions), 0);
@@ -500,7 +501,7 @@ function FileGroup({ props }: { props: P }) {
 }
 
 function CIStatus({ props }: { props: P }) {
-  const { selection, select } = useWorkspace();
+  const { selection, select } = useProofUi();
   const checks = arr<P>(props.checks);
   return (
     <Panel>
@@ -672,7 +673,7 @@ function CompatMatrix({ props }: { props: P }) {
 }
 
 function ArchGraph({ props }: { props: P }) {
-  const { selection, select, flashFiles } = useWorkspace();
+  const { selection, select, flashFiles } = useProofUi();
   const nodes = arr<P>(props.nodes);
   const edges = arr<P>(props.edges);
   if (!nodes.length) return null;
@@ -805,6 +806,73 @@ function NextSteps({ props }: { props: P }) {
   );
 }
 
+/* The three element types the CLI proof spec emits (see
+   packages/application/src/proof-spec.ts). The live workspace never streams
+   them, the stored spec always carries them, and one registry has to render
+   both. */
+
+function Understanding({ props }: { props: P }) {
+  const rows: Array<[string, string]> = [
+    ["What", str(props.what)],
+    ["Why", str(props.why)],
+    ["How", str(props.how)],
+  ];
+  return (
+    <div className="flex flex-col gap-2.5">
+      {rows
+        .filter(([, body]) => body.length > 0)
+        .map(([label, body]) => (
+          <div key={label}>
+            <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-3">
+              {label}
+            </div>
+            <p className="mt-0.5 max-w-[72ch] whitespace-pre-line text-[13px] text-ink-2">{body}</p>
+          </div>
+        ))}
+    </div>
+  );
+}
+
+function Meta({ props }: { props: P }) {
+  const outOfScope = arr<string>(props.outOfScope);
+  return (
+    <Panel className="px-3 py-2">
+      <div className="flex flex-wrap gap-x-5 gap-y-1 text-[12px]">
+        <span className="text-ink-3">
+          domain <span className="font-mono text-ink-2">{str(props.domain, "GENERAL")}</span>
+        </span>
+        <span className="text-ink-3">
+          focus <span className="font-mono text-ink-2">{str(props.focus, "none")}</span>
+        </span>
+      </div>
+      {outOfScope.length > 0 && (
+        <>
+          <div className="mt-2 text-[11px] font-medium uppercase tracking-[0.08em] text-ink-3">
+            Out of scope
+          </div>
+          <ul className="mt-1 flex flex-col gap-1">
+            {outOfScope.map((s, i) => (
+              <li key={i} className="text-[12px] leading-snug text-ink-2">
+                {s}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </Panel>
+  );
+}
+
+function SuggestedPatch({ props }: { props: P }) {
+  const diff = str(props.diff);
+  if (!diff) return null;
+  return (
+    <pre className="scroller max-h-[420px] overflow-auto rounded-lg border border-line bg-surface-2/50 px-3 py-2 font-mono text-[11px] leading-relaxed text-ink-2">
+      {diff}
+    </pre>
+  );
+}
+
 function Status({ props }: { props: P }) {
   return (
     <div className="flex items-center gap-2 py-1 text-[12px] text-ink-3">
@@ -826,6 +894,9 @@ export const registry: ComponentRegistry = {
   Columns: wrap(Columns),
   Text: wrap(Text),
   Summary: wrap(Summary),
+  Understanding: wrap(Understanding),
+  Meta: wrap(Meta),
+  SuggestedPatch: wrap(SuggestedPatch),
   Callout: wrap(Callout),
   MetricRow: wrap(MetricRow),
   ReviewPath: wrap(ReviewPath),

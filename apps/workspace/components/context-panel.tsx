@@ -3,7 +3,7 @@
 import { useWorkspace } from "@/lib/store";
 import { clsx } from "clsx";
 import { useEffect, useRef, useState } from "react";
-import { Confidence, Kbd, RiskDot, StatusIcon } from "./ui";
+import { Confidence, Kbd, RiskDot, StatusIcon } from "@cyclops/proof-ui";
 
 interface Hunk {
   header: string;

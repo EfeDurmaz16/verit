@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
     "@cyclops/application",
     "@cyclops/adapter-memory",
     "@cyclops/adapter-sqlite",
+    "@cyclops/proof-ui",
   ],
 };
 

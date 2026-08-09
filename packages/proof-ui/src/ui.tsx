@@ -1,8 +1,10 @@
 "use client";
 
-import type { Risk } from "@/lib/types";
 import { clsx } from "clsx";
 import type { ReactNode } from "react";
+
+/** none | low | medium | high */
+export type Risk = 0 | 1 | 2 | 3;
 
 export function SectionHeader({
   title,

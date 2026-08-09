@@ -2,11 +2,23 @@
 
 import { CommandBar } from "@/components/command-bar";
 import { ContextPanel } from "@/components/context-panel";
-import { registry } from "@/components/registry";
 import { Header, Palette, Rail } from "@/components/shell";
 import { useWorkspace, WorkspaceProvider } from "@/lib/store";
+import { ProofUiProvider, registry, type ProofUiHost } from "@cyclops/proof-ui";
 import { JSONUIProvider, Renderer } from "@json-render/react";
 import { clsx } from "clsx";
+import { useMemo, type ReactNode } from "react";
+
+/** The live store, in the shape the shared proof registry reads. */
+function ProofUiBridge({ children }: { children: ReactNode }) {
+  const { status, selection, highlight, focus, proveBusy, select, flashFiles, prove } =
+    useWorkspace();
+  const host = useMemo<ProofUiHost>(
+    () => ({ status, selection, highlight, focus, proveBusy, select, flashFiles, prove }),
+    [status, selection, highlight, focus, proveBusy, select, flashFiles, prove],
+  );
+  return <ProofUiProvider host={host}>{children}</ProofUiProvider>;
+}
 
 function MetricsStrip() {
   const { pr } = useWorkspace();
@@ -71,7 +83,8 @@ function Workspace() {
 export default function Page() {
   return (
     <WorkspaceProvider>
-      <JSONUIProvider registry={registry}>
+      <ProofUiBridge>
+        <JSONUIProvider registry={registry}>
           <div className="flex h-full flex-col">
             <Header />
             <div className="flex min-h-0 flex-1">
@@ -84,7 +97,8 @@ export default function Page() {
             <CommandBar />
           </div>
           <Palette />
-      </JSONUIProvider>
+        </JSONUIProvider>
+      </ProofUiBridge>
     </WorkspaceProvider>
   );
 }

@@ -3,7 +3,7 @@
 import { useWorkspace } from "@/lib/store";
 import { clsx } from "clsx";
 import { useEffect, useRef, useState } from "react";
-import { Kbd } from "./ui";
+import { Kbd } from "@cyclops/proof-ui";
 
 const SUGGESTIONS = [
   "Focus on security-relevant changes",

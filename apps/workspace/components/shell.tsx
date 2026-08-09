@@ -4,7 +4,7 @@ import { useWorkspace } from "@/lib/store";
 import { clsx } from "clsx";
 import { Command } from "cmdk";
 import { useEffect, useState } from "react";
-import { Kbd } from "./ui";
+import { Kbd } from "@cyclops/proof-ui";
 
 /* ---------------- header ---------------- */
 

@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* The shared proof registry lives outside this app, and Tailwind does not scan
+   node_modules. Name its source so its classes survive the build. */
+@source "../../../packages/proof-ui/src";
+
 :root {
   --bg: #fdfdfd;
   --surface: #ffffff;
