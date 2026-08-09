@@ -292,6 +292,73 @@ export const ProofArtifact = S.Struct({
 });
 export type ProofArtifact = S.Schema.Type<typeof ProofArtifact>;
 
+/**
+ * What `prove` actually did, as a schema. Structurally the same as ProveOutcome
+ * in @cyclops/ports, which stays an interface because nothing decodes it in
+ * process. This one crosses the network, so it is validated.
+ */
+export const ProveResult = S.Struct({
+  command: S.String,
+  source: S.String,
+  repo: S.String,
+  exitCode: S.Number,
+  durationMs: S.Number,
+  timedOut: S.Boolean,
+  logTail: S.String,
+  startedAt: S.String,
+});
+export type ProveResult = S.Schema.Type<typeof ProveResult>;
+
+/** The pull request a run reviewed, as the dashboard lists it. */
+export const RunUploadPr = S.Struct({
+  number: S.Number.pipe(S.int(), S.positive()),
+  title: S.String,
+  url: S.String,
+  author: S.String,
+  headSha: S.String,
+});
+export type RunUploadPr = S.Schema.Type<typeof RunUploadPr>;
+
+/** One log file kept whole. The log tail lives on the run row; this is the rest. */
+export const RunUploadLog = S.Struct({
+  name: S.String.pipe(S.minLength(1), S.maxLength(120), S.pattern(/^[A-Za-z0-9._-]+$/)),
+  contentType: S.String.pipe(S.maxLength(120)),
+  body: S.String.pipe(S.maxLength(4_000_000)),
+});
+export type RunUploadLog = S.Schema.Type<typeof RunUploadLog>;
+
+/** `owner/name`. The dashboard keys every repo by this and nothing else. */
+export const RepoSlug = S.String.pipe(
+  S.pattern(/^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/),
+);
+
+/**
+ * A finished run as the Action posts it to the dashboard. This is the whole
+ * contract of the ingest endpoint. The Action encodes it, the dashboard
+ * decodes it, and neither side gets to invent a field the other does not know.
+ */
+export const RunUpload = S.Struct({
+  repo: RepoSlug,
+  run: ReviewRun,
+  understanding: Understanding,
+  /** json-render Spec. Kept opaque past root and elements, which the page needs. */
+  proofSpec: S.Struct({
+    root: S.String.pipe(S.minLength(1)),
+    elements: S.Record({ key: S.String, value: S.Unknown }),
+  }),
+  pr: S.optional(RunUploadPr),
+  prove: S.optional(ProveResult),
+  logs: S.optional(S.Array(RunUploadLog)),
+});
+export type RunUpload = S.Schema.Type<typeof RunUpload>;
+
+/** Decode an uploaded run, normalizing the Understanding prose on the way in. */
+export const decodeRunUpload = (input: unknown) =>
+  Either.map(S.decodeUnknownEither(RunUpload)(input), (u) => ({
+    ...u,
+    understanding: normalize(u.understanding),
+  }));
+
 export const WikiHit = S.Struct({
   pageId: EntityId,
   title: S.String,

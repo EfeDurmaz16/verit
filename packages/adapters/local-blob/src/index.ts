@@ -1,7 +1,7 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join, resolve, sep } from "node:path";
 import { Effect } from "effect";
-import type { BlobPort } from "@cyclops/ports";
+import type { BlobPort, ObjectStorePort, StoredObject } from "@cyclops/ports";
 import { StoreError } from "@cyclops/ports";
 
 export const makeLocalBlob = (dir = ".data/proofs"): BlobPort => ({
@@ -14,5 +14,55 @@ export const makeLocalBlob = (dir = ".data/proofs"): BlobPort => ({
         return path;
       },
       catch: (e) => new StoreError("local blob", e),
+    }),
+});
+
+/** Object keys are opaque strings. Anything that could escape `root` is refused. */
+const KEY = /^[A-Za-z0-9][A-Za-z0-9._-]*(\/[A-Za-z0-9][A-Za-z0-9._-]*)*$/;
+
+const pathFor = (root: string, key: string): string => {
+  if (!KEY.test(key) || key.split("/").includes("..")) {
+    throw new StoreError(`unsafe object key: ${key}`);
+  }
+  const base = resolve(root);
+  const path = resolve(base, key);
+  if (path !== base && !path.startsWith(base + sep)) {
+    throw new StoreError(`object key escapes the store: ${key}`);
+  }
+  return path;
+};
+
+/**
+ * The dev object store: one file per key under `dir`, plus a sidecar holding
+ * the content type. R2 replaces this in the hosted deployment and nothing above
+ * the port changes.
+ */
+export const makeFsObjectStore = (dir = ".data/objects"): ObjectStorePort => ({
+  put: (key, body, contentType) =>
+    Effect.tryPromise({
+      try: async () => {
+        const path = pathFor(dir, key);
+        await mkdir(dirname(path), { recursive: true });
+        await writeFile(path, body);
+        await writeFile(`${path}.type`, contentType, "utf8");
+      },
+      catch: (e) => (e instanceof StoreError ? e : new StoreError("fs object put", e)),
+    }),
+  get: (key) =>
+    Effect.tryPromise({
+      try: async (): Promise<StoredObject | null> => {
+        const path = pathFor(dir, key);
+        let body: Buffer;
+        try {
+          body = await readFile(path);
+        } catch {
+          return null;
+        }
+        const contentType = await readFile(`${path}.type`, "utf8").catch(
+          () => "application/octet-stream",
+        );
+        return { body: new Uint8Array(body), contentType };
+      },
+      catch: (e) => (e instanceof StoreError ? e : new StoreError("fs object get", e)),
     }),
 });

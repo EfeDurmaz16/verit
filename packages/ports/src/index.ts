@@ -119,6 +119,26 @@ export interface BlobPort {
   readonly writeLocal: (name: string, body: string) => Effect.Effect<string, StoreError>;
 }
 
+export interface StoredObject {
+  readonly body: Uint8Array;
+  readonly contentType: string;
+}
+
+/**
+ * Keyed object storage, shaped like the S3 subset the dashboard uses. The
+ * filesystem adapter backs local development; R2 backs the hosted deployment.
+ * Keys are `runs/<runId>/<name>`: flat strings, never filesystem paths, and an
+ * adapter must reject any key it cannot map safely.
+ */
+export interface ObjectStorePort {
+  readonly put: (
+    key: string,
+    body: string | Uint8Array,
+    contentType: string,
+  ) => Effect.Effect<void, StoreError>;
+  readonly get: (key: string) => Effect.Effect<StoredObject | null, StoreError>;
+}
+
 /** A verification command, already split into argv. Never a shell string. */
 export interface ProveCommand {
   readonly command: string;
