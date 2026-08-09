@@ -75,6 +75,11 @@ CYCLOPS_PROVE_CWD=/path/to/that/repo pnpm cli review --pr=owner/repo#n
 
 ## Dogfood pay#415 (local = CI)
 
+Every pull request to this repo also dogfoods itself: the workflow reviews the
+PR's own head commit, proves it by running `pnpm test` in the runner, and posts
+the result as a `cyclops / behavior-proof` Check Run. On fork PRs the token is
+read-only and the post degrades to a dry run.
+
 Same path as [`.github/workflows/dogfood.yml`](.github/workflows/dogfood.yml):
 
 ```bash
