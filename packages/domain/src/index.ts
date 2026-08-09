@@ -31,10 +31,17 @@ export type ReviewDomain = S.Schema.Type<typeof ReviewDomain>;
 export const ProofRefKind = S.Literal("test", "command", "url", "image", "video");
 export type ProofRefKind = S.Schema.Type<typeof ProofRefKind>;
 
+/**
+ * A pointer to evidence. `status` and `log` are only set by refs that were
+ * actually executed (see the prove verb): a ref carrying `status: "fail"`
+ * renders as a failure everywhere, and nothing may drop it to dress a run up.
+ */
 export const ProofRef = S.Struct({
   kind: ProofRefKind,
   label: S.String,
   value: S.String,
+  status: S.optional(S.Literal("pass", "fail")),
+  log: S.optional(S.String),
 });
 export type ProofRef = S.Schema.Type<typeof ProofRef>;
 

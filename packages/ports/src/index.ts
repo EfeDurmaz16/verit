@@ -119,6 +119,62 @@ export interface BlobPort {
   readonly writeLocal: (name: string, body: string) => Effect.Effect<string, StoreError>;
 }
 
+/** A verification command, already split into argv. Never a shell string. */
+export interface ProveCommand {
+  readonly command: string;
+  readonly args: readonly string[];
+  /** Where the command came from, e.g. `package.json#scripts.test`. */
+  readonly source: string;
+}
+
+export interface ProveOutcome {
+  /** Display form of the argv, for humans and for the ProofRef label. */
+  readonly command: string;
+  readonly source: string;
+  readonly cwd: string;
+  readonly repo: string;
+  readonly exitCode: number;
+  readonly durationMs: number;
+  readonly timedOut: boolean;
+  /** Last lines of merged stdout/stderr. */
+  readonly logTail: string;
+  readonly startedAt: string;
+}
+
+/**
+ * Runs the target repo's own verification command and reports what happened.
+ * `run` is a trust boundary: it refuses unless the checkout at `cwd` is the
+ * repo named by `expectRepo`, so a review of someone else's PR can never
+ * execute anything in the operator's tree.
+ */
+export interface ProvePort {
+  readonly detect: (cwd: string) => Effect.Effect<ProveCommand | null, StoreError>;
+  /** `owner/repo` of the checkout at `cwd`, or null when it is not a GitHub clone. */
+  readonly repoAt: (cwd: string) => Effect.Effect<string | null, StoreError>;
+  readonly run: (input: {
+    cwd: string;
+    expectRepo: string;
+    timeoutMs?: number;
+  }) => Effect.Effect<ProveOutcome, StoreError>;
+}
+
+export interface CheckRunInput {
+  readonly owner: string;
+  readonly repo: string;
+  readonly headSha: string;
+  readonly name: string;
+  readonly conclusion: "success" | "failure" | "neutral";
+  readonly title: string;
+  readonly summary: string;
+}
+
+/** Posts the review outcome as a GitHub Check Run. */
+export interface CheckPort {
+  readonly postCheckRun: (
+    input: CheckRunInput,
+  ) => Effect.Effect<{ posted: boolean; url: string | null }, StoreError>;
+}
+
 export interface ProofRenderPort {
   readonly toSpec: (input: {
     understanding: Understanding;
