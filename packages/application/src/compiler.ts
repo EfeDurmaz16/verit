@@ -1,6 +1,7 @@
 import {
   assertDomainFocus,
   CODING_SKILLS,
+  OUTPUT_STYLE,
   REVIEW_SKILLS,
   type ReviewPresets,
 } from "@cyclops/domain";
@@ -20,10 +21,12 @@ export const compileReviewPack = (presets: ReviewPresets): ReturnType<CompilerPo
     `domain=${presets.domain}`,
     presets.focus ? `focus=${presets.focus}` : `focus=none`,
     `# additive overlays: domain.${presets.domain} + focus.${presets.focus ?? "none"}`,
+    ``,
+    OUTPUT_STYLE,
   ].join("\n");
 
   const skillsToml = [
-    `# GENERATED — change presets instead.`,
+    `# GENERATED. Change presets instead.`,
     `[defaults]`,
     `agent_model_env = "BYOK_MODEL"`,
     `proof = "${presets.proof_frequency}"`,
@@ -48,7 +51,7 @@ export const compileReviewPack = (presets: ReviewPresets): ReturnType<CompilerPo
 
 export const compileCodingPack = (presets: Pick<ReviewPresets, "reviewer_identity" | "domain" | "focus">) => {
   assertDomainFocus(presets.domain, presets.focus);
-  const append = `role=implement\ndomain=${presets.domain}\nfocus=${presets.focus ?? "none"}`;
+  const append = `role=implement\ndomain=${presets.domain}\nfocus=${presets.focus ?? "none"}\n\n${OUTPUT_STYLE}`;
   const skillsToml = [
     `# GENERATED coding pack`,
     ...CODING_SKILLS.map((id) => skillBlock(id, `skills/${id}/SKILL.md`)),
