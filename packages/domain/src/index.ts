@@ -183,6 +183,34 @@ export const ReviewRun = S.Struct({
 });
 export type ReviewRun = S.Schema.Type<typeof ReviewRun>;
 
+/** One live-workspace session: a PR at a specific head, with its blob dir. */
+export const WorkspaceSession = S.Struct({
+  id: EntityId,
+  repo: S.String,
+  prNumber: S.Number,
+  headSha: S.String,
+  /** Directory holding the run's blobs (diff, spec stream, understanding). */
+  workdir: S.String,
+  createdAt: S.String,
+});
+export type WorkspaceSession = S.Schema.Type<typeof WorkspaceSession>;
+
+export const WorkspaceRunStatus = S.Literal("running", "done", "error");
+export type WorkspaceRunStatus = S.Schema.Type<typeof WorkspaceRunStatus>;
+
+/** One analysis run of a session; `reviewRunId` links to the ReviewRun it produced. */
+export const WorkspaceRun = S.Struct({
+  id: EntityId,
+  sessionId: EntityId,
+  status: WorkspaceRunStatus,
+  threadId: S.NullOr(S.String),
+  reviewRunId: S.NullOr(EntityId),
+  error: S.NullOr(S.String),
+  startedAt: S.String,
+  finishedAt: S.NullOr(S.String),
+});
+export type WorkspaceRun = S.Schema.Type<typeof WorkspaceRun>;
+
 export const ProofArtifact = S.Struct({
   id: EntityId,
   runId: EntityId,

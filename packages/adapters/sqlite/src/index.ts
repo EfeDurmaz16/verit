@@ -2,8 +2,14 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Effect } from "effect";
-import type { IndexChunk, ProofArtifact, ReviewRun, Understanding } from "@cyclops/domain";
-import type { DocumentStore } from "@cyclops/ports";
+import type {
+  IndexChunk,
+  ProofArtifact,
+  ReviewRun,
+  Understanding,
+  WorkspaceRun,
+} from "@cyclops/domain";
+import type { DocumentStore, SessionStore } from "@cyclops/ports";
 import { StoreError } from "@cyclops/ports";
 
 export const migrateSqlite = (db: DatabaseSync): void => {
@@ -27,6 +33,26 @@ export const migrateSqlite = (db: DatabaseSync): void => {
       body TEXT NOT NULL,
       content_hash TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS workspace_sessions (
+      id TEXT PRIMARY KEY,
+      repo TEXT NOT NULL,
+      pr_number INTEGER NOT NULL,
+      head_sha TEXT NOT NULL,
+      workdir TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS workspace_runs (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      thread_id TEXT,
+      review_run_id TEXT,
+      error TEXT,
+      started_at TEXT NOT NULL,
+      finished_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS workspace_runs_session
+      ON workspace_runs (session_id, started_at DESC);
     CREATE TABLE IF NOT EXISTS index_chunks (
       id TEXT PRIMARY KEY,
       repo_id TEXT NOT NULL,
@@ -52,18 +78,105 @@ export const migrateSqlite = (db: DatabaseSync): void => {
   `);
 };
 
-export const makeSqliteDocumentStore = (filename: string): DocumentStore => {
+const openDb = (filename: string): DatabaseSync => {
   if (filename !== ":memory:") {
     mkdirSync(dirname(filename), { recursive: true });
   }
   const db = new DatabaseSync(filename);
   migrateSqlite(db);
+  return db;
+};
 
-  const wrap = <A>(fn: () => A) =>
-    Effect.try({
-      try: fn,
-      catch: (e) => new StoreError("sqlite", e),
-    });
+const wrapOn =
+  (label: string) =>
+  <A>(fn: () => A) =>
+    Effect.try({ try: fn, catch: (e) => new StoreError(label, e) });
+
+/** Both stores over one connection — sessions and their ReviewRuns share a DB. */
+export const makeSqliteStores = (
+  filename: string,
+): { docs: DocumentStore; sessions: SessionStore } => {
+  const db = openDb(filename);
+  return { docs: documentStoreOn(db), sessions: sessionStoreOn(db) };
+};
+
+export const makeSqliteDocumentStore = (filename: string): DocumentStore =>
+  documentStoreOn(openDb(filename));
+
+const sessionStoreOn = (db: DatabaseSync): SessionStore => {
+  const wrap = wrapOn("sqlite sessions");
+  const toRun = (row: Record<string, unknown>): WorkspaceRun => ({
+    id: String(row.id),
+    sessionId: String(row.session_id),
+    status: row.status as WorkspaceRun["status"],
+    threadId: row.thread_id == null ? null : String(row.thread_id),
+    reviewRunId: row.review_run_id == null ? null : String(row.review_run_id),
+    error: row.error == null ? null : String(row.error),
+    startedAt: String(row.started_at),
+    finishedAt: row.finished_at == null ? null : String(row.finished_at),
+  });
+
+  return {
+    upsertSession: (s) =>
+      wrap(() => {
+        db.prepare(
+          `INSERT INTO workspace_sessions (id, repo, pr_number, head_sha, workdir, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET workdir=excluded.workdir`,
+        ).run(s.id, s.repo, s.prNumber, s.headSha, s.workdir, s.createdAt);
+      }),
+    getSession: (id) =>
+      wrap(() => {
+        const row = db.prepare(`SELECT * FROM workspace_sessions WHERE id = ?`).get(id) as
+          | Record<string, unknown>
+          | undefined;
+        if (!row) return null;
+        return {
+          id: String(row.id),
+          repo: String(row.repo),
+          prNumber: Number(row.pr_number),
+          headSha: String(row.head_sha),
+          workdir: String(row.workdir),
+          createdAt: String(row.created_at),
+        };
+      }),
+    upsertRun: (r) =>
+      wrap(() => {
+        db.prepare(
+          `INSERT INTO workspace_runs
+             (id, session_id, status, thread_id, review_run_id, error, started_at, finished_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             status=excluded.status,
+             thread_id=excluded.thread_id,
+             review_run_id=excluded.review_run_id,
+             error=excluded.error,
+             finished_at=excluded.finished_at`,
+        ).run(
+          r.id,
+          r.sessionId,
+          r.status,
+          r.threadId,
+          r.reviewRunId,
+          r.error,
+          r.startedAt,
+          r.finishedAt,
+        );
+      }),
+    latestRun: (sessionId) =>
+      wrap(() => {
+        const row = db
+          .prepare(
+            `SELECT * FROM workspace_runs WHERE session_id = ? ORDER BY started_at DESC LIMIT 1`,
+          )
+          .get(sessionId) as Record<string, unknown> | undefined;
+        return row ? toRun(row) : null;
+      }),
+  };
+};
+
+const documentStoreOn = (db: DatabaseSync): DocumentStore => {
+  const wrap = wrapOn("sqlite");
 
   return {
     upsertReviewRun: (run) =>

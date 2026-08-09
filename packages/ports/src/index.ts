@@ -13,6 +13,8 @@ import type {
   Understanding,
   WikiHit,
   WikiPage,
+  WorkspaceRun,
+  WorkspaceSession,
 } from "@cyclops/domain";
 import type { Effect } from "effect";
 
@@ -35,6 +37,17 @@ export interface DocumentStore {
   readonly searchChunks: (repoId: string, q: string, limit: number) => Effect.Effect<readonly IndexChunk[], StoreError>;
   readonly saveUnderstandingJson: (runId: string, u: Understanding) => Effect.Effect<void, StoreError>;
   readonly getUnderstandingJson: (runId: string) => Effect.Effect<Understanding | null, StoreError>;
+}
+
+/**
+ * Live-workspace session persistence. SQLite today, Postgres later: swapping
+ * the implementation is the whole migration, nothing above this depends on it.
+ */
+export interface SessionStore {
+  readonly upsertSession: (s: WorkspaceSession) => Effect.Effect<void, StoreError>;
+  readonly getSession: (id: string) => Effect.Effect<WorkspaceSession | null, StoreError>;
+  readonly upsertRun: (r: WorkspaceRun) => Effect.Effect<void, StoreError>;
+  readonly latestRun: (sessionId: string) => Effect.Effect<WorkspaceRun | null, StoreError>;
 }
 
 export interface GraphStore {
