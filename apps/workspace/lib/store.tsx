@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  applySpecPatch,
-  diffToPatches,
-  parseSpecStreamLine,
-  type Spec,
-} from "@json-render/core";
+import { applySpecPatch, parseSpecStreamLine, type Spec } from "@json-render/core";
 import {
   createContext,
   useCallback,
@@ -16,11 +11,11 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { PR as MOCK_PR, comments as mockComments } from "./data";
-import { buildDemoLines, buildDemoSpec, type Focus } from "./demo";
 import type { StreamEvent } from "./schema";
 
-export type Status = "demo" | "fetching" | "streaming" | "ready" | "error";
+export type Focus = "all" | "security" | "protocol" | "risk";
+
+export type Status = "idle" | "fetching" | "streaming" | "ready" | "error";
 
 export interface Selection {
   kind: "file" | "insight" | "risk" | "node" | "check" | "step";
@@ -77,20 +72,6 @@ const Ctx = createContext<WorkspaceState | null>(null);
 
 const EMPTY_SPEC: Spec = { root: "", elements: {} };
 
-const DEMO_PR: PrHeader = {
-  repo: MOCK_PR.repo,
-  number: MOCK_PR.number,
-  title: MOCK_PR.title,
-  author: MOCK_PR.author,
-  branch: MOCK_PR.branch,
-  base: MOCK_PR.base,
-  additions: MOCK_PR.additions,
-  deletions: MOCK_PR.deletions,
-  changedFiles: 34,
-  commits: MOCK_PR.commits,
-  threads: mockComments.filter((c) => !c.resolved).length,
-};
-
 async function readSSE(res: Response, onEvent: (ev: StreamEvent) => void) {
   const reader = res.body!.getReader();
   const dec = new TextDecoder();
@@ -116,8 +97,8 @@ async function readSSE(res: Response, onEvent: (ev: StreamEvent) => void) {
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const specRef = useRef<Spec>(structuredClone(EMPTY_SPEC));
   const [spec, setSpec] = useState<Spec | null>(null);
-  const [pr, setPr] = useState<PrHeader | null>(DEMO_PR);
-  const [status, setStatus] = useState<Status>("demo");
+  const [pr, setPr] = useState<PrHeader | null>(null);
+  const [status, setStatus] = useState<Status>("idle");
   const [selection, setSelection] = useState<Selection | null>(null);
   const [highlight, setHighlight] = useState<string[]>([]);
   const [activity, setActivity] = useState<string[]>([]);
@@ -131,14 +112,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const session = useRef<{ threadId?: string; workdir?: string }>({});
   const booted = useRef(false);
-  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-
-  const clearTimers = () => {
-    timers.current.forEach(clearTimeout);
-    timers.current = [];
-  };
 
   const applyLines = useCallback((lines: string[]) => {
     for (const line of lines) {
@@ -160,20 +135,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setSpec({ ...specRef.current });
   }, []);
 
-  /* stagger lines so the workspace visibly assembles itself */
-  const streamLines = useCallback(
-    (lines: string[], stepMs: number) => {
-      clearTimers();
-      lines.forEach((line, i) => {
-        timers.current.push(setTimeout(() => applyLines([line]), i * stepMs));
-      });
-    },
-    [applyLines],
-  );
-
   useEffect(() => {
     return () => {
-      clearTimers();
       abortRef.current?.abort();
     };
   }, []);
@@ -214,7 +177,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       abortRef.current?.abort();
       const ctrl = new AbortController();
       abortRef.current = ctrl;
-      clearTimers();
       specRef.current = structuredClone(EMPTY_SPEC);
       setSpec(null);
       setPr(null);
@@ -267,49 +229,18 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     [handleEvent],
   );
 
-  // boot once: reattach to the last PR's server session, else run the demo
+  // boot once: reattach to the last PR's server session, else stay idle
   useEffect(() => {
     if (booted.current) return;
     booted.current = true;
     const last = localStorage.getItem("cyclops:pr");
     if (last) analyze(last);
-    else streamLines(buildDemoLines(), 110);
-  }, [analyze, streamLines]);
+  }, [analyze]);
 
   const sendCommand = useCallback(
     async (text: string) => {
       const cmd = text.trim();
       if (!cmd) return;
-      if (status === "demo") {
-        const t = cmd.toLowerCase();
-        const next: Focus = /secur/.test(t)
-          ? "security"
-          : /protocol|compat/.test(t)
-            ? "protocol"
-            : /risk/.test(t)
-              ? "risk"
-              : "all";
-        const target = buildDemoSpec(next);
-        const patches = diffToPatches(
-          specRef.current as unknown as Record<string, unknown>,
-          target as unknown as Record<string, unknown>,
-        );
-        applyLines(patches.map((p) => JSON.stringify(p)));
-        setFocus(next);
-        setSelection(null);
-        setAnswers((a) => [
-          ...a,
-          {
-            command: cmd,
-            text:
-              next === "all"
-                ? "Restored the full overview layout."
-                : `Reorganized the workspace around ${next}. Demo mode answers are canned — load a real PR to ask free-form questions.`,
-            pending: false,
-          },
-        ]);
-        return;
-      }
       // hybrid focus: apply the local filter instantly; the agent refines after
       const t = cmd.toLowerCase();
       if (/secur/.test(t)) setFocus("security");
@@ -317,7 +248,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       else if (/risk/.test(t)) setFocus("risk");
       else if (/reset|overview|full/.test(t)) setFocus("all");
       if (!session.current.threadId || !session.current.workdir) {
-        setError("No agent session yet — wait for the analysis to start.");
+        setError("No agent session yet — load a pull request first.");
         return;
       }
       setCommandBusy(true);
@@ -349,7 +280,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         setCommandBusy(false);
       }
     },
-    [status, handleEvent, applyLines],
+    [handleEvent],
   );
 
   /* Runs the target repo's test command on this machine. Only ever called from
@@ -414,7 +345,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       spec,
       pr,
       status,
-      live: status !== "demo",
+      live: status !== "idle",
       selection,
       highlight,
       activity,

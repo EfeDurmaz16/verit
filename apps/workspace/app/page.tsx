@@ -38,6 +38,13 @@ function Workspace() {
         <MetricsStrip />
         {spec?.root && spec.elements[spec.root] ? (
           <Renderer spec={spec} registry={registry} />
+        ) : status === "idle" ? (
+          <div className="flex flex-col items-center gap-1.5 pt-20 text-center">
+            <p className="text-[13px] font-medium text-ink-2">No pull request loaded</p>
+            <p className="text-[12px] text-ink-3">
+              Paste a GitHub PR URL in the header to start analysis.
+            </p>
+          </div>
         ) : (
           <div className="flex flex-col gap-3 pt-2">
             {[0, 1, 2].map((i) => (

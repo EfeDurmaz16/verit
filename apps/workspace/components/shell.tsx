@@ -86,12 +86,7 @@ function StatusChip({ status, error }: { status: string; error: string | null })
         {error ?? "error"}
       </span>
     );
-  if (status === "demo")
-    return (
-      <span className="rounded-md bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-ink-2">
-        demo data
-      </span>
-    );
+  if (status === "idle") return null;
   if (status === "fetching" || status === "streaming")
     return (
       <span className="flex items-center gap-1.5 text-[11px] font-medium text-ink-2">
