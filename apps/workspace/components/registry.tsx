@@ -619,7 +619,7 @@ const CELL_STYLE: Record<string, string> = {
   missing: "bg-danger-soft text-danger",
   na: "bg-surface-2 text-ink-3",
 };
-const CELL_LABEL: Record<string, string> = { done: "✓", partial: "◐", missing: "✗", na: "—" };
+const CELL_LABEL: Record<string, string> = { done: "✓", partial: "◐", missing: "✗", na: "n/a" };
 
 function CompatMatrix({ props }: { props: P }) {
   const columns = arr<string>(props.columns);
@@ -815,7 +815,7 @@ function Status({ props }: { props: P }) {
 }
 
 /* Renderer's registry is element-based: each renderer receives { element, children }.
-   Props are validated defensively inside each component — the AI is untrusted input. */
+   Props are validated defensively inside each component: the AI is untrusted input. */
 const wrap =
   (C: (p: { props: P; children?: ReactNode }) => ReactNode): ComponentRenderer =>
   ({ element, children }) => <C props={(element.props ?? {}) as P}>{children}</C>;

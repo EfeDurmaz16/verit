@@ -39,7 +39,7 @@ export async function persistReviewRun(
   const result = await Effect.runPromise(
     runReviewUnderstand({
       docs: docs(),
-      // no ontology graph behind the workspace yet — the Action owns that path
+      // no ontology graph behind the workspace yet, the Action owns that path
       graph: makeMemoryGraphStore(),
       harness: laneHarness(understanding),
       classifier: makeHeuristicClassifier(),

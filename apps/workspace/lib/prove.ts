@@ -8,7 +8,7 @@ import { docs } from "./stores";
 
 /* The workspace reviews any PR, but it may only *run* code for the repo the
    operator pointed cyclops at: this checkout. Prove never fires on its own
-   here — the UI shows the exact command and the user clicks it. */
+   here. The UI shows the exact command and the user clicks it. */
 
 export const PROVE_CWD = path.resolve(process.env.CYCLOPS_PROVE_CWD ?? process.cwd());
 

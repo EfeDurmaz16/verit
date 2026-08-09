@@ -23,8 +23,8 @@ export async function fetchDiff(repo: string, number: number): Promise<string> {
     });
     diff = stdout;
   } catch {
-    // GitHub refuses whole-PR diffs over 20k lines (HTTP 406) — rebuild it
-    // from the per-file endpoint, which limits per file instead
+    // GitHub refuses whole-PR diffs over 20k lines (HTTP 406). Rebuild it
+    // from the per-file endpoint, which limits per file instead.
     const { stdout } = await exec(
       "gh",
       ["api", `repos/${repo}/pulls/${number}/files`, "--paginate"],

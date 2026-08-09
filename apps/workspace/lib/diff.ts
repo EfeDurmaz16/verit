@@ -51,7 +51,7 @@ export function parseDiff(patch: string): Map<string, DiffHunk[]> {
     } else if (line.startsWith(" ") || line === "") {
       hunk.lines.push({ kind: "ctx", no: newNo++, text: line.slice(1) });
     }
-    // "\ No newline at end of file" etc. — skip
+    // "\ No newline at end of file" etc. Skip.
   }
   flushFile();
   return files;

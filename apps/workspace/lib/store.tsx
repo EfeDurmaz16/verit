@@ -248,7 +248,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       else if (/risk/.test(t)) setFocus("risk");
       else if (/reset|overview|full/.test(t)) setFocus("all");
       if (!session.current.threadId || !session.current.workdir) {
-        setError("No agent session yet — load a pull request first.");
+        setError("No agent session yet. Load a pull request first.");
         return;
       }
       setCommandBusy(true);
@@ -284,7 +284,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   );
 
   /* Runs the target repo's test command on this machine. Only ever called from
-     the labelled button in the Proof section — never on load or on analysis. */
+     the labelled button in the Proof section, never on load or on analysis. */
   const prove = useCallback(async () => {
     if (!prUrl || proveBusy) return;
     setProveBusy(true);
@@ -330,8 +330,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [prUrl]);
 
   useEffect(() => {
-    if (status === "streaming" || status === "fetching") document.title = "⟳ Compiling — Cyclops";
-    else if (status === "ready") document.title = "✓ Ready — Cyclops";
+    if (status === "streaming" || status === "fetching") document.title = "⟳ Cyclops: Compiling";
+    else if (status === "ready") document.title = "✓ Cyclops: Ready";
     else document.title = "Cyclops";
   }, [status]);
 

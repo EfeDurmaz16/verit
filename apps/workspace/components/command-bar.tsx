@@ -81,8 +81,8 @@ export function CommandBar() {
           onChange={(e) => setValue(e.target.value)}
           placeholder={
             live
-              ? 'Ask the workspace — "why is CI failing?", "focus on security"'
-              : 'Command the workspace — try "focus on protocol compatibility"'
+              ? 'Ask the workspace: "why is CI failing?", "focus on security"'
+              : 'Command the workspace: try "focus on protocol compatibility"'
           }
           className="w-full bg-transparent text-[13px] outline-none placeholder:text-ink-3"
           disabled={commandBusy}
