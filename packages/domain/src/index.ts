@@ -1,6 +1,22 @@
-import { Schema as S } from "effect";
+import { Either, Schema as S } from "effect";
 
-/** Closed review specialty enum — not technology stacks. */
+/**
+ * House style for every string a reviewer reads. STYLE.md at the repo root is
+ * the contract; this constant is the copy every prompt surface ships to the
+ * model. Keep the two in sync.
+ */
+export const OUTPUT_STYLE = `OUTPUT STYLE, this is not optional:
+- Write so a busy reviewer can scan it in under a minute.
+- Never use the em dash character. Use a period, a comma, or a colon instead.
+- Short sentences. One idea each. Break a long sentence into two.
+- Active voice. Say who or what does the thing: "the route handler retries", not "retries are performed".
+- Short words over long ones. Cut any word that carries no meaning.
+- Name concrete files, functions, and behaviors, not abstractions like "the system".
+- No filler openers: no "notably", "importantly", "it is worth noting", "this PR aims to".
+- No hype and no praise. State what the code does, including the parts that look wrong.
+- Plain words over jargon. Keep a technical term only when it names something exact.`;
+
+/** Closed review specialty enum, not technology stacks. */
 export const ReviewDomain = S.Literal(
   "GENERAL",
   "ARCHITECTURE",
@@ -54,7 +70,7 @@ export type RiskItem = S.Schema.Type<typeof RiskItem>;
 
 /**
  * Canonical Understanding artifact.
- * Author `risks` are hints only — never an allowlist for review agents.
+ * Author `risks` are hints only, never an allowlist for review agents.
  */
 export const Understanding = S.Struct({
   what: S.String.pipe(S.minLength(1)),
@@ -66,7 +82,33 @@ export const Understanding = S.Struct({
 });
 export type Understanding = S.Schema.Type<typeof Understanding>;
 
-export const decodeUnderstanding = S.decodeUnknownEither(Understanding);
+/**
+ * The prompt bans the em dash, but a model can still emit one. Strip it at the
+ * one boundary every Understanding passes through, so no downstream surface
+ * (Check Run body, proof page, workspace) has to care.
+ *
+ * Rule: an em dash and the whitespace around it become ", ". That reads as the
+ * aside it almost always was. A trailing comma left at the end is dropped.
+ */
+export const plainText = (s: string): string =>
+  s.includes("—")
+    ? s.replace(/\s*—\s*/g, ", ").replace(/,\s*$/, "").trim()
+    : s;
+
+const normalize = (u: Understanding): Understanding => ({
+  ...u,
+  what: plainText(u.what),
+  why: plainText(u.why),
+  how: plainText(u.how),
+  proof_refs: u.proof_refs.map((r) => ({ ...r, label: plainText(r.label) })),
+  out_of_scope: u.out_of_scope?.map(plainText),
+  risks: u.risks.map((r) => ({ ...r, note: plainText(r.note) })),
+});
+
+const decode = S.decodeUnknownEither(Understanding);
+
+/** Decode + validate an Understanding, then normalize its prose to house style. */
+export const decodeUnderstanding = (input: unknown) => Either.map(decode(input), normalize);
 export const encodeUnderstanding = S.encodeUnknownEither(Understanding);
 
 /** Focus must differ from primary when set. */
