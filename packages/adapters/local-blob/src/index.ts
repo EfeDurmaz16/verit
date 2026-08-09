@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import { Effect } from "effect";
 import type { BlobPort, ObjectStorePort, StoredObject } from "@cyclops/ports";
-import { StoreError } from "@cyclops/ports";
+import { assertSafeObjectKey, StoreError } from "@cyclops/ports";
 
 export const makeLocalBlob = (dir = ".data/proofs"): BlobPort => ({
   writeLocal: (name, body) =>
@@ -17,13 +17,8 @@ export const makeLocalBlob = (dir = ".data/proofs"): BlobPort => ({
     }),
 });
 
-/** Object keys are opaque strings. Anything that could escape `root` is refused. */
-const KEY = /^[A-Za-z0-9][A-Za-z0-9._-]*(\/[A-Za-z0-9][A-Za-z0-9._-]*)*$/;
-
 const pathFor = (root: string, key: string): string => {
-  if (!KEY.test(key) || key.split("/").includes("..")) {
-    throw new StoreError(`unsafe object key: ${key}`);
-  }
+  assertSafeObjectKey(key);
   const base = resolve(root);
   const path = resolve(base, key);
   if (path !== base && !path.startsWith(base + sep)) {

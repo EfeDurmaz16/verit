@@ -139,6 +139,24 @@ export interface ObjectStorePort {
   readonly get: (key: string) => Effect.Effect<StoredObject | null, StoreError>;
 }
 
+/**
+ * The whole alphabet an object key may use: dot-segments cannot appear, and
+ * nothing here needs URL escaping, so the same string is safe as a path suffix
+ * on a filesystem and as a path segment in an S3 request.
+ */
+const OBJECT_KEY = /^[A-Za-z0-9][A-Za-z0-9._-]*(\/[A-Za-z0-9][A-Za-z0-9._-]*)*$/;
+
+/**
+ * The key rule belongs to the port, not to one adapter. Every implementation
+ * calls this before it maps a key onto its own namespace, so a key that is
+ * refused by the filesystem store is refused by the S3 store too.
+ */
+export const assertSafeObjectKey = (key: string): void => {
+  if (!OBJECT_KEY.test(key) || key.split("/").includes("..")) {
+    throw new StoreError(`unsafe object key: ${key}`);
+  }
+};
+
 /** A verification command, already split into argv. Never a shell string. */
 export interface ProveCommand {
   readonly command: string;
