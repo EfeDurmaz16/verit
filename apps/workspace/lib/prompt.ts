@@ -5,11 +5,15 @@ import type { PRMeta } from "./schema";
 import { SECTION, UNDERSTANDING_FILE } from "./understanding";
 
 /* Bump when prompt or protocol semantics change. It is part of the session key. */
-export const PROMPT_VERSION = "v6";
+export const PROMPT_VERSION = "v7";
 
 const PROTOCOL = `
 STREAMING PROTOCOL. The reviewer watches the workspace assemble in real time:
-Append SpecStream lines to ./${BLOCKS_FILE} as you work (printf '%s\\n' '<json>' >> ${BLOCKS_FILE}).
+Append SpecStream lines to ./${BLOCKS_FILE} as you work. Always use a quoted heredoc,
+never printf or echo with quoted arguments (a quote inside the JSON would cut the line):
+cat >> ${BLOCKS_FILE} << 'SPECSTREAM'
+<json>
+SPECSTREAM
 Each line is ONE minified RFC 6902 JSON patch against the spec:
   {"op":"add","path":"/elements/<key>","value":{"type":"<Component>","props":{...},"children":[]}}
   {"op":"add","path":"/elements/<section>/children/-","value":"<key>"}   attach your element to a section
