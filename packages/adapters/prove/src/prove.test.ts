@@ -42,7 +42,7 @@ describe("detectProveCommand", () => {
   it("never lets a script name become a second command", async () => {
     const dir = await tmp();
     // a hostile manifest: the injection attempt must stay inside the *script*,
-    // which we never read — we only ever run `npm run test`
+    // which we never read. We only ever run `npm run test`
     await writeFile(
       join(dir, "package.json"),
       JSON.stringify({ scripts: { test: "vitest; rm -rf ~" } }),

@@ -10,7 +10,7 @@ import { Either } from "effect";
 export const UNDERSTANDING_FILE = "understanding.json";
 
 /* Element keys the lane streams into and the server overwrites with the
-   validated values — same keys, so the canonical render replaces the draft
+   validated values. Same keys, so the canonical render replaces the draft
    in place instead of stacking a second copy next to it. */
 const KEY = {
   what: "u-what",
@@ -67,7 +67,7 @@ const attach = (section: string, key: string): string =>
 
 /**
  * Deterministic SpecStream render of a validated Understanding.
- * Author risks stay visually separate from reviewer risks — author hints are
+ * Author risks stay visually separate from reviewer risks. Author hints are
  * never presented as the complete risk set.
  */
 export function understandingPatches(u: Understanding): string[] {

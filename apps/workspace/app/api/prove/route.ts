@@ -13,7 +13,7 @@ export const maxDuration = 900;
 
 /**
  * Explicit user action only. Nothing here runs on analysis, on load, or on a
- * schedule — the client calls this when someone clicks the labelled button,
+ * schedule. The client calls this when someone clicks the labelled button,
  * and the runner still refuses unless this checkout is the reviewed repo.
  */
 export async function POST(req: NextRequest) {

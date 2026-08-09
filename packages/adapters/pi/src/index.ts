@@ -95,7 +95,7 @@ export const buildDeterministicUnderstanding = (input: UnderstandInput): Underst
         note:
           process.env.CYCLOPS_PI_BIN != null
             ? "CYCLOPS_PI_BIN set but stub path active (spawn failed or returned invalid JSON)."
-            : "CYCLOPS_PI_BIN unset — using deterministic stub Understanding.",
+            : "CYCLOPS_PI_BIN unset. Using deterministic stub Understanding.",
         source: "reviewer",
       },
     ],

@@ -1,6 +1,6 @@
 import type { PRMeta } from "./schema";
 
-/* Instant workspace shell built from GitHub structural data — streamed to the
+/* Instant workspace shell built from GitHub structural data. Streamed to the
    client as SpecStream patches before the AI produces anything, and handed to
    the agent as the current spec it should evolve. */
 

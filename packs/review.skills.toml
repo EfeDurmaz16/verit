@@ -1,7 +1,7 @@
-# GENERATED — golden fixture; do not hand-edit as product truth.
+# GENERATED: golden fixture; do not hand-edit as product truth.
 # Change presets.json instead; re-emit via pure compiler when implemented.
 # skill_pack_hash = "sha256:fixture-review-payments-security-v0"
-# Paths reference the shared catalog (Decision 24 / AB) — no duplicated skill bodies.
+# Paths reference the shared catalog (Decision 24 / AB). No duplicated skill bodies.
 
 [defaults]
 agent_model_env = "BYOK_MODEL"

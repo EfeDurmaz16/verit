@@ -90,7 +90,7 @@ const writeProofArtifacts = async (
 };
 
 /**
- * Run the reviewed repo's own verification command — but only when this
+ * Run the reviewed repo's own verification command, but only when this
  * machine's checkout IS that repo. The port fails closed on any mismatch, so
  * reviewing a stranger's PR never executes their code here; in CI the runner's
  * checkout is the repo under review, which is where prove is meant to run.
@@ -123,7 +123,7 @@ const proveIfPointedHere = async (
 const runUnderstandPipeline = async (input: {
   repoId: string;
   prId?: string;
-  /** owner/repo of the reviewed PR — the only repo prove may run in. */
+  /** owner/repo of the reviewed PR: the only repo prove may run in. */
   repo?: string;
   title: string;
   body: string;
@@ -205,7 +205,7 @@ const runUnderstandPipeline = async (input: {
 
 /**
  * The `post` verb: one Check Run on the commit this Action is running against.
- * Without a checks:write token it is a dry run — the body is printed, nothing
+ * Without a checks:write token it is a dry run. The body is printed, nothing
  * is posted, and no green check is ever invented for an unproven change.
  */
 const postBehaviorProofCheck = async (input: {
@@ -216,7 +216,7 @@ const postBehaviorProofCheck = async (input: {
   const slug = process.env.GITHUB_REPOSITORY;
   const headSha = process.env.CYCLOPS_CHECK_SHA || process.env.GITHUB_SHA;
   if (!slug || !headSha) {
-    console.error("post: no GITHUB_REPOSITORY/GITHUB_SHA — skipping check run");
+    console.error("post: no GITHUB_REPOSITORY/GITHUB_SHA, skipping check run");
     return null;
   }
   const [owner, repo] = slug.split("/");
@@ -245,7 +245,7 @@ const postBehaviorProofCheck = async (input: {
     console.error(`post: ${check.name} → ${check.conclusion} ${posted.url ?? ""}`);
     return { ...check, ...posted };
   } catch (e) {
-    // a fork PR's token cannot write checks — report the outcome, do not fail
+    // a fork PR's token cannot write checks. Report the outcome, do not fail
     // the run over the announcement of it
     console.error(`post failed: ${e instanceof Error ? e.message : String(e)}`);
     return { ...check, posted: false, url: null };

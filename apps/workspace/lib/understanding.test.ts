@@ -47,7 +47,7 @@ describe("understanding lane contract", () => {
       proof_refs: [
         {
           kind: "test",
-          label: "prove: pnpm run test — failed",
+          label: "prove: pnpm run test, failed",
           value: "exit 1 · 3.2s",
           status: "fail",
           log: "Error: 2 tests failed",

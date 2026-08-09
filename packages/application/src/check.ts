@@ -18,8 +18,11 @@ const logExcerpt = (o: ProveOutcome): string =>
 
 /**
  * The `post` verb: the review outcome as a Check Run body. The conclusion is
- * the prove exit code and nothing else — an Understanding without a run is
+ * the prove exit code and nothing else. An Understanding without a run is
  * `neutral`, never a green check.
+ *
+ * Copy follows STYLE.md: plain labels, short sentences, no em dash. The
+ * Understanding's own prose is normalized in @cyclops/domain when it decodes.
  */
 export const behaviorProofCheck = (input: {
   understanding: Understanding;
@@ -32,24 +35,24 @@ export const behaviorProofCheck = (input: {
   const conclusion = outcome === null ? "neutral" : outcome.exitCode === 0 ? "success" : "failure";
   const title =
     outcome === null
-      ? "Understanding only — no proof was run"
+      ? "No proof was run. Understanding only."
       : outcome.timedOut
-        ? `Proof timed out — ${outcome.command}`
+        ? `Proof timed out: ${outcome.command}`
         : outcome.exitCode === 0
-          ? `Proof passed — ${outcome.command}`
-          : `Proof failed — ${outcome.command} (exit ${outcome.exitCode})`;
+          ? `Proof passed: ${outcome.command}`
+          : `Proof failed: ${outcome.command} (exit ${outcome.exitCode})`;
 
   const reviewerRisks = u.risks.filter((r) => r.source === "reviewer").length;
   const otherRefs = u.proof_refs.filter((r) => !isProveRef(r));
 
   const lines = [
-    `**What** — ${condense(u.what, 400)}`,
+    `**What changed:** ${condense(u.what, 400)}`,
     "",
-    `**Why** — ${condense(u.why, 400)}`,
+    `**Why:** ${condense(u.why, 400)}`,
     "",
-    `**How** — ${condense(u.how, 600)}`,
+    `**How:** ${condense(u.how, 600)}`,
     "",
-    `**Risks** — ${u.risks.length} total, ${reviewerRisks} found by review`,
+    `**Risks:** ${u.risks.length} in total. ${reviewerRisks} found by review.`,
     "",
     "## Proof",
     "",
@@ -57,11 +60,11 @@ export const behaviorProofCheck = (input: {
 
   if (outcome === null) {
     lines.push(
-      "No verification command was run for this change, so this check proves nothing about behavior.",
+      "Nothing was run to check this change. This check proves nothing about behavior.",
     );
   } else {
     lines.push(
-      `\`${outcome.command}\` in \`${outcome.repo}\` → **exit ${outcome.exitCode}**${outcome.timedOut ? " (timed out)" : ""} after ${(outcome.durationMs / 1000).toFixed(1)}s`,
+      `\`${outcome.command}\` ran in \`${outcome.repo}\` and exited **${outcome.exitCode}**${outcome.timedOut ? " (timed out)" : ""} after ${(outcome.durationMs / 1000).toFixed(1)}s.`,
       "",
       `Command source: \`${outcome.source}\``,
       "",
@@ -76,7 +79,7 @@ export const behaviorProofCheck = (input: {
   }
 
   if (otherRefs.length > 0) {
-    lines.push("", "### Other proof refs", "");
+    lines.push("", "### Other evidence", "");
     for (const r of otherRefs) {
       lines.push(`- \`${r.kind}\` ${r.label}: ${condense(r.value, 200)}`);
     }
@@ -86,7 +89,7 @@ export const behaviorProofCheck = (input: {
     "",
     proofPageUrl
       ? `[Full proof page](${proofPageUrl})`
-      : "_No hosted proof page for this run (set `PROOF_PAGE_URL` to link one)._",
+      : "_This run has no hosted proof page. Set `PROOF_PAGE_URL` to link one._",
   );
   if (runId) lines.push("", `<sub>cyclops run \`${runId}\`</sub>`);
 

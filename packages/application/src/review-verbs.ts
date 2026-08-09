@@ -9,7 +9,7 @@ export const stubRisk = (u: Understanding): Understanding => ({
     ...u.risks,
     {
       area: "review-verb",
-      note: "risk verb stub — replace with agent pass",
+      note: "risk verb stub, replace with agent pass",
       source: "reviewer",
     },
   ],

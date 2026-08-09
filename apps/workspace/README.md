@@ -1,7 +1,7 @@
 # @cyclops/workspace
 
 The live review workspace: the face of cyclops. Open a PR URL and a structural
-shell appears instantly (files, CI, timeline — straight from the GitHub API).
+shell appears instantly (files, CI, timeline, straight from the GitHub API).
 One analysis lane (Codex CLI, headless) then reads the full diff, the review
 threads and the failing CI logs, and **builds the interface itself**: it streams
 [json-render](https://json-render.dev) SpecStream patches (RFC 6902, one JSON
@@ -30,18 +30,18 @@ GitHub (gh CLI)          Codex CLI (headless)
 
 ## Layout
 
-- `lib/catalog.ts` — the component catalog (Zod-validated). `catalog.prompt()`
+- `lib/catalog.ts`: the component catalog (Zod-validated). `catalog.prompt()`
   becomes the lane's system prompt; the renderer refuses anything not registered.
-- `lib/shell-spec.ts` — instant shell from GitHub data, before any AI. Its
+- `lib/shell-spec.ts`: instant shell from GitHub data, before any AI. Its
   section slots are the Understanding fields, in the locked proof-page order.
-- `lib/prompt.ts` — the single `understand` lane prompt and its output contract.
-- `lib/understanding.ts` — schema validation plus the deterministic render of a
+- `lib/prompt.ts`: the single `understand` lane prompt and its output contract.
+- `lib/understanding.ts`: schema validation plus the deterministic render of a
   validated Understanding.
-- `lib/sessions.ts` — detached sessions: rows in the `SessionStore`, blobs under
+- `lib/sessions.ts`: detached sessions, rows in the `SessionStore`, blobs under
   `.data/workspace/<session>/`, only the live listener set in memory.
-- `lib/review-run.ts` — hands the lane's Understanding to `runReviewUnderstand`
+- `lib/review-run.ts`: hands the lane's Understanding to `runReviewUnderstand`
   as a `HarnessPort`. Swapping Codex for Pi is swapping that one adapter.
-- `components/registry.tsx` — the renderers. AI props are untrusted input and
+- `components/registry.tsx`: the renderers. AI props are untrusted input and
   are validated defensively.
 
 ## Run

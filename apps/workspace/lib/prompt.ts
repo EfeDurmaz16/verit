@@ -1,44 +1,45 @@
+import { OUTPUT_STYLE } from "@cyclops/domain";
 import { catalog } from "./catalog";
 import { BLOCKS_FILE } from "./codex";
 import type { PRMeta } from "./schema";
 import { SECTION, UNDERSTANDING_FILE } from "./understanding";
 
-/* Bump when prompt/protocol semantics change — part of the session key. */
-export const PROMPT_VERSION = "v5";
+/* Bump when prompt or protocol semantics change. It is part of the session key. */
+export const PROMPT_VERSION = "v6";
 
 const PROTOCOL = `
-STREAMING PROTOCOL — the reviewer watches the workspace assemble in real time:
+STREAMING PROTOCOL. The reviewer watches the workspace assemble in real time:
 Append SpecStream lines to ./${BLOCKS_FILE} as you work (printf '%s\\n' '<json>' >> ${BLOCKS_FILE}).
 Each line is ONE minified RFC 6902 JSON patch against the spec:
   {"op":"add","path":"/elements/<key>","value":{"type":"<Component>","props":{...},"children":[]}}
-  {"op":"add","path":"/elements/<section>/children/-","value":"<key>"}   — attach your element to a section
-  {"op":"replace","path":"/elements/<key>","value":{...}}                — swap a whole element
-  {"op":"replace","path":"/elements/<key>/props/<prop>","value":...}     — tweak one prop
+  {"op":"add","path":"/elements/<section>/children/-","value":"<key>"}   attach your element to a section
+  {"op":"replace","path":"/elements/<key>","value":{...}}                swap a whole element
+  {"op":"replace","path":"/elements/<key>/props/<prop>","value":...}     tweak one prop
 
 Hard rules:
-- One patch per line, minified. Keep every line under 3000 characters — split large content into multiple elements rather than one giant value.
+- One patch per line, minified. Keep every line under 3000 characters. Split large content into several elements instead of one giant value.
 - Add an element BEFORE attaching its key to a section's children.
 - NEVER modify /root or /elements/ws.
 - Every file path, line number, and code excerpt must come verbatim from the diff. Never invent.
-- EMIT AS YOU GO. A rough element now + a replace later beats a perfect element at the end.
+- EMIT AS YOU GO. A rough element now plus a replace later beats a perfect element at the end.
 `;
 
 /* The lane fills exactly the Understanding surfaces. Keys are fixed so the
    server can overwrite each one with the schema-validated value at the end. */
 const SURFACES = `
-YOUR SECTIONS AND THE ELEMENT KEY FOR EACH — use these keys exactly:
-- ${SECTION.understanding} → key "u-what" (Summary: headline = what changed, body = why it changed)
-                          → key "u-how"  (Text: how it is implemented)
-- ${SECTION.proof}         → key "u-proof" (ProofEvidence: how a human verifies the behaviour)
-- ${SECTION.risks}         → key "u-risks" (RisksList: what you found vs what the author declared)
-- ${SECTION.scope}         → key "u-scope" (Text: what this PR deliberately does not do; omit if nothing)
+YOUR SECTIONS AND THE ELEMENT KEY FOR EACH. Use these keys exactly:
+- ${SECTION.understanding} -> key "u-what" (Summary: headline = what changed, body = why it changed)
+                          -> key "u-how"  (Text: how it is implemented)
+- ${SECTION.proof}         -> key "u-proof" (ProofEvidence: how a human verifies the behaviour)
+- ${SECTION.risks}         -> key "u-risks" (RisksList: what you found vs what the author declared)
+- ${SECTION.scope}         -> key "u-scope" (Text: what this PR deliberately does not do; omit if nothing)
 
 You may add extra evidence elements with the key prefix "e-" (Insight, CodePreview, Callout)
 and attach them to ${SECTION.proof} or ${SECTION.risks}. Nothing else.
 `;
 
 const CONTRACT = `
-OUTPUT CONTRACT — this is what the run is judged on:
+OUTPUT CONTRACT. This is what the run is judged on.
 When your analysis is complete, write ./${UNDERSTANDING_FILE} (one JSON object, not JSONL):
 {
   "what":  "<one paragraph: what this PR actually changes in behaviour>",
@@ -50,11 +51,12 @@ When your analysis is complete, write ./${UNDERSTANDING_FILE} (one JSON object, 
 }
 Rules:
 - what, why and how are required and must each be non-empty. The file is validated against a
-  strict schema; if it fails, the run is reported as unverified.
-- Every proof_ref must be runnable or openable as written. An empty list is better than an invented one.
+  strict schema. If it fails, the run is reported as unverified.
+- Every proof_ref must be runnable or openable as written. An empty list beats an invented one.
 - source:"author" is for risks the PR description itself admits. source:"reviewer" is for risks you
-  found by reading the diff. The author's list is a hint, NEVER an allowlist — review the whole diff
-  regardless of what the description says, and expect to find risks the author did not mention.
+  found by reading the diff. The author's list is a hint, NEVER an allowlist. Review the whole diff
+  whatever the description says, and expect to find risks the author did not mention.
+- Every string in this file follows the OUTPUT STYLE above. No em dash anywhere.
 - Write the file exactly once, at the end, after the workspace already reflects your analysis.
 `;
 
@@ -63,22 +65,23 @@ export function understandPrompt(pr: PRMeta): string {
 
 Your job is to produce the Understanding of this pull request: what it changes, why, how, how a human can verify the behaviour, and where the risk is.
 
-ALL DATA IS ALREADY ON DISK in your working directory — do NOT run gh to fetch it:
-- ./diff.patch     — the full unified diff
-- ./pr.json        — title, description, branches, commit list, reviews
-- ./comments.json  — inline review comments (may be empty)
-- ./ci.json        — check names + status
-- ./ci-fail.log    — tail of the failing CI logs (only if something failed)
+ALL DATA IS ALREADY ON DISK in your working directory. Do NOT run gh to fetch it:
+- ./diff.patch     the full unified diff
+- ./pr.json        title, description, branches, commit list, reviews
+- ./comments.json  inline review comments (may be empty)
+- ./ci.json        check names and status
+- ./ci-fail.log    tail of the failing CI logs (only if something failed)
 Read them with sed/rg/cat. The gh CLI is available only if you genuinely need something beyond these.
 
-The workspace shell already exists; the section slots below are pre-created and empty.
+The workspace shell already exists. The section slots below are pre-created and empty.
 
 ${catalog.prompt()}
 
 ${PROTOCOL}
 ${SURFACES}
+${OUTPUT_STYLE}
 
-Work order — the first step must produce patches within your first minute:
+Work order. The first step must produce patches within your first minute:
 1. Read pr.json and the first ~300 lines of diff.patch. IMMEDIATELY emit a draft "u-what" and replace status-el's text with what you are doing.
 2. Read the rest of diff.patch (rg for the load-bearing parts), plus comments.json and ci-fail.log. Refine "u-what" and emit "u-how".
 3. Emit "u-proof" as soon as you know how the behaviour can be checked, then "u-risks", then "u-scope".
@@ -96,11 +99,11 @@ export function commandPrompt(command: string): string {
 The PR data files (diff.patch, pr.json, comments.json, ci.json, ci-fail.log) are still in your working directory.
 
 Respond by appending lines to ./${BLOCKS_FILE} (same SpecStream protocol):
-1. Stream your answer as you form it: append {"answer":"<sentence or two>"} lines progressively (2-4 chunks). Concrete, cite exact file paths.
+1. Stream your answer as you form it: append {"answer":"<sentence or two>"} lines progressively (2-4 chunks). Be concrete and cite exact file paths.
 2. If the command changes what the workspace should emphasize, patch it: you MAY reorder /elements/ws/children (move ops), add a new Section (add element with key prefix "q-", then append its key to /elements/ws/children), or replace existing elements with refocused versions.
 3. New analysis must come with verbatim evidence. Never invent paths or code.
 4. Keep untouched elements untouched.
-5. Do NOT rewrite ${UNDERSTANDING_FILE} — that artifact belongs to the analysis run.
-
+5. Do NOT rewrite ${UNDERSTANDING_FILE}. That artifact belongs to the analysis run.
+${OUTPUT_STYLE}
 When done, reply with exactly: done`;
 }

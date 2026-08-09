@@ -1,4 +1,4 @@
-/** Pure deterministic hex digest (no Node crypto — application stays platform-free). */
+/** Pure deterministic hex digest (no Node crypto, application stays platform-free). */
 export const contentHash = (body: string, length = 32): string => {
   let h1 = 0x811c9dc5;
   let h2 = 0x01000193;

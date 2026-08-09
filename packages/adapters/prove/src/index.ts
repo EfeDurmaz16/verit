@@ -8,7 +8,7 @@ import type { ProveCommand, ProveOutcome, ProvePort } from "@cyclops/ports";
 import { StoreError } from "@cyclops/ports";
 
 /*
- * THREAT MODEL — this file starts real processes on the machine running it.
+ * THREAT MODEL: this file starts real processes on the machine running it.
  *
  *  - argv only. Every child is `spawn(cmd, args, { shell: false })`. Nothing
  *    read out of a repo, a PR, or a model is ever concatenated into a shell
@@ -24,7 +24,7 @@ import { StoreError } from "@cyclops/ports";
  *    output is capped so a chatty suite cannot exhaust memory.
  *
  * This is not a sandbox. It is "run the command the user already runs, where
- * they already run it" — in CI the GitHub runner is the isolation boundary.
+ * they already run it." In CI the GitHub runner is the isolation boundary.
  */
 
 const exec = promisify(execFile);

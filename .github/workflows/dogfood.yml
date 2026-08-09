@@ -10,17 +10,18 @@ on:
   pull_request:
 
 # checks:write posts the behavior-proof Check Run. On a fork PR the token stays
-# read-only and the post degrades to a dry run — by design, never a failure.
+# read-only and the post degrades to a dry run, by design, never a failure.
 permissions:
   contents: read
   checks: write
+  pull-requests: read
 
 jobs:
   review:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # no `version:` here — package.json packageManager is the single source
+      # no `version:` here: package.json packageManager is the single source
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -28,7 +29,7 @@ jobs:
           cache: pnpm
       - run: pnpm install
       # prove runs the repo's own `pnpm test` inside this runner, which is the
-      # sandbox for v1 — so it reviews *this* PR, not an unrelated repo, and
+      # sandbox for v1, so it reviews *this* PR, not an unrelated repo, and
       # the ProveRunner refuses anything whose checkout is not the target.
       - name: Dogfood pipeline (ingest-pr → review → prove → post check)
         env:

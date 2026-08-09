@@ -1,5 +1,5 @@
 /**
- * GitHub Action entry — same pipeline as local `pnpm cli dogfood`.
+ * GitHub Action entry. Same pipeline as local `pnpm cli dogfood`.
  * Env: PR_SPEC=owner/repo#n, GITHUB_TOKEN, optional CYCLOPS_SQLITE_PATH / CYCLOPS_PI_BIN
  */
 import { spawnSync } from "node:child_process";

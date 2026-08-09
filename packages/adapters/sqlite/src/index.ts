@@ -92,7 +92,7 @@ const wrapOn =
   <A>(fn: () => A) =>
     Effect.try({ try: fn, catch: (e) => new StoreError(label, e) });
 
-/** Both stores over one connection — sessions and their ReviewRuns share a DB. */
+/** Both stores over one connection: sessions and their ReviewRuns share a DB. */
 export const makeSqliteStores = (
   filename: string,
 ): { docs: DocumentStore; sessions: SessionStore } => {

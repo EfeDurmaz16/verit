@@ -1,7 +1,7 @@
 {
   "name": "cyclops",
   "private": true,
-  "description": "Behavior-proof PR review — understanding-first, dual stores, generative proof UI",
+  "description": "Behavior-proof PR review: understanding-first, dual stores, generative proof UI",
   "type": "module",
   "packageManager": "pnpm@11.9.0",
   "scripts": {

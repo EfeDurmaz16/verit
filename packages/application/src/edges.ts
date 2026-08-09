@@ -4,7 +4,7 @@ import { contentHash } from "./hash";
 export { contentHash };
 
 const pathGlobOverlap = (a: readonly string[], b: readonly string[]): boolean => {
-  // Top-level directory (or file basename if unscoped) — shared path glob for edge (b).
+  // Top-level directory (or file basename if unscoped): shared path glob for edge (b).
   const dirs = (paths: readonly string[]) =>
     new Set(paths.map((p) => p.split("/")[0] ?? p));
   const A = dirs(a);

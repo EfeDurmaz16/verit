@@ -17,8 +17,8 @@ import { readUnderstanding, understandingPatches } from "./understanding";
 
    Durable state lives in the SessionStore (session + run rows) and on disk
    under WORKSPACE_ROOT (prefetched PR data, the SpecStream log, the
-   Understanding JSON). Only the live listener set is process-local — that is
-   connection state, not session state — so a finished run still replays after
+   Understanding JSON). Only the live listener set is process-local. That is
+   connection state, not session state, so a finished run still replays after
    a restart. */
 
 const EVENTS_FILE = "events.ndjson";
@@ -47,7 +47,7 @@ export function sessionId(pr: PRMeta): string {
 
 export const workdirOf = (id: string): string => path.join(WORKSPACE_ROOT, id);
 
-/** True only for a workdir this app created — never an arbitrary path. */
+/** True only for a workdir this app created. Never an arbitrary path. */
 export function isWorkspaceDir(dir: string): boolean {
   const resolved = path.resolve(dir);
   return (
@@ -130,7 +130,7 @@ export async function startSession(pr: PRMeta): Promise<LiveSession> {
 
   for (const line of buildShellSpec(pr).lines) broadcast(s, patch(line));
 
-  // detached runner — outlives any request
+  // detached runner, outlives any request
   void (async () => {
     const send: Send = (ev) => broadcast(s, ev);
     let reviewRunId: string | null = null;
@@ -205,7 +205,7 @@ const unverifiedCallout = (reason: string): string =>
     path: "/elements/u-unverified",
     value: {
       type: "Callout",
-      props: { tone: "warn", text: `Unverified run — ${reason}` },
+      props: { tone: "warn", text: `Unverified run: ${reason}` },
       children: [],
     },
   });

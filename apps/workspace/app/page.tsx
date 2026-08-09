@@ -58,7 +58,7 @@ function Workspace() {
               {status === "fetching"
                 ? "Fetching pull request from GitHub…"
                 : status === "error"
-                  ? "Analysis failed — check the header for details."
+                  ? "Analysis failed. Check the header for details."
                   : "Assembling workspace…"}
             </p>
           </div>

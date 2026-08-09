@@ -11,7 +11,7 @@ interface Hunk {
 }
 
 /* The real diff for a selected file, fetched from the server's cached patch.
-   No AI involved — evidence chips deep-link here via payload.line. */
+   No AI involved. Evidence chips deep-link here via payload.line. */
 function DiffView({ path, line }: { path: string; line?: number }) {
   const { prUrl } = useWorkspace();
   const [hunks, setHunks] = useState<Hunk[] | null>(null);
@@ -116,7 +116,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function FileList({ paths }: { paths: string[] }) {
   const { spec, select, flashFiles } = useWorkspace();
-  if (!paths.length) return <span className="text-[12px] text-ink-3">—</span>;
+  if (!paths.length) return <span className="text-[12px] text-ink-3">none</span>;
   // enrich from whatever FileGroup already knows about this path
   const lookup = (path: string): P => {
     for (const el of Object.values(spec?.elements ?? {})) {
@@ -136,7 +136,7 @@ function FileList({ paths }: { paths: string[] }) {
             flashFiles([p]);
           }}
           className="block w-full truncate rounded-[4px] px-1 py-0.5 text-left font-mono text-[11px] text-accent-text hover:bg-accent-soft"
-          title={`${p} — open diff`}
+          title={`${p}: open diff`}
         >
           {p}
         </button>

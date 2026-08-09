@@ -2,7 +2,7 @@ import { defineCatalog } from "@json-render/core";
 import { schema } from "@json-render/react/schema";
 import { z } from "zod";
 
-/* The component catalog — the ONLY vocabulary the model can render with.
+/* The component catalog: the ONLY vocabulary the model can render with.
    catalog.prompt() turns this into the system prompt; the renderer refuses
    anything not registered here. */
 
@@ -102,7 +102,7 @@ export const catalog = defineCatalog(schema, {
             label: z.string().describe("what this reference proves"),
             value: z
               .string()
-              .describe("the test name, the exact command, or the URL — verbatim, never invented"),
+              .describe("the test name, the exact command, or the URL, verbatim, never invented"),
           }),
         ),
       }),
@@ -114,7 +114,7 @@ export const catalog = defineCatalog(schema, {
         authorDeclared: z
           .array(z.object({ area: z.string(), note: z.string() }))
           .default([])
-          .describe("risks the PR author admitted — hints only, never the complete set"),
+          .describe("risks the PR author admitted: hints only, never the complete set"),
         reviewerFound: z
           .array(z.object({ area: z.string(), note: z.string() }))
           .default([])

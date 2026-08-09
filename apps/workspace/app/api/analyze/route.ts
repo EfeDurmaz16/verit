@@ -18,11 +18,11 @@ export async function POST(req: NextRequest) {
 
   const pr = await fetchPR(parsed.repo, parsed.number);
 
-  // in-flight (or just-finished) in this process — reattach, never restart
+  // in-flight (or just-finished) in this process, reattach, never restart
   const live = getLiveSession(pr);
   if (live) return new Response(attachStream(live), { headers: SSE_HEADERS });
 
-  // finished on a previous server run — rehydrate from the store
+  // finished on a previous server run, rehydrate from the store
   const replay = await replayEvents(pr);
   if (replay) return new Response(replayStream(replay), { headers: SSE_HEADERS });
 
