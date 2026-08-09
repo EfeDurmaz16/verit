@@ -59,10 +59,12 @@ interface WorkspaceState {
   answers: Answer[];
   error: string | null;
   commandBusy: boolean;
+  proveBusy: boolean;
   focus: Focus;
   prUrl: string | null;
   analyze: (url: string) => void;
   stop: () => void;
+  prove: () => void;
   sendCommand: (text: string) => void;
   select: (s: Selection | null) => void;
   flashFiles: (paths: string[]) => void;
@@ -122,6 +124,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [answers, setAnswers] = useState<Answer[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [commandBusy, setCommandBusy] = useState(false);
+  const [proveBusy, setProveBusy] = useState(false);
   const [focus, setFocus] = useState<Focus>("all");
   const [prUrl, setPrUrl] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -349,6 +352,40 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     [status, handleEvent, applyLines],
   );
 
+  /* Runs the target repo's test command on this machine. Only ever called from
+     the labelled button in the Proof section — never on load or on analysis. */
+  const prove = useCallback(async () => {
+    if (!prUrl || proveBusy) return;
+    setProveBusy(true);
+    setActivity((a) => [...a.slice(-30), "running the proof command locally…"]);
+    try {
+      const res = await fetch("/api/prove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: prUrl }),
+      });
+      const json = (await res.json()) as {
+        lines?: string[];
+        outcome?: { command: string; exitCode: number; durationMs: number; timedOut: boolean };
+        error?: string;
+      };
+      if (!res.ok) throw new Error(json.error ?? "prove failed to run");
+      if (json.lines) applyLines(json.lines);
+      const o = json.outcome;
+      if (o) {
+        const verdict = o.timedOut ? "timed out" : o.exitCode === 0 ? "passed" : `failed (exit ${o.exitCode})`;
+        setActivity((a) => [
+          ...a.slice(-30),
+          `${o.command} ${verdict} in ${(o.durationMs / 1000).toFixed(1)}s`,
+        ]);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setProveBusy(false);
+    }
+  }, [prUrl, proveBusy, applyLines]);
+
   const stop = useCallback(() => {
     abortRef.current?.abort();
     if (prUrl) {
@@ -384,10 +421,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       answers,
       error,
       commandBusy,
+      proveBusy,
       focus,
       prUrl,
       analyze,
       stop,
+      prove,
       sendCommand,
       select,
       flashFiles,
@@ -395,7 +434,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       paletteOpen,
       setPaletteOpen,
     }),
-    [spec, pr, status, selection, highlight, activity, answers, error, commandBusy, focus, prUrl, analyze, stop, sendCommand, select, flashFiles, scrollTo, paletteOpen],
+    [spec, pr, status, selection, highlight, activity, answers, error, commandBusy, proveBusy, focus, prUrl, analyze, stop, prove, sendCommand, select, flashFiles, scrollTo, paletteOpen],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

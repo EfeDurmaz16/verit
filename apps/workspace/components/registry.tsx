@@ -200,6 +200,8 @@ function ProofEvidence({ props }: { props: P }) {
           const value = str(r.value);
           // model-supplied: only ever linkify plain http(s), never other schemes
           const href = /^https?:\/\//i.test(value) ? value : null;
+          const status = str(r.status);
+          const log = str(r.log);
           return (
             <div key={i} className="flex items-start gap-2.5 px-3 py-2">
               <span
@@ -211,7 +213,21 @@ function ProofEvidence({ props }: { props: P }) {
                 {str(r.kind, "proof")}
               </span>
               <div className="min-w-0 flex-1">
-                <div className="text-[12.5px] font-medium leading-tight">{str(r.label)}</div>
+                <div className="flex items-baseline gap-2">
+                  {/* an executed ref states its verdict first: a failed proof
+                      is never rendered as neutral evidence */}
+                  {status === "pass" || status === "fail" ? (
+                    <span
+                      className={clsx(
+                        "shrink-0 rounded-[4px] px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide",
+                        status === "pass" ? "bg-ok-soft text-ok" : "bg-danger-soft text-danger",
+                      )}
+                    >
+                      {status === "pass" ? "passed" : "failed"}
+                    </span>
+                  ) : null}
+                  <span className="text-[12.5px] font-medium leading-tight">{str(r.label)}</span>
+                </div>
                 {href ? (
                   <a
                     href={href}
@@ -226,12 +242,63 @@ function ProofEvidence({ props }: { props: P }) {
                     {value}
                   </div>
                 )}
+                {log ? (
+                  <details className="mt-1.5">
+                    <summary className="cursor-pointer text-[11px] text-ink-3 hover:text-ink-2">
+                      log tail
+                    </summary>
+                    <pre className="mt-1 max-h-64 overflow-auto rounded-md bg-surface-2 p-2 font-mono text-[11px] leading-snug text-ink-2">
+                      {log}
+                    </pre>
+                  </details>
+                ) : null}
               </div>
             </div>
           );
         })}
       </div>
     </Panel>
+  );
+}
+
+/**
+ * The only path that executes anything on the reviewer's machine. It names the
+ * exact command and directory before the click, and renders as a disabled
+ * explanation whenever this checkout is not the repo under review.
+ */
+function ProveAction({ props }: { props: P }) {
+  const { prove, proveBusy, status } = useWorkspace();
+  const allowed = props.allowed === true;
+  const command = str(props.command);
+  const cwd = str(props.cwd);
+  const reason = str(props.reason);
+
+  if (!allowed) {
+    return (
+      <div className="rounded-md border border-dashed border-line px-3 py-2 text-[12px] text-ink-3">
+        <span className="font-medium text-ink-2">Proof not runnable here.</span> {reason}
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md border border-line bg-surface px-3 py-2">
+      <button
+        onClick={() => prove()}
+        disabled={proveBusy || status === "streaming"}
+        className={clsx(
+          "shrink-0 rounded-md border px-2.5 py-1 text-[12px] font-medium transition-colors",
+          proveBusy
+            ? "border-line text-ink-3"
+            : "border-line-strong text-ink hover:border-accent hover:text-accent-text",
+        )}
+      >
+        {proveBusy ? "Running…" : "Run proof"}
+      </button>
+      <span className="min-w-0 text-[11.5px] text-ink-3">
+        runs <code className="font-mono text-ink-2">{command}</code> locally in{" "}
+        <code className="font-mono text-ink-2">{cwd}</code> ({reason})
+      </span>
+    </div>
   );
 }
 
@@ -763,6 +830,7 @@ export const registry: ComponentRegistry = {
   MetricRow: wrap(MetricRow),
   ReviewPath: wrap(ReviewPath),
   ProofEvidence: wrap(ProofEvidence),
+  ProveAction: wrap(ProveAction),
   RisksList: wrap(RisksList),
   RiskCluster: wrap(RiskCluster),
   Insight: wrap(Insight),

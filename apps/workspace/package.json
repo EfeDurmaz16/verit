@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@cyclops/adapter-memory": "workspace:*",
+    "@cyclops/adapter-prove": "workspace:*",
     "@cyclops/adapter-sqlite": "workspace:*",
     "@cyclops/application": "workspace:*",
     "@cyclops/domain": "workspace:*",

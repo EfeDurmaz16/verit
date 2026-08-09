@@ -4,6 +4,7 @@ import { Effect } from "effect";
 import { runAgent, watchBlocks, type Send } from "./codex";
 import { prefetchPR } from "./prefetch";
 import { PROMPT_VERSION, understandPrompt } from "./prompt";
+import { proveActionPatches, proveOffer } from "./prove";
 import { persistReviewRun, readStoredUnderstanding } from "./review-run";
 import type { PRMeta, StreamEvent } from "./schema";
 import { buildShellSpec } from "./shell-spec";
@@ -166,6 +167,9 @@ export async function startSession(pr: PRMeta): Promise<LiveSession> {
           for (const line of understandingPatches(result.understanding)) send(patch(line));
           reviewRunId = await persistReviewRun(pr, result.understanding);
           send({ kind: "activity", text: `understanding stored as ${reviewRunId}` });
+          // the prove control appears only once there is a run to attach
+          // evidence to, and it never fires itself
+          for (const line of proveActionPatches(await proveOffer(pr.repo))) send(patch(line));
         }
       }
       if (s.threadId) send({ kind: "session", threadId: s.threadId, workdir });
@@ -234,8 +238,10 @@ export async function replayEvents(pr: PRMeta): Promise<StreamEvent[] | null> {
   }
   if (run.reviewRunId) {
     const stored = await readStoredUnderstanding(run.reviewRunId);
-    // re-assert the canonical sections straight from the store
+    // re-assert the canonical sections straight from the store, including any
+    // proof refs a previous prove wrote
     if (stored) events.push(...understandingPatches(stored).map(patch));
+    events.push(...proveActionPatches(await proveOffer(session.repo)).map(patch));
   }
   events.push({ kind: "activity", text: `replayed run ${run.id} from the store` });
   if (run.threadId) {
