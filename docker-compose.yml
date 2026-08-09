@@ -25,6 +25,28 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  # A real S3 server for developing and testing the S3 object store adapter.
+  # R2 is the hosted target; this is what proves the adapter locally. Dev only,
+  # and the credentials below are dev-only too: they are not a secret, they are
+  # a fixture, and nothing outside this file may reuse them.
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # console, http://localhost:9001
+    environment:
+      MINIO_ROOT_USER: cyclops
+      MINIO_ROOT_PASSWORD: cyclops-dev-secret
+      # MinIO checks the region in the signature. R2 wants "auto"; here the
+      # adapter is pointed at us-east-1 through CYCLOPS_S3_REGION.
+      MINIO_REGION_NAME: us-east-1
+    # A top-level directory under /data is a bucket, so the bucket exists on
+    # first boot without a second container just to run `mc mb`.
+    entrypoint: sh -c 'mkdir -p /data/cyclops-proofs && exec minio server /data --console-address ":9001"'
+    volumes:
+      - minio_data:/data
+
 volumes:
   neo4j_data:
   postgres_data:
+  minio_data:
