@@ -1,0 +1,162 @@
+# Dashboard setup
+
+The hosted surface: teams sign in with GitHub, see run history per repo, and open a
+run's proof page. The Check Run posted by the Action links straight at a run.
+
+Two halves. Run it locally first, then do the hosted checklist once.
+
+## Run it locally
+
+Nothing here needs a cloud account.
+
+```bash
+docker compose up -d postgres          # host port 5433, see docker-compose.yml
+cd apps/dashboard
+export DATABASE_URL="postgres://cyclops:cyclops-dev@localhost:5433/cyclops"
+export CYCLOPS_SESSION_SECRET="$(openssl rand -base64 48)"
+pnpm migrate                           # idempotent, safe to re-run
+pnpm register-repo EfeDurmaz16/cyclops # prints the ingest token once
+pnpm dev                               # http://localhost:3001
+```
+
+`register-repo` prints `CYCLOPS_INGEST_TOKEN=...` once. Only its sha256 digest is
+stored, so a lost token is reissued by running the command again, never recovered.
+
+To skip the GitHub login while developing, set `CYCLOPS_DEV_USER` to a login:
+
+```bash
+CYCLOPS_DEV_USER=EfeDurmaz16 pnpm dev
+```
+
+This is opt-in and has no default. With the variable unset the dashboard always
+asks GitHub who you are. A dev session carries no GitHub token, which is also why
+it is the one path that skips the per-repo access check. Never set it in a
+deployed environment.
+
+Then run the pipeline against it:
+
+```bash
+PR_SPEC="EfeDurmaz16/cyclops#1" \
+GITHUB_TOKEN="$(gh auth token)" \
+CYCLOPS_PROVE_CWD="$PWD" \
+CYCLOPS_CHECK_DRY_RUN=1 \
+CYCLOPS_DASHBOARD_URL="http://localhost:3001" \
+CYCLOPS_INGEST_TOKEN="cyc_..." \
+pnpm cli dogfood "EfeDurmaz16/cyclops#1"
+```
+
+The run appears at `/r/EfeDurmaz16/cyclops`, and its proof page at
+`/r/EfeDurmaz16/cyclops/runs/{runId}`, which is the URL printed as
+`proofPageUrl` and linked from the Check body.
+
+## Environment variables
+
+| Variable | Where | What it does |
+|---|---|---|
+| `DATABASE_URL` | dashboard | Postgres connection string. Neon in production |
+| `CYCLOPS_SESSION_SECRET` | dashboard | At least 32 chars. Seals the session cookie. Rotating it signs everyone out |
+| `GITHUB_CLIENT_ID` | dashboard | OAuth app client id |
+| `GITHUB_CLIENT_SECRET` | dashboard | OAuth app client secret |
+| `CYCLOPS_ACCESS_TTL_SECONDS` | dashboard | How long a cached "may read" answer is trusted. Default 600 |
+| `CYCLOPS_BLOB_DIR` | dashboard | Where the filesystem object store writes. Local only |
+| `CYCLOPS_DEV_USER` | dashboard | Local only. Skips login as that GitHub login. Never set in a deployment |
+| `CYCLOPS_DASHBOARD_URL` | Action | Base URL of the dashboard. Unset means no upload |
+| `CYCLOPS_INGEST_TOKEN` | Action | Per-repo token from `register-repo`. Unset means no upload |
+| `PROOF_PAGE_URL` | Action | Only to override the computed proof page link |
+
+## Hosted checklist
+
+Do these once, in this order.
+
+### 1. Neon Postgres
+
+1. Create a Neon project. Pick the region closest to the Vercel deployment.
+2. Copy the pooled connection string. It ends with `?sslmode=require`.
+3. Keep the major version in step with `docker-compose.yml`, which pins
+   postgres 17.
+4. Apply the schema against it:
+   ```bash
+   DATABASE_URL="postgres://...neon.tech/cyclops?sslmode=require" \
+     pnpm --filter @cyclops/dashboard migrate
+   ```
+5. Register each repo the same way, once per repo:
+   ```bash
+   DATABASE_URL="..." pnpm --filter @cyclops/dashboard register-repo owner/name
+   ```
+   Put the printed token in that repo's GitHub secrets as
+   `CYCLOPS_INGEST_TOKEN`, and set the repository variable
+   `CYCLOPS_DASHBOARD_URL` to the dashboard's URL.
+
+### 2. GitHub OAuth app
+
+1. GitHub, Settings, Developer settings, OAuth Apps, New OAuth App.
+2. Homepage URL: the dashboard's URL.
+3. Authorization callback URL: `https://<dashboard>/api/auth/callback`.
+   It must match exactly, including the scheme.
+4. Generate a client secret. Copy both values into Vercel.
+5. Scopes are requested by the app, not configured here. It asks for
+   `read:user read:org repo`. `repo` is what lets the dashboard ask GitHub
+   whether a signed-in user may read a private repo. It is a coarse grant.
+   A GitHub App with per-repo installation would be finer and is the upgrade
+   path; it is not in phase 1.
+
+For local development make a second OAuth app with callback
+`http://localhost:3001/api/auth/callback`. GitHub allows only one callback per
+app, so do not reuse the production one.
+
+### 3. Cloudflare R2
+
+Not wired yet. The dashboard writes blobs through `ObjectStorePort`
+(`packages/ports/src/index.ts`) and the only implementation today is the
+filesystem one in `packages/adapters/local-blob`. Until an R2 adapter exists,
+a deployed dashboard on Vercel has no durable blob storage: the run row and its
+log tail survive, the full log does not.
+
+When you do create the bucket:
+
+1. Cloudflare, R2, create a bucket, e.g. `cyclops-proofs`.
+2. Create an R2 API token scoped to that bucket, read and write.
+3. Note the account id, access key id, secret access key, and the S3 endpoint
+   `https://<account-id>.r2.cloudflarestorage.com`.
+4. Add an adapter that implements `ObjectStorePort` against that endpoint and
+   select it in `apps/dashboard/lib/objects.ts`. Nothing else changes.
+
+### 4. Vercel
+
+1. Import the repo. Set the root directory to `apps/dashboard`.
+2. Build command and install command: leave the defaults. The monorepo builds
+   through pnpm workspaces.
+3. Environment variables, all environments unless noted:
+   - `DATABASE_URL`, the Neon pooled string
+   - `CYCLOPS_SESSION_SECRET`, from `openssl rand -base64 48`
+   - `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`
+   - `CYCLOPS_ACCESS_TTL_SECONDS`, optional
+   - Do NOT set `CYCLOPS_DEV_USER`
+4. Deploy, then update the OAuth app's callback URL to the real domain if you
+   created it against a preview URL.
+5. Sign in once and confirm you land on your organization list.
+
+### 5. Wire the Action
+
+In each connected repo:
+
+- Repository variable `CYCLOPS_DASHBOARD_URL` = the dashboard URL.
+- Repository secret `CYCLOPS_INGEST_TOKEN` = the token from `register-repo`.
+
+`.github/workflows/dogfood.yml` already passes both through. With either unset
+the job runs exactly as before: no upload, no proof page link, same Check.
+
+Fork pull requests do not receive secrets, so a fork PR uploads nothing. That is
+by design, the same way its Check post degrades to a dry run.
+
+## What is stored
+
+- `repos`: the connected repo and the sha256 of its ingest token.
+- `runs`: one row per uploaded run, with the Understanding and the proof spec as
+  jsonb, the prove verdict, and the log tail.
+- `repo_access`: the cached answer to "may this user read this repo", with the
+  time it was checked.
+- Object store: the full prove log, keyed `runs/<runId>/prove.log`.
+
+The user's GitHub token lives only inside the sealed session cookie. It is never
+written to the database.

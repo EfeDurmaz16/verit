@@ -17,7 +17,8 @@ The `prove` verb runs the reviewed repo's **own** test or build command and reco
 - **Neo4j**: ontology + PR/git graph (`GraphStore`; optional, memory fallback without Docker)
 - **tree-sitter** ingest with **regex fallback** until WASM grammars ship
 - **Harness port**: one headless coding CLI per lane, chosen with `CYCLOPS_LANE_HARNESS` (`codex`, `claude`, `cursor`); the Action falls back to Pi via `CYCLOPS_PI_BIN`, then to a deterministic stub
-- **json-render** proof UI: the live review workspace (`@cyclops/workspace`, Next.js + SSE)
+- **json-render** proof UI: one component registry (`@cyclops/proof-ui`) rendered by both the live review workspace (`@cyclops/workspace`, Next.js + SSE) and the hosted dashboard
+- **Dashboard** (`@cyclops/dashboard`, Next.js + Postgres): GitHub login, run history per repo, and the proof page the Check Run links to. Setup: [`docs/dashboard-setup.md`](docs/dashboard-setup.md)
 - **ProvePort**: child-process runner for the target repo's verification command; **CheckPort**: `cyclops / behavior-proof` Check Run
 
 Architecture notes: [`docs/architecture/`](docs/architecture/). Domain terms: [`CONTEXT.md`](CONTEXT.md).
@@ -55,7 +56,9 @@ pnpm cli --help
 | `CYCLOPS_PROVE_CMD` | detected | Override the command, e.g. `cargo test --all` (argv, never a shell string) |
 | `CYCLOPS_PROVE_TIMEOUT_MS` | `600000` | Hard timeout; the process group is killed |
 | `CYCLOPS_CHECK_DRY_RUN` | unset | `1` prints the Check body instead of posting |
-| `PROOF_PAGE_URL` | unset | Hosted proof page linked from the Check |
+| `CYCLOPS_DASHBOARD_URL` | unset | Dashboard base URL. With `CYCLOPS_INGEST_TOKEN` the finished run is uploaded and the Check links its proof page |
+| `CYCLOPS_INGEST_TOKEN` | unset | Per-repo ingest token from `pnpm --filter @cyclops/dashboard register-repo owner/name` |
+| `PROOF_PAGE_URL` | unset | Only to override the computed `/r/{owner}/{repo}/runs/{runId}` link |
 
 ## CLI
 

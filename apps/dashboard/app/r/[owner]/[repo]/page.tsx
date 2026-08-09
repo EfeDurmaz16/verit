@@ -46,7 +46,9 @@ export default async function RepoPage({
             <tbody>
               {runs.map((run) => (
                 <tr key={run.id} className="border-b border-line last:border-0 hover:bg-surface-2">
-                  <td className="px-3 py-2">
+                  {/* the whole table scrolls sideways on a narrow screen, which
+                      reads better than a title wrapped into a tower of words */}
+                  <td className="whitespace-nowrap px-3 py-2">
                     <Link
                       href={`/r/${row.id}/runs/${encodeURIComponent(run.id)}`}
                       className="text-accent-text hover:underline"
@@ -54,22 +56,24 @@ export default async function RepoPage({
                       {run.prNumber ? `#${run.prNumber}` : "run"}
                     </Link>
                     {run.prTitle && (
-                      <span className="ml-2 text-ink-2">{run.prTitle}</span>
+                      <span className="ml-2 inline-block max-w-[46vw] truncate align-bottom text-ink-2 sm:max-w-[420px]">
+                        {run.prTitle}
+                      </span>
                     )}
                   </td>
                   <td className="px-3 py-2 font-mono text-[11px] text-ink-3">
                     {run.headSha ? run.headSha.slice(0, 7) : "-"}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="whitespace-nowrap px-3 py-2">
                     <Verdict verdict={run.verdict} />
                   </td>
                   <td className="px-3 py-2 font-mono text-[11px] text-ink-3">
                     {run.proofCommand ?? "-"}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="whitespace-nowrap px-3 py-2">
                     <Duration ms={run.durationMs} />
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="whitespace-nowrap px-3 py-2">
                     <When at={run.createdAt} />
                   </td>
                 </tr>

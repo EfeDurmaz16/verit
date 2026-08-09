@@ -15,7 +15,9 @@ services:
   postgres:
     image: postgres:17-alpine
     ports:
-      - "5432:5432"
+      # 5433 on the host: a locally installed postgres usually owns 5432 and
+      # the clash is silent, you just connect to the wrong database.
+      - "5433:5432"
     environment:
       POSTGRES_USER: cyclops
       POSTGRES_PASSWORD: cyclops-dev
