@@ -10,3 +10,6 @@
 | DocumentStore | SQLite runs, proof blobs, FTS |
 | skill_pack_hash | Content hash of compiled pack |
 | author risks | Hints only — never allowlist for reviewers |
+| prove | Run the reviewed repo's own verification command; refuses any other checkout |
+| ProofRef status | Verdict of an executed ref — `pass`/`fail`; absent means nothing was run |
+| behavior-proof Check | `cyclops / behavior-proof` Check Run; neutral when no proof ran |

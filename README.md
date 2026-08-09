@@ -8,6 +8,8 @@ Planning lives in [`proof-review`](https://github.com/EfeDurmaz16/proof-review).
 
 Cyclops builds a canonical **Understanding** (what / why / how + proof refs and risks), then renders a **proof page** (json-render Spec) so humans can verify behavior — not just skim a chatty review.
 
+The `prove` verb runs the reviewed repo's **own** test or build command and records the real exit code, duration and log tail as a proof ref. It refuses to run anywhere but a checkout of the repo under review: in CI that is the Action runner (the sandbox for v1), and in the workspace it only ever fires when you click the button that names the command. A failed proof renders as failed.
+
 ## Stack
 
 - **Effect** onion: `domain` → `ports` → `application` → adapters
@@ -16,6 +18,7 @@ Cyclops builds a canonical **Understanding** (what / why / how + proof refs and 
 - **tree-sitter** ingest with **regex fallback** until WASM grammars ship
 - **Harness port** — Codex CLI lane in the workspace, Pi via `CYCLOPS_PI_BIN` in the Action, deterministic stub otherwise
 - **json-render** proof UI — the live review workspace (`@cyclops/workspace`, Next.js + SSE)
+- **ProvePort** — child-process runner for the target repo's verification command; **CheckPort** — `cyclops / behavior-proof` Check Run
 
 Architecture notes: [`docs/architecture/`](docs/architecture/). Domain terms: [`CONTEXT.md`](CONTEXT.md).
 
@@ -44,6 +47,11 @@ pnpm cli --help
 | `CYCLOPS_WORKSPACE_DIR` | `.data/workspace` | Workspace session blobs |
 | `CYCLOPS_LANE_MODEL` | unset | Model for the workspace analysis lane |
 | `PR_SPEC` | `solana-foundation/pay#415` | Action / dogfood target |
+| `CYCLOPS_PROVE_CWD` | `GITHUB_WORKSPACE` (CLI) / cwd (workspace) | Checkout prove runs in; must be the reviewed repo |
+| `CYCLOPS_PROVE_CMD` | detected | Override the command, e.g. `cargo test --all` (argv, never a shell string) |
+| `CYCLOPS_PROVE_TIMEOUT_MS` | `600000` | Hard timeout; the process group is killed |
+| `CYCLOPS_CHECK_DRY_RUN` | unset | `1` prints the Check body instead of posting |
+| `PROOF_PAGE_URL` | unset | Hosted proof page linked from the Check |
 
 ## CLI
 
@@ -58,6 +66,12 @@ pnpm workspace                   # live review workspace on http://localhost:300
 ```
 
 Artifacts land under `.data/proofs/` (gitignored).
+
+Prove is off unless you point it at a checkout of the repo you are reviewing:
+
+```bash
+CYCLOPS_PROVE_CWD=/path/to/that/repo pnpm cli review --pr=owner/repo#n
+```
 
 ## Dogfood pay#415 (local = CI)
 
@@ -87,7 +101,7 @@ Requires `gh` (authenticated) and the `codex` CLI on PATH.
 | `@cyclops/domain` | Pure schemas & entities |
 | `@cyclops/ports` | Interfaces |
 | `@cyclops/application` | Use-cases |
-| `@cyclops/adapters-*` | SQLite, Neo4j, tree-sitter, GitHub, Pi, … |
+| `@cyclops/adapters-*` | SQLite, Neo4j, tree-sitter, GitHub, Pi, prove, … |
 | `@cyclops/cli` | `ingest` / `ingest-pr` / `understand` / `review` / `dogfood` |
 | `@cyclops/workspace` | Live review workspace (Next.js, SSE, json-render) |
 | `@cyclops/action` | GitHub Action entry (calls `dogfood`) |
