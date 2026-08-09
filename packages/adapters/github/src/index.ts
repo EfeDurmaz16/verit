@@ -4,7 +4,7 @@ import type { CheckPort, VcsPort } from "@cyclops/ports";
 import { StoreError } from "@cyclops/ports";
 
 /**
- * Check Runs need a token with `checks: write` — in an Action that is the
+ * Check Runs need a token with `checks: write`. In an Action that is the
  * job's own GITHUB_TOKEN. Without one this is a dry run: the body is returned
  * for the caller to print, and nothing is posted. No GitHub App in v1.
  */

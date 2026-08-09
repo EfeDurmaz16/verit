@@ -13,12 +13,12 @@ const verdict = (o: ProveOutcome): string =>
 
 /**
  * The evidence a run actually produced. A non-zero exit is carried as
- * `status: "fail"` and said plainly in the label — a failed proof is a result,
+ * `status: "fail"` and said plainly in the label. A failed proof is a result,
  * not something to soften.
  */
 export const proveRef = (o: ProveOutcome): ProofRef => ({
   kind: "test",
-  label: `${PROVE_PREFIX}${o.command} — ${verdict(o)}`,
+  label: `${PROVE_PREFIX}${o.command}, ${verdict(o)}`,
   value: `exit ${o.exitCode} · ${(o.durationMs / 1000).toFixed(1)}s · ${o.source} · ${o.cwd}`,
   status: o.exitCode === 0 ? "pass" : "fail",
   log: o.logTail,

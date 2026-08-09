@@ -1,24 +1,24 @@
 # Cyclops
 
-Behavior-proof PR review — understanding-first harness, dual stores, generative proof UI.
+Behavior-proof PR review: understanding-first harness, dual stores, generative proof UI.
 
 Planning lives in [`proof-review`](https://github.com/EfeDurmaz16/proof-review). This repo is the product.
 
 ## What it does
 
-Cyclops builds a canonical **Understanding** (what / why / how + proof refs and risks), then renders a **proof page** (json-render Spec) so humans can verify behavior — not just skim a chatty review.
+Cyclops builds a canonical **Understanding** (what / why / how + proof refs and risks), then renders a **proof page** (json-render Spec) so humans can verify behavior, not just skim a chatty review.
 
 The `prove` verb runs the reviewed repo's **own** test or build command and records the real exit code, duration and log tail as a proof ref. It refuses to run anywhere but a checkout of the repo under review: in CI that is the Action runner (the sandbox for v1), and in the workspace it only ever fires when you click the button that names the command. A failed proof renders as failed.
 
 ## Stack
 
 - **Effect** onion: `domain` → `ports` → `application` → adapters
-- **SQLite** — runs, proof blobs, FTS chunks (`DocumentStore`)
-- **Neo4j** — ontology + PR/git graph (`GraphStore`; optional — memory fallback without Docker)
+- **SQLite**: runs, proof blobs, FTS chunks (`DocumentStore`)
+- **Neo4j**: ontology + PR/git graph (`GraphStore`; optional, memory fallback without Docker)
 - **tree-sitter** ingest with **regex fallback** until WASM grammars ship
-- **Harness port** — Codex CLI lane in the workspace, Pi via `CYCLOPS_PI_BIN` in the Action, deterministic stub otherwise
-- **json-render** proof UI — the live review workspace (`@cyclops/workspace`, Next.js + SSE)
-- **ProvePort** — child-process runner for the target repo's verification command; **CheckPort** — `cyclops / behavior-proof` Check Run
+- **Harness port**: Codex CLI lane in the workspace, Pi via `CYCLOPS_PI_BIN` in the Action, deterministic stub otherwise
+- **json-render** proof UI: the live review workspace (`@cyclops/workspace`, Next.js + SSE)
+- **ProvePort**: child-process runner for the target repo's verification command; **CheckPort**: `cyclops / behavior-proof` Check Run
 
 Architecture notes: [`docs/architecture/`](docs/architecture/). Domain terms: [`CONTEXT.md`](CONTEXT.md).
 
@@ -43,7 +43,7 @@ pnpm cli --help
 | `CYCLOPS_PI_BIN` | unset | Path to Pi binary; if unset, deterministic stub |
 | `CYCLOPS_PI_ARGS` | `understand --json` | Args passed to Pi (JSON Understanding on stdout) |
 | `CYCLOPS_NEO4J_URI` | unset | `bolt://…`; memory graph if unset |
-| `CYCLOPS_NEO4J_PASSWORD` | — | Neo4j auth when URI set |
+| `CYCLOPS_NEO4J_PASSWORD` | none | Neo4j auth when URI set |
 | `CYCLOPS_WORKSPACE_DIR` | `.data/workspace` | Workspace session blobs |
 | `CYCLOPS_LANE_MODEL` | unset | Model for the workspace analysis lane |
 | `PR_SPEC` | `solana-foundation/pay#415` | Action / dogfood target |

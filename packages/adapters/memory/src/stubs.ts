@@ -39,7 +39,7 @@ export const makeStubHarness = (): HarnessPort => ({
               .join("; ")
           : "none";
       const understanding: Understanding = {
-        what: title.trim() || `Review (${role}) — untitled change`,
+        what: title.trim() || `Review (${role}): untitled change`,
         why:
           (body.trim().split(/\n\n/)[0] ?? "").trim().slice(0, 280) ||
           `Change in ${context.domain}${context.focus ? `×${context.focus}` : ""} (stub harness; set CYCLOPS_PI_BIN for live Pi).`,
@@ -54,7 +54,7 @@ export const makeStubHarness = (): HarnessPort => ({
         risks: [
           {
             area: "stub",
-            note: "Deterministic stub Understanding — not model-authored proof.",
+            note: "Deterministic stub Understanding. Not model-authored proof.",
             source: "reviewer",
           },
         ],
@@ -84,7 +84,7 @@ export const makeProofRender = (): ProofRenderPort => ({
     }),
 });
 
-/** Regex/tree-lite symbol extract — upgraded by treesitter adapter when available. */
+/** Regex/tree-lite symbol extract, upgraded by treesitter adapter when available. */
 export const makeRegexParser = (): ParserPort => ({
   extractSymbols: (path, source) =>
     Effect.sync(() => {
