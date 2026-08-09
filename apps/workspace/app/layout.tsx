@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Lattice — osp-protocol/osp #482",
-  description: "Task workspace over GitHub pull requests",
+  title: "Cyclops workspace",
+  description: "Behaviour-proof review workspace over GitHub pull requests",
 };
 
 export default function RootLayout({

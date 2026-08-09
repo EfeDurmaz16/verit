@@ -223,7 +223,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setFocus("all");
       setPrUrl(url);
       try {
-        localStorage.setItem("lattice:pr", url);
+        localStorage.setItem("cyclops:pr", url);
       } catch {}
       session.current = {};
       try {
@@ -268,7 +268,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (booted.current) return;
     booted.current = true;
-    const last = localStorage.getItem("lattice:pr");
+    const last = localStorage.getItem("cyclops:pr");
     if (last) analyze(last);
     else streamLines(buildDemoLines(), 110);
   }, [analyze, streamLines]);
@@ -362,9 +362,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [prUrl]);
 
   useEffect(() => {
-    if (status === "streaming" || status === "fetching") document.title = "⟳ Compiling — Lattice";
-    else if (status === "ready") document.title = "✓ Ready — Lattice";
-    else document.title = "Lattice";
+    if (status === "streaming" || status === "fetching") document.title = "⟳ Compiling — Cyclops";
+    else if (status === "ready") document.title = "✓ Ready — Cyclops";
+    else document.title = "Cyclops";
   }, [status]);
 
   const select = useCallback((s: Selection | null) => setSelection(s), []);

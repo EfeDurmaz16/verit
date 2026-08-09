@@ -16,7 +16,7 @@ export function Header() {
     <header className="flex h-11 shrink-0 items-center gap-3 border-b border-line bg-surface px-4">
       <span className="flex items-center gap-1.5 text-[13px] font-semibold tracking-tight">
         <span className="inline-block size-[9px] rounded-[2px] bg-accent" />
-        Lattice
+        Cyclops
       </span>
       <span className="h-4 w-px bg-line" />
       {pr ? (

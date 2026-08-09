@@ -39,16 +39,13 @@ export function buildShellSpec(pr: PRMeta): {
   el("status-el", "Status", { text: "Reading the diff and review threads…" });
   el("sec-status", "Section", { id: "analysis", title: "Analysis" }, ["status-el"]);
 
-  /* every surface pre-created as a slot: parallel lanes fill them without
-     touching ws children (fixed order = no cross-lane conflicts), and empty
-     slots render as pending skeletons while streaming */
-  el("sec-overview", "Section", { id: "overview", title: "Overview" }, []);
-  el("sec-review-order", "Section", { id: "review-order", title: "Review order" }, []);
-  el("sec-risks", "Section", { id: "risks", title: "Risk clusters" }, []);
-  el("sec-architecture", "Section", { id: "architecture", title: "Architecture" }, []);
-  el("sec-insights", "Section", { id: "insights", title: "Insights", hint: "evidence-backed" }, []);
-  el("sec-discussion", "Section", { id: "discussion", title: "Discussion" }, []);
-  el("sec-next-steps", "Section", { id: "next-steps", title: "Next steps" }, []);
+  /* One slot per Understanding field, in the locked proof-page order:
+     understanding → proof → risks → out of scope. Empty slots render as
+     pending skeletons while the lane streams into them. */
+  el("sec-understanding", "Section", { id: "understanding", title: "Understanding", hint: "what · why · how" }, []);
+  el("sec-proof", "Section", { id: "proof", title: "Proof", hint: "how to verify the behaviour" }, []);
+  el("sec-risks", "Section", { id: "risks", title: "Risks" }, []);
+  el("sec-out-of-scope", "Section", { id: "out-of-scope", title: "Out of scope" }, []);
 
   el("sec-files", "Section", {
     id: "changed-files",
@@ -58,10 +55,9 @@ export function buildShellSpec(pr: PRMeta): {
 
   const sections = [
     "sec-status",
-    "sec-overview",
-    "sec-review-order",
+    "sec-understanding",
+    "sec-proof",
     "sec-risks",
-    "sec-architecture",
     "sec-files",
   ];
 
@@ -77,7 +73,7 @@ export function buildShellSpec(pr: PRMeta): {
     }, ["ci-el"]);
     sections.push("sec-ci");
   }
-  sections.push("sec-insights", "sec-discussion", "sec-next-steps");
+  sections.push("sec-out-of-scope");
 
   const fmt = (d: string) =>
     new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });

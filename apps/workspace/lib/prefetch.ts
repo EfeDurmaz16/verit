@@ -1,11 +1,7 @@
 import { execFile } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import os from "node:os";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { BLOCKS_FILE } from "./codex";
-import { PROMPT_VERSION } from "./prompt";
 import type { PRMeta } from "./schema";
 
 const exec = promisify(execFile);
@@ -95,56 +91,4 @@ export async function prefetchPR(pr: PRMeta, cwd: string): Promise<void> {
     );
   }
   await Promise.all(tasks);
-}
-
-/* ---- head-SHA cache: same PR + same commit → instant replay ---- */
-
-interface CacheMeta {
-  threadId: string | null;
-}
-
-function cacheDir(pr: PRMeta): string {
-  const key = `${pr.repo.replace("/", "_")}-${pr.number}-${pr.headSha.slice(0, 12)}-${PROMPT_VERSION}`;
-  return path.join(os.homedir(), ".cache", "lattice", key);
-}
-
-export async function readCache(
-  pr: PRMeta,
-): Promise<{ lines: string[]; threadId: string | null } | null> {
-  const dir = cacheDir(pr);
-  if (!pr.headSha || !existsSync(path.join(dir, BLOCKS_FILE))) return null;
-  try {
-    const [blocks, metaRaw] = await Promise.all([
-      readFile(path.join(dir, BLOCKS_FILE), "utf8"),
-      readFile(path.join(dir, "meta.json"), "utf8"),
-    ]);
-    const meta = JSON.parse(metaRaw) as CacheMeta;
-    return {
-      lines: blocks.split("\n").filter((l) => l.trim()),
-      threadId: meta.threadId,
-    };
-  } catch {
-    return null;
-  }
-}
-
-export async function saveCache(
-  pr: PRMeta,
-  workdir: string,
-  threadId: string | null,
-): Promise<void> {
-  if (!pr.headSha) return;
-  const dir = cacheDir(pr);
-  try {
-    await mkdir(dir, { recursive: true });
-    const parts = await Promise.all(
-      ["lead", "insight", "structure"].map((l) =>
-        readFile(path.join(workdir, `blocks-${l}.ndjson`), "utf8").catch(() => ""),
-      ),
-    );
-    await writeFile(path.join(dir, BLOCKS_FILE), parts.join(""));
-    await writeFile(path.join(dir, "meta.json"), JSON.stringify({ threadId } satisfies CacheMeta));
-  } catch {
-    /* cache is best-effort */
-  }
 }
