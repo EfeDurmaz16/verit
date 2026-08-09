@@ -16,7 +16,7 @@ The `prove` verb runs the reviewed repo's **own** test or build command and reco
 - **SQLite**: runs, proof blobs, FTS chunks (`DocumentStore`)
 - **Neo4j**: ontology + PR/git graph (`GraphStore`; optional, memory fallback without Docker)
 - **tree-sitter** ingest with **regex fallback** until WASM grammars ship
-- **Harness port**: Codex CLI lane in the workspace, Pi via `CYCLOPS_PI_BIN` in the Action, deterministic stub otherwise
+- **Harness port**: one headless coding CLI per lane, chosen with `CYCLOPS_LANE_HARNESS` (`codex`, `claude`, `cursor`); the Action falls back to Pi via `CYCLOPS_PI_BIN`, then to a deterministic stub
 - **json-render** proof UI: the live review workspace (`@cyclops/workspace`, Next.js + SSE)
 - **ProvePort**: child-process runner for the target repo's verification command; **CheckPort**: `cyclops / behavior-proof` Check Run
 
@@ -45,7 +45,11 @@ pnpm cli --help
 | `CYCLOPS_NEO4J_URI` | unset | `bolt://…`; memory graph if unset |
 | `CYCLOPS_NEO4J_PASSWORD` | none | Neo4j auth when URI set |
 | `CYCLOPS_WORKSPACE_DIR` | `.data/workspace` | Workspace session blobs |
-| `CYCLOPS_LANE_MODEL` | unset | Model for the workspace analysis lane |
+| `CYCLOPS_LANE_HARNESS` | `codex` | Coding CLI behind the analysis lane: `codex`, `claude` or `cursor`. An unknown value is an error, never a silent fallback. The Action understands `claude` and `cursor`; on `codex` it keeps the Pi path |
+| `CYCLOPS_LANE_MODEL` | unset | Model for the analysis lane, passed to whichever harness is selected |
+| `CYCLOPS_LANE_TIMEOUT_MS` | `900000` | Hard timeout for the Action's one-shot lane call |
+| `ANTHROPIC_API_KEY` | unset | Auth for `CYCLOPS_LANE_HARNESS=claude` in CI. Locally the CLI's own login is used |
+| `CURSOR_API_KEY` | unset | Auth for `CYCLOPS_LANE_HARNESS=cursor` in CI. Locally `cursor-agent login` is used |
 | `PR_SPEC` | `solana-foundation/pay#415` | Action / dogfood target |
 | `CYCLOPS_PROVE_CWD` | `GITHUB_WORKSPACE` (CLI) / cwd (workspace) | Checkout prove runs in; must be the reviewed repo |
 | `CYCLOPS_PROVE_CMD` | detected | Override the command, e.g. `cargo test --all` (argv, never a shell string) |

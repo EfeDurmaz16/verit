@@ -1,4 +1,4 @@
-import { OUTPUT_STYLE } from "@cyclops/domain";
+import { OUTPUT_STYLE, UNDERSTANDING_JSON_SHAPE } from "@cyclops/domain";
 import { catalog } from "./catalog";
 import { BLOCKS_FILE } from "./lane";
 import type { PRMeta } from "./schema";
@@ -41,22 +41,7 @@ and attach them to ${SECTION.proof} or ${SECTION.risks}. Nothing else.
 const CONTRACT = `
 OUTPUT CONTRACT. This is what the run is judged on.
 When your analysis is complete, write ./${UNDERSTANDING_FILE} (one JSON object, not JSONL):
-{
-  "what":  "<one paragraph: what this PR actually changes in behaviour>",
-  "why":   "<one paragraph: why the change exists>",
-  "how":   "<one paragraph: how it is implemented, naming the load-bearing files>",
-  "proof_refs": [ {"kind":"test|command|url|image|video","label":"<what it proves>","value":"<verbatim test name, command, or URL>"} ],
-  "out_of_scope": [ "<something a reviewer might expect that this PR does not do>" ],
-  "risks": [ {"area":"<short slug>","note":"<one sentence>","source":"reviewer|author"} ]
-}
-Rules:
-- what, why and how are required and must each be non-empty. The file is validated against a
-  strict schema. If it fails, the run is reported as unverified.
-- Every proof_ref must be runnable or openable as written. An empty list beats an invented one.
-- source:"author" is for risks the PR description itself admits. source:"reviewer" is for risks you
-  found by reading the diff. The author's list is a hint, NEVER an allowlist. Review the whole diff
-  whatever the description says, and expect to find risks the author did not mention.
-- Every string in this file follows the OUTPUT STYLE above. No em dash anywhere.
+${UNDERSTANDING_JSON_SHAPE}
 - Write the file exactly once, at the end, after the workspace already reflects your analysis.
 `;
 

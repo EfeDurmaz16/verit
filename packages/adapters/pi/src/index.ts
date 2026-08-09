@@ -4,6 +4,7 @@ import { Effect } from "effect";
 import { decodeUnderstanding, type Understanding } from "@cyclops/domain";
 import type { HarnessPort } from "@cyclops/ports";
 import { StoreError } from "@cyclops/ports";
+import { agentCli, runAgentUnderstand } from "./agent";
 
 type UnderstandInput = Parameters<HarnessPort["runUnderstand"]>[0];
 
@@ -179,11 +180,32 @@ const trySpawnPi = (input: UnderstandInput): Understanding | null => {
 export const makePiHarness = (): HarnessPort => ({
   runUnderstand: (input) =>
     Effect.try({
-      try: () => {
-        const live = trySpawnPi(input);
-        if (live) return live;
-        return buildDeterministicUnderstanding(input);
-      },
+      try: () => trySpawnPi(input) ?? buildDeterministicUnderstanding(input),
       catch: (e) => new StoreError("pi harness understand", e),
     }),
 });
+
+/**
+ * Harness for the CLI and Action path, with the same selector the workspace
+ * lane uses. `CYCLOPS_LANE_HARNESS=claude|cursor` asks that CLI for the
+ * Understanding; anything else keeps Pi.
+ *
+ * Every failure degrades instead of throwing: no API key, no CLI on PATH, a
+ * timeout, or output that misses the schema all fall through to Pi and then to
+ * the deterministic stub. That is deliberate. CI without the key must keep
+ * producing exactly what it produces today.
+ */
+export const makeAgentHarness = (): HarnessPort => ({
+  runUnderstand: (input) =>
+    Effect.try({
+      try: () => {
+        const cli = agentCli();
+        const live = cli ? runAgentUnderstand(cli, input) : null;
+        return live ?? trySpawnPi(input) ?? buildDeterministicUnderstanding(input);
+      },
+      catch: (e) => new StoreError("agent harness understand", e),
+    }),
+});
+
+export { agentCli, agentPrompt, extractUnderstanding, runAgentUnderstand } from "./agent";
+export type { AgentCli } from "./agent";

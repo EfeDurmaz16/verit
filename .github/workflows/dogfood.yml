@@ -28,6 +28,12 @@ jobs:
           node-version: "22"
           cache: pnpm
       - run: pnpm install
+      # Opt-in only. With the repository variable unset this step is skipped and
+      # the pipeline runs on the Pi stub exactly as it does today. Nothing here
+      # creates or requires a secret.
+      - name: Install Claude Code
+        if: vars.CYCLOPS_LANE_HARNESS == 'claude'
+        run: npm install -g @anthropic-ai/claude-code
       # prove runs the repo's own `pnpm test` inside this runner, which is the
       # sandbox for v1, so it reviews *this* PR, not an unrelated repo, and
       # the ProveRunner refuses anything whose checkout is not the target.
@@ -38,6 +44,13 @@ jobs:
           CYCLOPS_SQLITE_PATH: .data/cyclops.db
           CYCLOPS_PROVE_TIMEOUT_MS: "900000"
           PROOF_PAGE_URL: ${{ vars.PROOF_PAGE_URL }}
+          # The lane harness stays empty unless BOTH the variable and the key are
+          # set, so a fork PR (no secrets) or a half-configured repo falls back
+          # to the stub instead of burning the job timeout on a CLI that cannot
+          # authenticate. Set the variable to claude and add the secret to flip.
+          CYCLOPS_LANE_HARNESS: ${{ secrets.ANTHROPIC_API_KEY != '' && vars.CYCLOPS_LANE_HARNESS || '' }}
+          CYCLOPS_LANE_MODEL: ${{ vars.CYCLOPS_LANE_MODEL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: pnpm --filter @cyclops/action exec tsx src/run.ts
       - uses: actions/upload-artifact@v4
         with:

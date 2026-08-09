@@ -16,6 +16,28 @@ export const OUTPUT_STYLE = `OUTPUT STYLE, this is not optional:
 - No hype and no praise. State what the code does, including the parts that look wrong.
 - Plain words over jargon. Keep a technical term only when it names something exact.`;
 
+/**
+ * The Understanding a lane must produce, as the model sees it. Every harness
+ * ships this same block, so the workspace lane and the Action lane are judged
+ * against one contract instead of two that drift apart silently.
+ */
+export const UNDERSTANDING_JSON_SHAPE = `{
+  "what":  "<one paragraph: what this PR actually changes in behaviour>",
+  "why":   "<one paragraph: why the change exists>",
+  "how":   "<one paragraph: how it is implemented, naming the load-bearing files>",
+  "proof_refs": [ {"kind":"test|command|url|image|video","label":"<what it proves>","value":"<verbatim test name, command, or URL>"} ],
+  "out_of_scope": [ "<something a reviewer might expect that this PR does not do>" ],
+  "risks": [ {"area":"<short slug>","note":"<one sentence>","source":"reviewer|author"} ]
+}
+Rules:
+- what, why and how are required and must each be non-empty. The output is validated against a
+  strict schema. If it fails, the run is reported as unverified.
+- Every proof_ref must be runnable or openable as written. An empty list beats an invented one.
+- source:"author" is for risks the PR description itself admits. source:"reviewer" is for risks you
+  found by reading the diff. The author's list is a hint, NEVER an allowlist. Review the whole diff
+  whatever the description says, and expect to find risks the author did not mention.
+- Every string follows the OUTPUT STYLE above. No em dash anywhere.`;
+
 /** Closed review specialty enum, not technology stacks. */
 export const ReviewDomain = S.Literal(
   "GENERAL",

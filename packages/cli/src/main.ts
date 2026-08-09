@@ -23,7 +23,7 @@ import {
   makeProofRender,
 } from "@cyclops/adapter-memory";
 import { makeGraphStore } from "@cyclops/adapter-neo4j";
-import { makePiHarness } from "@cyclops/adapter-pi";
+import { makeAgentHarness } from "@cyclops/adapter-pi";
 import { makeSqliteDocumentStore } from "@cyclops/adapter-sqlite";
 import { makeTreeSitterParser } from "@cyclops/adapter-treesitter";
 import type { ReviewPresets, Understanding } from "@cyclops/domain";
@@ -42,6 +42,10 @@ Commands:
 Env:
   GITHUB_TOKEN          optional for public PRs; needs checks:write to post a Check
   CYCLOPS_SQLITE_PATH   default .data/cyclops.db (set empty to use memory)
+  CYCLOPS_LANE_HARNESS  claude | cursor asks that headless CLI for the Understanding;
+                        anything else keeps the Pi path. Any failure falls back
+  CYCLOPS_LANE_MODEL    optional model for the selected lane harness
+  CYCLOPS_LANE_TIMEOUT_MS  hard timeout for the lane CLI, default 900000
   CYCLOPS_PI_BIN        optional Pi binary; else deterministic stub Understanding
   CYCLOPS_PI_ARGS       optional args (default: understand --json)
   CYCLOPS_NEO4J_URI     optional bolt://… (memory graph fallback if unset)
@@ -138,7 +142,7 @@ const runUnderstandPipeline = async (input: {
     runReviewUnderstand({
       docs,
       graph,
-      harness: makePiHarness(),
+      harness: makeAgentHarness(),
       classifier: makeHeuristicClassifier(),
       render: makeProofRender(),
     })({
