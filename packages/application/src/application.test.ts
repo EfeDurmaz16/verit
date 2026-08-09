@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { Either } from "effect";
+import { behaviorProofCheck } from "./check";
 import { compileReviewPack } from "./compiler";
 import { buildWikiHits, buildReviewContext } from "./context";
 import { inferEmbeddingSimilarEdges, inferSameAuthorPathEdges } from "./edges";
 import { markdownToWikiPages } from "./ingest-wiki";
 import { understandingToProofSpec } from "./proof-spec";
-import type { ReviewPresets } from "@cyclops/domain";
+import { decodeUnderstanding, type ReviewPresets } from "@cyclops/domain";
 
 const basePresets: ReviewPresets = {
   reviewer_identity: "harsh",
@@ -113,5 +115,46 @@ describe("buildReviewContext", () => {
       domain: "GENERAL",
     });
     expect(ctx.wiki_hits).toEqual([]);
+  });
+});
+
+describe("behaviorProofCheck output style", () => {
+  /* Prose written by the model. Every field carries an em dash on purpose. */
+  const dirty = decodeUnderstanding({
+    what: "Adds a retry — the client now retries once on 429.",
+    why: "Rate limits broke checkout — orders were dropped.",
+    how: "src/pay.ts wraps fetch — see retryOnce().",
+    proof_refs: [
+      { kind: "test", label: "retry test — proves the backoff", value: "pnpm test pay" },
+    ],
+    out_of_scope: ["Idempotency keys — left for a later PR"],
+    risks: [{ area: "retry", note: "A retry can double charge — no idempotency key yet.", source: "reviewer" }],
+  });
+
+  const outcome = {
+    command: "pnpm run test",
+    source: "package.json",
+    cwd: "/tmp/r",
+    repo: "acme/pay",
+    exitCode: 1,
+    durationMs: 4200,
+    timedOut: false,
+    logTail: "1 failed\n",
+    startedAt: "2026-08-09T00:00:00Z",
+  };
+
+  it("normalizes the model's em dashes away when decoding", () => {
+    expect(Either.isRight(dirty)).toBe(true);
+    if (Either.isLeft(dirty)) return;
+    expect(dirty.right.what).toBe("Adds a retry, the client now retries once on 429.");
+  });
+
+  it("renders a Check body with no em dash", () => {
+    if (Either.isLeft(dirty)) throw new Error("fixture failed to decode");
+    for (const o of [null, outcome]) {
+      const check = behaviorProofCheck({ understanding: dirty.right, outcome: o });
+      expect(check.summary).not.toContain("—");
+      expect(check.title).not.toContain("—");
+    }
   });
 });
