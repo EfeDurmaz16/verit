@@ -182,6 +182,100 @@ function ReviewPath({ props }: { props: P }) {
   );
 }
 
+const PROOF_KIND: Record<string, string> = {
+  test: "bg-ok-soft text-ok",
+  command: "bg-surface-2 text-ink-2",
+  url: "bg-accent-soft text-accent-text",
+  image: "bg-warn-soft text-warn",
+  video: "bg-warn-soft text-warn",
+};
+
+function ProofEvidence({ props }: { props: P }) {
+  const refs = arr<P>(props.refs);
+  if (!refs.length) return null;
+  return (
+    <Panel>
+      <div className="divide-y divide-line">
+        {refs.map((r, i) => {
+          const value = str(r.value);
+          // model-supplied: only ever linkify plain http(s), never other schemes
+          const href = /^https?:\/\//i.test(value) ? value : null;
+          return (
+            <div key={i} className="flex items-start gap-2.5 px-3 py-2">
+              <span
+                className={clsx(
+                  "mt-px shrink-0 rounded-[4px] px-1.5 py-px text-[10px] font-medium uppercase tracking-wide",
+                  PROOF_KIND[str(r.kind)] ?? "bg-surface-2 text-ink-2",
+                )}
+              >
+                {str(r.kind, "proof")}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[12.5px] font-medium leading-tight">{str(r.label)}</div>
+                {href ? (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="mt-0.5 block truncate font-mono text-[11px] text-accent-text hover:underline"
+                  >
+                    {value}
+                  </a>
+                ) : (
+                  <div className="mt-0.5 overflow-x-auto whitespace-pre font-mono text-[11px] text-ink-3">
+                    {value}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Panel>
+  );
+}
+
+function RiskColumn({ title, hint, items }: { title: string; hint: string; items: P[] }) {
+  return (
+    <Panel className="px-3 py-2">
+      <div className="flex items-baseline gap-2">
+        <span className="text-[12px] font-medium">{title}</span>
+        <span className="text-[11px] text-ink-3">{hint}</span>
+        <span className="tnum ml-auto text-[11px] text-ink-3">{items.length}</span>
+      </div>
+      {items.length === 0 ? (
+        <p className="mt-1 text-[12px] text-ink-3">none</p>
+      ) : (
+        <ul className="mt-1.5 flex flex-col gap-1.5">
+          {items.map((r, i) => (
+            <li key={i}>
+              <span className="font-mono text-[11px] text-ink-3">{str(r.area)}</span>
+              <p className="text-[12px] leading-snug text-ink-2">{str(r.note)}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
+  );
+}
+
+function RisksList({ props }: { props: P }) {
+  return (
+    <div className="grid gap-1.5 sm:grid-cols-2">
+      <RiskColumn
+        title="Reviewer found"
+        hint="independent pass"
+        items={arr<P>(props.reviewerFound)}
+      />
+      <RiskColumn
+        title="Author declared"
+        hint="hints only"
+        items={arr<P>(props.authorDeclared)}
+      />
+    </div>
+  );
+}
+
 function RiskCluster({ props }: { props: P }) {
   const { selection, select, flashFiles } = useWorkspace();
   const sel = selection?.kind === "risk" && selection.payload.title === props.title;
@@ -668,6 +762,8 @@ export const registry: ComponentRegistry = {
   Callout: wrap(Callout),
   MetricRow: wrap(MetricRow),
   ReviewPath: wrap(ReviewPath),
+  ProofEvidence: wrap(ProofEvidence),
+  RisksList: wrap(RisksList),
   RiskCluster: wrap(RiskCluster),
   Insight: wrap(Insight),
   FileGroup: wrap(FileGroup),

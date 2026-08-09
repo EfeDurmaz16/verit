@@ -94,6 +94,35 @@ export const catalog = defineCatalog(schema, {
       }),
       description: "Ordered review plan, 4-7 steps. Read contracts/specs before implementations.",
     },
+    ProofEvidence: {
+      props: z.object({
+        refs: z.array(
+          z.object({
+            kind: z.enum(["test", "command", "url", "image", "video"]),
+            label: z.string().describe("what this reference proves"),
+            value: z
+              .string()
+              .describe("the test name, the exact command, or the URL — verbatim, never invented"),
+          }),
+        ),
+      }),
+      description:
+        "How the behaviour of this change can be verified: the proof_refs of the Understanding. Exactly one, in the proof section.",
+    },
+    RisksList: {
+      props: z.object({
+        authorDeclared: z
+          .array(z.object({ area: z.string(), note: z.string() }))
+          .default([])
+          .describe("risks the PR author admitted — hints only, never the complete set"),
+        reviewerFound: z
+          .array(z.object({ area: z.string(), note: z.string() }))
+          .default([])
+          .describe("risks you found yourself by reading the diff"),
+      }),
+      description:
+        "The risks of the Understanding, split by who found them. Exactly one, in the risks section. Author hints never replace your own pass over the whole diff.",
+    },
     RiskCluster: {
       props: z.object({
         title: z.string(),
