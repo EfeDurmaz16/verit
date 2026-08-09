@@ -37,7 +37,7 @@ export const proveLogBody = (o: ProveOutcome): string =>
     `began: ${o.startedAt}`,
     `exit:  ${o.exitCode} after ${(o.durationMs / 1000).toFixed(1)}s${o.timedOut ? " (timed out)" : ""}`,
     "",
-    o.logTail,
+    o.log || o.logTail,
   ].join("\n");
 
 /**

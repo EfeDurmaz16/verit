@@ -26,8 +26,9 @@ import { makeGraphStore } from "@cyclops/adapter-neo4j";
 import { makeAgentHarness } from "@cyclops/adapter-pi";
 import { makeSqliteDocumentStore } from "@cyclops/adapter-sqlite";
 import { makeTreeSitterParser } from "@cyclops/adapter-treesitter";
-import type { ReviewPresets, Understanding } from "@cyclops/domain";
+import type { PullRequest, ReviewPresets, ReviewRun, Understanding } from "@cyclops/domain";
 import type { DocumentStore, ProveOutcome } from "@cyclops/ports";
+import { buildUpload, dashboardTarget, proofPageUrl, uploadRun } from "./upload";
 
 const help = `cyclops <command>
 
@@ -53,7 +54,11 @@ Env:
                         refused unless that checkout IS the reviewed repo
   CYCLOPS_PROVE_CMD     override the detected command, e.g. "cargo test --all"
   CYCLOPS_PROVE_TIMEOUT_MS  hard timeout, default 600000
-  PROOF_PAGE_URL        optional hosted proof page linked from the Check
+  CYCLOPS_DASHBOARD_URL   base URL of the hosted dashboard. With CYCLOPS_INGEST_TOKEN
+                          the finished run is uploaded and the Check links its proof
+                          page. Leave either unset and nothing is uploaded
+  CYCLOPS_INGEST_TOKEN    per-repo ingest token issued by the dashboard
+  PROOF_PAGE_URL          overrides the computed proof page link in the Check
 `;
 
 const defaultPresets: ReviewPresets = {
@@ -193,6 +198,8 @@ const runUnderstandPipeline = async (input: {
   const specPath = await writeProofArtifacts(blob, result.runId, enrichedSpec, input.alias);
   return {
     runId: result.runId,
+    run: result.run,
+    spec: enrichedSpec,
     skillPackHash: result.skillPackHash,
     what: understanding.what,
     risks: understanding.risks.length,
@@ -216,6 +223,7 @@ const postBehaviorProofCheck = async (input: {
   understanding: Understanding;
   outcome: ProveOutcome | null;
   runId: string;
+  proofPageUrl?: string;
 }) => {
   const slug = process.env.GITHUB_REPOSITORY;
   const headSha = process.env.CYCLOPS_CHECK_SHA || process.env.GITHUB_SHA;
@@ -228,7 +236,7 @@ const postBehaviorProofCheck = async (input: {
   const check = behaviorProofCheck({
     understanding: input.understanding,
     outcome: input.outcome,
-    proofPageUrl: process.env.PROOF_PAGE_URL,
+    proofPageUrl: input.proofPageUrl,
     runId: input.runId,
   });
   const dry = process.env.CYCLOPS_CHECK_DRY_RUN === "1" || !process.env.GITHUB_TOKEN;
@@ -257,12 +265,28 @@ const postBehaviorProofCheck = async (input: {
 };
 
 /** The pipeline result minus the bulky objects the caller keeps for itself. */
-const printable = <T extends { understanding: Understanding; outcome: ProveOutcome | null }>(
+const printable = <
+  T extends {
+    understanding: Understanding;
+    outcome: ProveOutcome | null;
+    run: ReviewRun;
+    spec: unknown;
+  },
+>(
   out: T,
-): Omit<T, "understanding" | "outcome"> => {
-  const { understanding: _u, outcome: _o, ...rest } = out;
+): Omit<T, "understanding" | "outcome" | "run" | "spec"> => {
+  const { understanding: _u, outcome: _o, run: _r, spec: _s, ...rest } = out;
   return rest;
 };
+
+/** The PR fields the dashboard lists, plus the commit the runner is on. */
+const prUpload = (pr: PullRequest) => ({
+  number: pr.number,
+  title: pr.title,
+  url: pr.url,
+  author: pr.author,
+  headSha: process.env.CYCLOPS_CHECK_SHA || process.env.GITHUB_SHA || undefined,
+});
 
 const ingestPr = async (spec: string) => {
   const { owner, repo, number } = parsePrSpec(spec);
@@ -335,7 +359,7 @@ const reviewPr = async (spec: string) => {
     /* use API patch */
   }
   const alias = `${owner}-${repo}-${number}.spec.json`.replaceAll("/", "-");
-  return runUnderstandPipeline({
+  const out = await runUnderstandPipeline({
     repoId: pr.repoId,
     prId: pr.id,
     repo: `${owner}/${repo}`,
@@ -346,6 +370,7 @@ const reviewPr = async (spec: string) => {
     context,
     alias,
   });
+  return { ...out, pr, repoSlug: `${owner}/${repo}` };
 };
 
 const main = async () => {
@@ -422,7 +447,7 @@ const main = async () => {
       rest.find((a) => a.startsWith("--pr="))?.slice(5) ??
       (rest[0] === "--pr" ? rest[1] : rest[0]);
     if (!prFlag) throw new Error("usage: cyclops review --pr=owner/repo#n");
-    const out = await reviewPr(prFlag.replace(/^--pr=/, ""));
+    const { pr: _pr, ...out } = await reviewPr(prFlag.replace(/^--pr=/, ""));
     console.log(JSON.stringify(printable(out), null, 2));
     return;
   }
@@ -436,13 +461,39 @@ const main = async () => {
     console.error(`skill_pack_hash=${compiled.skillPackHash}`);
     console.error(`dogfood: review ${spec}`);
     const out = await reviewPr(spec);
+
+    // Upload before the Check is posted, so the link in the Check body already
+    // resolves. With either variable unset there is no upload and no link, and
+    // the pipeline behaves exactly as it did before the dashboard existed.
+    const target = dashboardTarget();
+    const pageUrl =
+      process.env.PROOF_PAGE_URL ||
+      (target ? proofPageUrl(target.baseUrl, out.repoSlug, out.runId) : undefined);
+    let upload: { uploaded: boolean; error?: string } | null = null;
+    if (target) {
+      console.error(`dogfood: upload run to ${target.baseUrl}`);
+      upload = await uploadRun(
+        target,
+        buildUpload({
+          repo: out.repoSlug,
+          run: out.run,
+          understanding: out.understanding,
+          proofSpec: out.spec,
+          pr: prUpload(out.pr),
+          outcome: out.outcome,
+        }),
+      );
+      if (!upload.uploaded) console.error(`dashboard upload failed: ${upload.error}`);
+    }
+
     console.error(`dogfood: post check`);
     const check = await postBehaviorProofCheck({
       understanding: out.understanding,
       outcome: out.outcome,
       runId: out.runId,
+      proofPageUrl: pageUrl,
     });
-    const { understanding: _u, outcome: _o, ...summary } = out;
+    const { understanding: _u, outcome: _o, run: _r, spec: _s, pr: _p, ...summary } = out;
     console.log(
       JSON.stringify(
         {
@@ -450,6 +501,8 @@ const main = async () => {
           check: check
             ? { name: check.name, conclusion: check.conclusion, posted: check.posted, url: check.url }
             : null,
+          proofPageUrl: pageUrl ?? null,
+          upload,
           ingested: {
             paths: ingested.changedPaths.length,
             patchChars: ingested.patch.length,

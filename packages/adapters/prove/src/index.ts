@@ -223,6 +223,7 @@ export const makeProveRunner = (): ProvePort => ({
           durationMs: raw.durationMs,
           timedOut: raw.timedOut,
           logTail: tail(raw.output),
+          log: raw.output.trimEnd(),
           startedAt,
         };
       },

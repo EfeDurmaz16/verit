@@ -140,6 +140,7 @@ describe("behaviorProofCheck output style", () => {
     durationMs: 4200,
     timedOut: false,
     logTail: "1 failed\n",
+    log: "running 2 tests\n1 failed\n",
     startedAt: "2026-08-09T00:00:00Z",
   };
 

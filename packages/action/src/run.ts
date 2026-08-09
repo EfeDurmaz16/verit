@@ -1,6 +1,10 @@
 /**
  * GitHub Action entry. Same pipeline as local `pnpm cli dogfood`.
  * Env: PR_SPEC=owner/repo#n, GITHUB_TOKEN, optional CYCLOPS_SQLITE_PATH / CYCLOPS_PI_BIN
+ *
+ * Set CYCLOPS_DASHBOARD_URL and CYCLOPS_INGEST_TOKEN together to upload the
+ * finished run and link its proof page from the Check. Leave either unset and
+ * nothing is uploaded.
  */
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";

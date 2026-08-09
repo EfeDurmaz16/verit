@@ -325,7 +325,8 @@ export const RunUploadPr = S.Struct({
   title: S.String,
   url: S.String,
   author: S.String,
-  headSha: S.String,
+  /** Absent when the run was not driven by a checkout, e.g. a local dogfood. */
+  headSha: S.optional(S.String),
 });
 export type RunUploadPr = S.Schema.Type<typeof RunUploadPr>;
 
@@ -361,6 +362,8 @@ export const RunUpload = S.Struct({
   logs: S.optional(S.Array(RunUploadLog)),
 });
 export type RunUpload = S.Schema.Type<typeof RunUpload>;
+
+export const encodeRunUpload = S.encodeUnknownEither(RunUpload);
 
 /** Decode an uploaded run, normalizing the Understanding prose on the way in. */
 export const decodeRunUpload = (input: unknown) =>

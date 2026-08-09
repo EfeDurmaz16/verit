@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import type { ReviewContext, ReviewPresets, Understanding } from "@cyclops/domain";
+import type { ReviewContext, ReviewPresets, ReviewRun, Understanding } from "@cyclops/domain";
 import type {
   ClassifierPort,
   DocumentStore,
@@ -29,7 +29,17 @@ export const runReviewUnderstand = (deps: {
   context: ReviewContext;
   presets: ReviewPresets;
   nowIso: string;
-}): Effect.Effect<{ runId: string; understanding: Understanding; spec: unknown; skillPackHash: string }, StoreError> =>
+}): Effect.Effect<
+  {
+    runId: string;
+    /** The row this verb wrote. The dashboard upload posts it verbatim. */
+    run: ReviewRun;
+    understanding: Understanding;
+    spec: unknown;
+    skillPackHash: string;
+  },
+  StoreError
+> =>
   Effect.gen(function* () {
     const classified = yield* deps.classifier.classify({
       title: input.title,
@@ -50,7 +60,7 @@ export const runReviewUnderstand = (deps: {
       role: "review",
     });
     const runId = `run:${compiled.skillPackHash.slice(0, 12)}:${Date.now()}`;
-    yield* deps.docs.upsertReviewRun({
+    const run: ReviewRun = {
       id: runId,
       repoId: input.repoId,
       prId: input.prId,
@@ -58,7 +68,8 @@ export const runReviewUnderstand = (deps: {
       domain,
       focus,
       createdAt: input.nowIso,
-    });
+    };
+    yield* deps.docs.upsertReviewRun(run);
     yield* deps.docs.saveUnderstandingJson(runId, understanding);
     const archNodes = input.paths.slice(0, 24).map((p) => ({
       id: p,
@@ -91,5 +102,5 @@ export const runReviewUnderstand = (deps: {
     if (input.prId) {
       yield* deps.graph.linkRunToPr(runId, input.prId);
     }
-    return { runId, understanding, spec, skillPackHash: compiled.skillPackHash };
+    return { runId, run, understanding, spec, skillPackHash: compiled.skillPackHash };
   });

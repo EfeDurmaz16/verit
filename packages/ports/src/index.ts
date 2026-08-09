@@ -156,8 +156,10 @@ export interface ProveOutcome {
   readonly exitCode: number;
   readonly durationMs: number;
   readonly timedOut: boolean;
-  /** Last lines of merged stdout/stderr. */
+  /** Last lines of merged stdout/stderr. What a Check body and a row can hold. */
   readonly logTail: string;
+  /** The whole captured output, capped by the runner. Kept as a blob, not a row. */
+  readonly log: string;
   readonly startedAt: string;
 }
 
