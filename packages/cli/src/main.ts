@@ -3,18 +3,19 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Effect } from "effect";
 import {
+  behaviorProofCheck,
   buildReviewContext,
   compileReviewPack,
   inferEmbeddingSimilarEdges,
   inferSameAuthorPathEdges,
+  runProve,
   runReviewUnderstand,
   stubPatch,
-  stubPost,
-  stubProve,
   stubRisk,
 } from "@cyclops/application";
 import { ingestRepoPath } from "@cyclops/adapter-fs-ingest";
-import { makeGithubVcs } from "@cyclops/adapter-github";
+import { makeGithubChecks, makeGithubVcs } from "@cyclops/adapter-github";
+import { makeProveRunner } from "@cyclops/adapter-prove";
 import { makeLocalBlob } from "@cyclops/adapter-local-blob";
 import {
   makeHeuristicClassifier,
@@ -25,7 +26,8 @@ import { makeGraphStore } from "@cyclops/adapter-neo4j";
 import { makePiHarness } from "@cyclops/adapter-pi";
 import { makeSqliteDocumentStore } from "@cyclops/adapter-sqlite";
 import { makeTreeSitterParser } from "@cyclops/adapter-treesitter";
-import type { ReviewPresets } from "@cyclops/domain";
+import type { ReviewPresets, Understanding } from "@cyclops/domain";
+import type { DocumentStore, ProveOutcome } from "@cyclops/ports";
 
 const help = `cyclops <command>
 
@@ -38,11 +40,16 @@ Commands:
   dogfood owner/repo#n       ingest-pr → compile-pack → review (Action mirror)
 
 Env:
-  GITHUB_TOKEN          optional for public PRs; recommended for rate limits
+  GITHUB_TOKEN          optional for public PRs; needs checks:write to post a Check
   CYCLOPS_SQLITE_PATH   default .data/cyclops.db (set empty to use memory)
   CYCLOPS_PI_BIN        optional Pi binary; else deterministic stub Understanding
   CYCLOPS_PI_ARGS       optional args (default: understand --json)
   CYCLOPS_NEO4J_URI     optional bolt://… (memory graph fallback if unset)
+  CYCLOPS_PROVE_CWD     checkout to prove in (default GITHUB_WORKSPACE); prove is
+                        refused unless that checkout IS the reviewed repo
+  CYCLOPS_PROVE_CMD     override the detected command, e.g. "cargo test --all"
+  CYCLOPS_PROVE_TIMEOUT_MS  hard timeout, default 600000
+  PROOF_PAGE_URL        optional hosted proof page linked from the Check
 `;
 
 const defaultPresets: ReviewPresets = {
@@ -72,9 +79,8 @@ const writeProofArtifacts = async (
   alias?: string,
 ) => {
   const body = JSON.stringify(spec, null, 2);
-  const posted = stubPost(spec);
   const path = await Effect.runPromise(
-    blob.writeLocal(`${runId.replaceAll(":", "_")}.spec.json`, posted.body),
+    blob.writeLocal(`${runId.replaceAll(":", "_")}.spec.json`, JSON.stringify(spec)),
   );
   await Effect.runPromise(blob.writeLocal("latest.spec.json", body));
   if (alias) {
@@ -83,9 +89,42 @@ const writeProofArtifacts = async (
   return path;
 };
 
+/**
+ * Run the reviewed repo's own verification command — but only when this
+ * machine's checkout IS that repo. The port fails closed on any mismatch, so
+ * reviewing a stranger's PR never executes their code here; in CI the runner's
+ * checkout is the repo under review, which is where prove is meant to run.
+ */
+const proveIfPointedHere = async (
+  docs: DocumentStore,
+  runId: string,
+  repo: string,
+  understanding: Understanding,
+): Promise<{ understanding: Understanding; outcome: ProveOutcome | null }> => {
+  const cwd = process.env.CYCLOPS_PROVE_CWD || process.env.GITHUB_WORKSPACE;
+  if (!cwd) return { understanding, outcome: null };
+  const timeoutMs = Number(process.env.CYCLOPS_PROVE_TIMEOUT_MS) || undefined;
+  try {
+    return await Effect.runPromise(
+      runProve({ prove: makeProveRunner(), docs })({
+        runId,
+        cwd,
+        expectRepo: repo,
+        understanding,
+        timeoutMs,
+      }),
+    );
+  } catch (e) {
+    console.error(`prove skipped: ${e instanceof Error ? e.message : String(e)}`);
+    return { understanding, outcome: null };
+  }
+};
+
 const runUnderstandPipeline = async (input: {
   repoId: string;
   prId?: string;
+  /** owner/repo of the reviewed PR — the only repo prove may run in. */
+  repo?: string;
   title: string;
   body: string;
   paths: readonly string[];
@@ -114,8 +153,13 @@ const runUnderstandPipeline = async (input: {
       nowIso: new Date().toISOString(),
     }),
   );
-  let understanding = stubProve(result.understanding);
-  understanding = stubRisk(understanding);
+  let understanding = stubRisk(result.understanding);
+  let outcome: ProveOutcome | null = null;
+  if (input.repo) {
+    const proved = await proveIfPointedHere(docs, result.runId, input.repo, understanding);
+    understanding = proved.understanding;
+    outcome = proved.outcome;
+  }
   const patch = stubPatch();
   // Re-render with prove/risk stubs so Spec matches enriched Understanding
   const render = makeProofRender();
@@ -151,7 +195,69 @@ const runUnderstandPipeline = async (input: {
     proofRefs: understanding.proof_refs.length,
     patch: patch.summary,
     specPath,
+    understanding,
+    prove: outcome
+      ? { command: outcome.command, exitCode: outcome.exitCode, durationMs: outcome.durationMs }
+      : null,
+    outcome,
   };
+};
+
+/**
+ * The `post` verb: one Check Run on the commit this Action is running against.
+ * Without a checks:write token it is a dry run — the body is printed, nothing
+ * is posted, and no green check is ever invented for an unproven change.
+ */
+const postBehaviorProofCheck = async (input: {
+  understanding: Understanding;
+  outcome: ProveOutcome | null;
+  runId: string;
+}) => {
+  const slug = process.env.GITHUB_REPOSITORY;
+  const headSha = process.env.CYCLOPS_CHECK_SHA || process.env.GITHUB_SHA;
+  if (!slug || !headSha) {
+    console.error("post: no GITHUB_REPOSITORY/GITHUB_SHA — skipping check run");
+    return null;
+  }
+  const [owner, repo] = slug.split("/");
+  if (!owner || !repo) return null;
+  const check = behaviorProofCheck({
+    understanding: input.understanding,
+    outcome: input.outcome,
+    proofPageUrl: process.env.PROOF_PAGE_URL,
+    runId: input.runId,
+  });
+  const dry = process.env.CYCLOPS_CHECK_DRY_RUN === "1" || !process.env.GITHUB_TOKEN;
+  if (dry) {
+    console.error(`post (dry run) ${check.name} → ${check.conclusion}: ${check.title}`);
+    console.error(check.summary);
+    return { ...check, posted: false, url: null };
+  }
+  try {
+    const posted = await Effect.runPromise(
+      makeGithubChecks(process.env.GITHUB_TOKEN).postCheckRun({
+        owner,
+        repo,
+        headSha,
+        ...check,
+      }),
+    );
+    console.error(`post: ${check.name} → ${check.conclusion} ${posted.url ?? ""}`);
+    return { ...check, ...posted };
+  } catch (e) {
+    // a fork PR's token cannot write checks — report the outcome, do not fail
+    // the run over the announcement of it
+    console.error(`post failed: ${e instanceof Error ? e.message : String(e)}`);
+    return { ...check, posted: false, url: null };
+  }
+};
+
+/** The pipeline result minus the bulky objects the caller keeps for itself. */
+const printable = <T extends { understanding: Understanding; outcome: ProveOutcome | null }>(
+  out: T,
+): Omit<T, "understanding" | "outcome"> => {
+  const { understanding: _u, outcome: _o, ...rest } = out;
+  return rest;
 };
 
 const ingestPr = async (spec: string) => {
@@ -228,6 +334,7 @@ const reviewPr = async (spec: string) => {
   return runUnderstandPipeline({
     repoId: pr.repoId,
     prId: pr.id,
+    repo: `${owner}/${repo}`,
     title: pr.title,
     body: pr.body ?? "",
     paths: changedPaths,
@@ -282,7 +389,7 @@ const main = async () => {
       context,
       alias: "dry-run.spec.json",
     });
-    console.log(JSON.stringify(out, null, 2));
+    console.log(JSON.stringify(printable(out), null, 2));
     return;
   }
 
@@ -312,7 +419,7 @@ const main = async () => {
       (rest[0] === "--pr" ? rest[1] : rest[0]);
     if (!prFlag) throw new Error("usage: cyclops review --pr=owner/repo#n");
     const out = await reviewPr(prFlag.replace(/^--pr=/, ""));
-    console.log(JSON.stringify(out, null, 2));
+    console.log(JSON.stringify(printable(out), null, 2));
     return;
   }
 
@@ -325,10 +432,20 @@ const main = async () => {
     console.error(`skill_pack_hash=${compiled.skillPackHash}`);
     console.error(`dogfood: review ${spec}`);
     const out = await reviewPr(spec);
+    console.error(`dogfood: post check`);
+    const check = await postBehaviorProofCheck({
+      understanding: out.understanding,
+      outcome: out.outcome,
+      runId: out.runId,
+    });
+    const { understanding: _u, outcome: _o, ...summary } = out;
     console.log(
       JSON.stringify(
         {
-          ...out,
+          ...summary,
+          check: check
+            ? { name: check.name, conclusion: check.conclusion, posted: check.posted, url: check.url }
+            : null,
           ingested: {
             paths: ingested.changedPaths.length,
             patchChars: ingested.patch.length,

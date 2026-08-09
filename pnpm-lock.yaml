@@ -26,6 +26,9 @@ importers:
       '@cyclops/adapter-memory':
         specifier: workspace:*
         version: link:../../packages/adapters/memory
+      '@cyclops/adapter-prove':
+        specifier: workspace:*
+        version: link:../../packages/adapters/prove
       '@cyclops/adapter-sqlite':
         specifier: workspace:*
         version: link:../../packages/adapters/sqlite
@@ -242,6 +245,25 @@ importers:
         specifier: ^3.1.2
         version: 3.2.7(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.1)
 
+  packages/adapters/prove:
+    dependencies:
+      '@cyclops/domain':
+        specifier: workspace:*
+        version: link:../../domain
+      '@cyclops/ports':
+        specifier: workspace:*
+        version: link:../../ports
+      effect:
+        specifier: ^3.14.14
+        version: 3.22.1
+    devDependencies:
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.1.2
+        version: 3.2.7(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.1)
+
   packages/adapters/sqlite:
     dependencies:
       '@cyclops/domain':
@@ -322,6 +344,9 @@ importers:
       '@cyclops/adapter-pi':
         specifier: workspace:*
         version: link:../adapters/pi
+      '@cyclops/adapter-prove':
+        specifier: workspace:*
+        version: link:../adapters/prove
       '@cyclops/adapter-sqlite':
         specifier: workspace:*
         version: link:../adapters/sqlite
@@ -334,6 +359,9 @@ importers:
       '@cyclops/domain':
         specifier: workspace:*
         version: link:../domain
+      '@cyclops/ports':
+        specifier: workspace:*
+        version: link:../ports
       effect:
         specifier: ^3.14.14
         version: 3.22.1

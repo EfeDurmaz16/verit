@@ -16,10 +16,12 @@
     "@cyclops/adapter-memory": "workspace:*",
     "@cyclops/adapter-neo4j": "workspace:*",
     "@cyclops/adapter-pi": "workspace:*",
+    "@cyclops/adapter-prove": "workspace:*",
     "@cyclops/adapter-sqlite": "workspace:*",
     "@cyclops/adapter-treesitter": "workspace:*",
     "@cyclops/application": "workspace:*",
     "@cyclops/domain": "workspace:*",
+    "@cyclops/ports": "workspace:*",
     "effect": "^3.14.14"
   },
   "devDependencies": {

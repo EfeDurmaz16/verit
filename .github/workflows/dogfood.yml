@@ -9,6 +9,12 @@ on:
         default: "solana-foundation/pay#415"
   pull_request:
 
+# checks:write posts the behavior-proof Check Run. On a fork PR the token stays
+# read-only and the post degrades to a dry run — by design, never a failure.
+permissions:
+  contents: read
+  checks: write
+
 jobs:
   review:
     runs-on: ubuntu-latest
@@ -22,12 +28,16 @@ jobs:
           node-version: "22"
           cache: pnpm
       - run: pnpm install
-      - run: pnpm test
-      - name: Dogfood pipeline (ingest-pr → compile-pack → review)
+      # prove runs the repo's own `pnpm test` inside this runner, which is the
+      # sandbox for v1 — so it reviews *this* PR, not an unrelated repo, and
+      # the ProveRunner refuses anything whose checkout is not the target.
+      - name: Dogfood pipeline (ingest-pr → review → prove → post check)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_SPEC: ${{ github.event.inputs.pr || 'solana-foundation/pay#415' }}
+          PR_SPEC: ${{ github.event_name == 'pull_request' && format('{0}#{1}', github.repository, github.event.number) || github.event.inputs.pr || 'solana-foundation/pay#415' }}
           CYCLOPS_SQLITE_PATH: .data/cyclops.db
+          CYCLOPS_PROVE_TIMEOUT_MS: "900000"
+          PROOF_PAGE_URL: ${{ vars.PROOF_PAGE_URL }}
         run: pnpm --filter @cyclops/action exec tsx src/run.ts
       - uses: actions/upload-artifact@v4
         with:
