@@ -14,7 +14,7 @@ Cyclops builds a canonical **Understanding** (what / why / how + proof refs and 
 - **SQLite** — runs, proof blobs, FTS chunks (`DocumentStore`)
 - **Neo4j** — ontology + PR/git graph (`GraphStore`; optional — memory fallback without Docker)
 - **tree-sitter** ingest with **regex fallback** until WASM grammars ship
-- **Pi harness** via `CYCLOPS_PI_BIN`, else deterministic stub Understanding
+- **Harness port** — Codex CLI lane in the workspace, Pi via `CYCLOPS_PI_BIN` in the Action, deterministic stub otherwise
 - **json-render** proof UI — the live review workspace (`@cyclops/workspace`, Next.js + SSE)
 
 Architecture notes: [`docs/architecture/`](docs/architecture/). Domain terms: [`CONTEXT.md`](CONTEXT.md).
@@ -41,6 +41,8 @@ pnpm cli --help
 | `CYCLOPS_PI_ARGS` | `understand --json` | Args passed to Pi (JSON Understanding on stdout) |
 | `CYCLOPS_NEO4J_URI` | unset | `bolt://…`; memory graph if unset |
 | `CYCLOPS_NEO4J_PASSWORD` | — | Neo4j auth when URI set |
+| `CYCLOPS_WORKSPACE_DIR` | `.data/workspace` | Workspace session blobs |
+| `CYCLOPS_LANE_MODEL` | unset | Model for the workspace analysis lane |
 | `PR_SPEC` | `solana-foundation/pay#415` | Action / dogfood target |
 
 ## CLI
