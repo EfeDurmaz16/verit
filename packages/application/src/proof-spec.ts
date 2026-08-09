@@ -54,13 +54,9 @@ export const understandingToProofSpec = (input: {
     },
     proofList: {
       type: "ProofEvidence",
-      props: {
-        refs: u.proof_refs.map((r) => ({
-          kind: r.kind,
-          label: r.label,
-          value: r.value,
-        })),
-      },
+      // whole refs: an executed ref carries its verdict and log tail, and a
+      // projection that drops them would render a failed proof as neutral
+      props: { refs: u.proof_refs },
     },
     risks: {
       type: "Section",

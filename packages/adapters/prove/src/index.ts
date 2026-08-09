@@ -29,6 +29,11 @@ import { StoreError } from "@cyclops/ports";
 
 const exec = promisify(execFile);
 
+/* Keep the reason in the message: "prove refused" with no cause is unusable
+   both in CI logs and in the workspace, which shows this text verbatim. */
+const fail = (label: string) => (e: unknown) =>
+  new StoreError(`${label}: ${e instanceof Error ? e.message : String(e)}`, e);
+
 const TAIL_LINES = 100;
 const CAPTURE_CHARS = 256_000;
 export const DEFAULT_TIMEOUT_MS = 10 * 60_000;
@@ -181,13 +186,13 @@ export const makeProveRunner = (): ProvePort => ({
   detect: (cwd) =>
     Effect.tryPromise({
       try: () => detectProveCommand(resolve(cwd)),
-      catch: (e) => new StoreError("prove detect", e),
+      catch: fail("prove detect"),
     }),
 
   repoAt: (cwd) =>
     Effect.tryPromise({
       try: () => repoSlugAt(resolve(cwd)),
-      catch: (e) => new StoreError("prove repoAt", e),
+      catch: fail("prove repoAt"),
     }),
 
   run: ({ cwd, expectRepo, timeoutMs }) =>
@@ -221,6 +226,6 @@ export const makeProveRunner = (): ProvePort => ({
           startedAt,
         };
       },
-      catch: (e) => new StoreError("prove run", e),
+      catch: fail("prove"),
     }),
 });

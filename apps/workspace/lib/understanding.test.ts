@@ -41,6 +41,31 @@ describe("understanding lane contract", () => {
     expect(invalid.ok).toBe(false);
   });
 
+  it("carries an executed proof's verdict and log into the render", async () => {
+    const failed = {
+      ...VALID,
+      proof_refs: [
+        {
+          kind: "test",
+          label: "prove: pnpm run test — failed",
+          value: "exit 1 · 3.2s",
+          status: "fail",
+          log: "Error: 2 tests failed",
+        },
+      ],
+    };
+    const r = await readUnderstanding(dirWith(JSON.stringify(failed)));
+    if (!r.ok) throw new Error(r.error);
+    const proof = understandingPatches(r.understanding)
+      .map((l) => JSON.parse(l) as { path: string; value: unknown })
+      .find((p) => p.path === "/elements/u-proof")?.value as {
+      props: { refs: { status?: string; log?: string }[] };
+    };
+    // dropping these would render a failed proof as neutral evidence
+    expect(proof.props.refs[0]?.status).toBe("fail");
+    expect(proof.props.refs[0]?.log).toContain("2 tests failed");
+  });
+
   it("renders author and reviewer risks into separate props", async () => {
     const r = await readUnderstanding(dirWith(JSON.stringify(VALID)));
     if (!r.ok) throw new Error(r.error);

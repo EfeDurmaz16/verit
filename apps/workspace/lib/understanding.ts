@@ -76,9 +76,9 @@ export function understandingPatches(u: Understanding): string[] {
     attach(SECTION.understanding, KEY.what),
     el(KEY.how, "Text", { content: u.how }),
     attach(SECTION.understanding, KEY.how),
-    el(KEY.proof, "ProofEvidence", {
-      refs: u.proof_refs.map((r) => ({ kind: r.kind, label: r.label, value: r.value })),
-    }),
+    // whole refs, not a projection: an executed ref's verdict and log tail are
+    // the evidence, and dropping them would render a failed proof as neutral
+    el(KEY.proof, "ProofEvidence", { refs: u.proof_refs }),
     attach(SECTION.proof, KEY.proof),
     el(KEY.risks, "RisksList", {
       authorDeclared: u.risks.filter((r) => r.source !== "reviewer"),
