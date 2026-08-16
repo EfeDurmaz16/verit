@@ -1,119 +1,298 @@
-# Cyclops
+# cyclops
 
-Behavior-proof PR review: understanding-first harness, dual stores, generative proof UI.
+**The verification layer above your AI reviewers.**
 
-Planning lives in [`proof-review`](https://github.com/EfeDurmaz16/proof-review). This repo is the product.
+AI reviewers give you opinions. cyclops gives you evidence.
 
-## What it does
+A reviewer bot reads your diff and tells you what it thinks might break. That is
+useful, and it is still an opinion. cyclops runs your repository's own tests
+against the pull request, records the real exit code, and posts the result as a
+`cyclops / behavior-proof` GitHub Check. If the tests did not run, the Check is
+`neutral`. It never turns green on a guess.
 
-Cyclops builds a canonical **Understanding** (what / why / how + proof refs and risks), then renders a **proof page** (json-render Spec) so humans can verify behavior, not just skim a chatty review.
+Alongside the proof it publishes an **Understanding**: what the change does, why,
+and how, with risks split into the ones the author declared and the ones the
+review found. Author risks are hints. They are never treated as an allowlist.
 
-The `prove` verb runs the reviewed repo's **own** test or build command and records the real exit code, duration and log tail as a proof ref. It refuses to run anywhere but a checkout of the repo under review: in CI that is the Action runner (the sandbox for v1), and in the workspace it only ever fires when you click the button that names the command. A failed proof renders as failed.
+Open source, AGPL-3.0. Self-host it for free.
 
-## Stack
+---
 
-- **Effect** onion: `domain` → `ports` → `application` → adapters
-- **SQLite**: runs, proof blobs, FTS chunks (`DocumentStore`)
-- **Neo4j**: ontology + PR/git graph (`GraphStore`; optional, memory fallback without Docker)
-- **tree-sitter** ingest with **regex fallback** until WASM grammars ship
-- **Harness port**: one headless coding CLI per lane, chosen with `CYCLOPS_LANE_HARNESS` (`codex`, `claude`, `cursor`); the Action falls back to Pi via `CYCLOPS_PI_BIN`, then to a deterministic stub
-- **json-render** proof UI: one component registry (`@cyclops/proof-ui`) rendered by both the live review workspace (`@cyclops/workspace`, Next.js + SSE) and the hosted dashboard
-- **Dashboard** (`@cyclops/dashboard`, Next.js + Postgres): GitHub login, run history per repo, and the proof page the Check Run links to. Setup: [`docs/dashboard-setup.md`](docs/dashboard-setup.md)
-- **ProvePort**: child-process runner for the target repo's verification command; **CheckPort**: `cyclops / behavior-proof` Check Run
+## What lands on the pull request
 
-Architecture notes: [`docs/architecture/`](docs/architecture/). Domain terms: [`CONTEXT.md`](CONTEXT.md).
+```
+cyclops / behavior-proof            Proof passed: pnpm test
 
-## Quick start
+  What changed:  Adds the pay gate commands to the CLI.
+  Why:           Gate checks were only reachable through the HTTP API.
+  How:           New verbs in cli/src/gate.ts routed to the existing service.
 
-```bash
-pnpm install
-docker compose up -d neo4j   # optional
-export CYCLOPS_NEO4J_URI=bolt://localhost:7687
-export CYCLOPS_NEO4J_PASSWORD=cyclops-dev
-pnpm test
-pnpm typecheck
-pnpm cli --help
+  Risks:         5 in total. 3 found by review.
+
+  ## Proof
+  `pnpm test` ran in `owner/repo` and exited **0** after 41.2s.
+  Command source: `package.json`
+  <details> Log tail </details>
 ```
 
-## Environment
+Three states, and only three:
+
+| Check conclusion | What it means |
+|---|---|
+| `success` | The repository's own verification command ran and exited 0. |
+| `failure` | It ran and exited non-zero, or it timed out. |
+| `neutral` | Nothing ran. You have an Understanding and no proof. |
+
+---
+
+## Quickstart
+
+Add one workflow. That is the whole install.
+
+```yaml
+# .github/workflows/cyclops.yml
+name: cyclops
+on: pull_request
+permissions:
+  contents: read
+  checks: write
+  pull-requests: read
+jobs:
+  behavior-proof:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EfeDurmaz16/cyclops@main
+```
+
+cyclops detects the verification command from your repository. Override it when
+the guess is wrong:
+
+```yaml
+      - uses: EfeDurmaz16/cyclops@main
+        with:
+          prove-command: cargo test --all
+```
+
+The Understanding is written by a headless coding CLI. With no key configured
+you get a deterministic stub, which is honest but thin. To get the real thing:
+
+```yaml
+      - uses: EfeDurmaz16/cyclops@main
+        with:
+          lane-harness: claude
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+Fork pull requests receive no secrets and a read-only token. cyclops degrades to
+a dry run and prints the Check instead of posting it. That is deliberate, and it
+is never a failed job.
+
+Every input is listed in [`action.yml`](action.yml).
+
+---
+
+## Self-host the review workspace
+
+The workspace is the live surface: paste a pull request URL and watch the
+review assemble, instead of waiting for a Check to appear.
+
+```bash
+git clone https://github.com/EfeDurmaz16/cyclops
+cd cyclops
+pnpm install
+pnpm workspace          # http://localhost:3000
+```
+
+Node 22 and pnpm 11. Needs `gh` authenticated, and one of `codex`, `claude` or
+`cursor` on PATH for live analysis. No Docker, no database, no account. The
+graph store falls back to memory and runs land in `.data/`.
+
+Run the same pipeline headless:
+
+```bash
+pnpm cli review --pr=owner/repo#123
+```
+
+Prove stays off until you point it at a checkout of the repository you are
+reviewing. It refuses every other checkout, so reviewing a stranger's pull
+request never executes their code on your machine:
+
+```bash
+CYCLOPS_PROVE_CWD=/path/to/that/repo pnpm cli review --pr=owner/repo#123
+```
+
+The hosted dashboard, with GitHub login and run history over Postgres, is
+optional and documented in [`docs/dashboard-setup.md`](docs/dashboard-setup.md).
+
+---
+
+## How it compares
+
+Checked August 2026. Corrections by pull request are welcome, with a link.
+
+| | cyclops | CodeRabbit | Greptile | PR-Agent |
+|---|---|---|---|---|
+| Source | Open, AGPL-3.0 | Closed | Closed | Open, MIT |
+| Self-host | Free | Paid enterprise contract | Paid enterprise contract | Free |
+| Runs your repo's own test command | Yes, every run | No | No | No |
+| Executes code at all | Yes | No | Yes, through TREX (beta) | No |
+| Where the verdict comes from | A real process exit code | Model judgement | Model judgement, plus TREX sandbox runs | Model judgement |
+| Check Run with a pass or fail conclusion | Yes, the conclusion is the exit code | Yes, from review state | Unverified | Comments only |
+| Says "no proof" when nothing ran | Yes, `neutral` | No | No | No |
+
+The honest version of the pitch: Greptile is the closest. Its TREX layer is a
+real execution layer, not a marketing line. It spins up disposable sandboxes and
+runs the changed code to confirm a suspected bug is real before reporting it.
+
+The two differences that matter are what gets run, and who can run it.
+
+**What gets run.** TREX has an agent write and drive scenarios. cyclops runs the
+command your repository already defines, unchanged, and reports its exit code.
+Nothing is inferred and nothing is generated. If your suite is good, the proof is
+good. If your suite is weak, cyclops tells you it passed a weak suite rather than
+claiming more than it checked.
+
+**Who can run it.** TREX is proprietary and in beta, and Greptile self-hosting
+needs an annual enterprise contract. cyclops is AGPL-3.0. Clone it and run it
+today for nothing.
+
+Everything else in that table analyzes the diff and writes about it. That is a
+different job, and a useful one. cyclops sits above it: keep your reviewer, and
+put a verdict underneath its opinion.
+
+---
+
+## How it works
+
+```
+  pull request
+       │
+       ▼
+  ingest-pr ─────────► GraphStore        repo, PRs, edges (Neo4j, or memory)
+       │                                  wiki pages and file symbols
+       │
+       ▼
+  understand ────────► lane harness       one headless coding CLI reads the
+       │                                  full diff, threads and CI logs
+       │
+       │  Understanding JSON              validated against the Effect Schema
+       │  (what / why / how,              in @cyclops/domain. A run that fails
+       │   risks, proof_refs)             validation is shown as unverified
+       ▼
+  prove ─────────────► ProvePort          runs the repo's OWN command as argv,
+       │                                  in a checkout it confirmed is that
+       │  exit code, duration,            repo. Fails closed on any mismatch
+       │  log tail                        Timeout kills the process group
+       ▼
+  post ──────────────► CheckPort          cyclops / behavior-proof Check Run
+       │                                  conclusion = exit code, nothing else
+       ▼
+  render ────────────► proof page         json-render Spec, one component
+                                          registry shared by the workspace
+                                          and the dashboard
+```
+
+The code is an Effect onion. `domain` holds pure schemas, `ports` holds
+interfaces, `application` holds use cases, and every I/O concern is an adapter
+behind a port. Swapping Neo4j for memory, or Codex for Claude Code, is swapping
+one adapter.
+
+Two stores by design. Neo4j holds the ontology and the pull request graph.
+SQLite holds runs, proof blobs and full text chunks. Neither is required to try
+cyclops: both have a memory or local fallback.
+
+Architecture notes live in [`docs/architecture/`](docs/architecture/). The exact
+meaning of every domain word is in [`CONTEXT.md`](CONTEXT.md).
+
+---
+
+## Hosted cloud
+
+Self-hosting is free and always will be. A hosted version, with run history,
+org-wide dashboards and no infrastructure to run, is coming.
+
+**Waitlist: TODO add link before launch**
+
+---
+
+## Configuration
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `GITHUB_TOKEN` | unset | Optional for public PRs; raises rate limits |
-| `CYCLOPS_SQLITE_PATH` | `.data/cyclops.db` | DocumentStore path; set `""` for in-memory |
-| `CYCLOPS_PI_BIN` | unset | Path to Pi binary; if unset, deterministic stub |
-| `CYCLOPS_PI_ARGS` | `understand --json` | Args passed to Pi (JSON Understanding on stdout) |
-| `CYCLOPS_NEO4J_URI` | unset | `bolt://…`; memory graph if unset |
-| `CYCLOPS_NEO4J_PASSWORD` | none | Neo4j auth when URI set |
-| `CYCLOPS_WORKSPACE_DIR` | `.data/workspace` | Workspace session blobs |
-| `CYCLOPS_LANE_HARNESS` | `codex` | Coding CLI behind the analysis lane: `codex`, `claude` or `cursor`. An unknown value is an error, never a silent fallback. The Action understands `claude` and `cursor`; on `codex` it keeps the Pi path |
-| `CYCLOPS_LANE_MODEL` | unset | Model for the analysis lane, passed to whichever harness is selected |
-| `CYCLOPS_LANE_TIMEOUT_MS` | `900000` | Hard timeout for the Action's one-shot lane call |
+| `GITHUB_TOKEN` | unset | Optional for public PRs. Needs `checks:write` to post the Check |
+| `CYCLOPS_PROVE_CWD` | `GITHUB_WORKSPACE` | Checkout prove runs in. Must be the reviewed repo |
+| `CYCLOPS_PROVE_CMD` | detected | Override the command, e.g. `cargo test --all`. Argv, never a shell string |
+| `CYCLOPS_PROVE_TIMEOUT_MS` | `600000` | Hard timeout. The process group is killed |
+| `CYCLOPS_CHECK_DRY_RUN` | unset | `1` prints the Check body instead of posting it |
+| `CYCLOPS_LANE_HARNESS` | `codex` | Coding CLI behind the analysis lane: `codex`, `claude` or `cursor`. An unknown value is an error, never a silent fallback |
+| `CYCLOPS_LANE_MODEL` | unset | Model for the analysis lane |
+| `CYCLOPS_LANE_TIMEOUT_MS` | `900000` | Hard timeout for the one-shot lane call |
 | `ANTHROPIC_API_KEY` | unset | Auth for `CYCLOPS_LANE_HARNESS=claude` in CI. Locally the CLI's own login is used |
 | `CURSOR_API_KEY` | unset | Auth for `CYCLOPS_LANE_HARNESS=cursor` in CI. Locally `cursor-agent login` is used |
-| `PR_SPEC` | `solana-foundation/pay#415` | Action / dogfood target |
-| `CYCLOPS_PROVE_CWD` | `GITHUB_WORKSPACE` (CLI) / cwd (workspace) | Checkout prove runs in; must be the reviewed repo |
-| `CYCLOPS_PROVE_CMD` | detected | Override the command, e.g. `cargo test --all` (argv, never a shell string) |
-| `CYCLOPS_PROVE_TIMEOUT_MS` | `600000` | Hard timeout; the process group is killed |
-| `CYCLOPS_CHECK_DRY_RUN` | unset | `1` prints the Check body instead of posting |
-| `CYCLOPS_DASHBOARD_URL` | unset | Dashboard base URL. With `CYCLOPS_INGEST_TOKEN` the finished run is uploaded and the Check links its proof page |
+| `CYCLOPS_SQLITE_PATH` | `.data/cyclops.db` | DocumentStore path. Set `""` for in-memory |
+| `CYCLOPS_NEO4J_URI` | unset | `bolt://…`. Memory graph if unset |
+| `CYCLOPS_NEO4J_PASSWORD` | none | Neo4j auth when the URI is set |
+| `CYCLOPS_WORKSPACE_DIR` | `.data/workspace` | Workspace session blobs |
+| `CYCLOPS_PI_BIN` | unset | Path to a Pi binary. If unset, the deterministic stub |
+| `CYCLOPS_DASHBOARD_URL` | unset | Dashboard base URL. With `CYCLOPS_INGEST_TOKEN` the run is uploaded and the Check links its proof page |
 | `CYCLOPS_INGEST_TOKEN` | unset | Per-repo ingest token from `pnpm --filter @cyclops/dashboard register-repo owner/name` |
-| `PROOF_PAGE_URL` | unset | Only to override the computed `/r/{owner}/{repo}/runs/{runId}` link |
+| `PROOF_PAGE_URL` | unset | Only to override the computed proof page link |
 
 ## CLI
 
 ```bash
-pnpm cli ingest .
-pnpm cli compile-pack
-pnpm cli understand --dry-run
-pnpm cli ingest-pr owner/repo#n
-pnpm cli review --pr=owner/repo#n
-pnpm cli dogfood solana-foundation/pay#415
-pnpm workspace                   # live review workspace on http://localhost:3000
+pnpm cli ingest .                       # index a repo: files, symbols, wiki, chunks
+pnpm cli ingest-pr owner/repo#123       # fetch a PR plus explicit and inferred edges
+pnpm cli understand --dry-run           # stub Understanding into the store and a proof Spec
+pnpm cli review --pr=owner/repo#123     # classify, understand, render the proof Spec
+pnpm cli compile-pack                   # emit the review skills.toml from presets
+pnpm cli dogfood owner/repo#123         # the full Action path, locally
+pnpm workspace                          # live review workspace on :3000
 ```
 
-Artifacts land under `.data/proofs/` (gitignored).
-
-Prove is off unless you point it at a checkout of the repo you are reviewing:
-
-```bash
-CYCLOPS_PROVE_CWD=/path/to/that/repo pnpm cli review --pr=owner/repo#n
-```
-
-## Dogfood pay#415 (local = CI)
-
-Every pull request to this repo also dogfoods itself: the workflow reviews the
-PR's own head commit, proves it by running `pnpm test` in the runner, and posts
-the result as a `cyclops / behavior-proof` Check Run. On fork PRs the token is
-read-only and the post degrades to a dry run.
-
-Same path as [`.github/workflows/dogfood.yml`](.github/workflows/dogfood.yml):
-
-```bash
-pnpm install
-pnpm cli dogfood solana-foundation/pay#415
-# or Action mirror:
-PR_SPEC=solana-foundation/pay#415 CYCLOPS_SQLITE_PATH=.data/cyclops.db \
-  pnpm --filter @cyclops/action exec tsx src/run.ts
-```
-
-To watch the same review assemble live instead of reading the artifact:
-
-```bash
-pnpm workspace
-# open http://localhost:3000 and paste https://github.com/solana-foundation/pay/pull/415
-```
-
-Requires `gh` (authenticated) and the `codex` CLI on PATH.
+Proof artifacts land in `.data/proofs/`, which is gitignored.
 
 ## Packages
 
 | Package | Role |
 |---|---|
-| `@cyclops/domain` | Pure schemas & entities |
+| `@cyclops/domain` | Pure schemas and entities |
 | `@cyclops/ports` | Interfaces |
-| `@cyclops/application` | Use-cases |
-| `@cyclops/adapters-*` | SQLite, Neo4j, tree-sitter, GitHub, Pi, prove, … |
-| `@cyclops/cli` | `ingest` / `ingest-pr` / `understand` / `review` / `dogfood` |
+| `@cyclops/application` | Use cases |
+| `@cyclops/adapters-*` | SQLite, Neo4j, tree-sitter, GitHub, Pi, prove, S3, memory |
+| `@cyclops/cli` | `ingest`, `ingest-pr`, `understand`, `review`, `dogfood` |
 | `@cyclops/workspace` | Live review workspace (Next.js, SSE, json-render) |
-| `@cyclops/action` | GitHub Action entry (calls `dogfood`) |
+| `@cyclops/dashboard` | Hosted run history and proof pages (Next.js, Postgres) |
+| `@cyclops/proof-ui` | The one component registry both surfaces render |
+| `@cyclops/action` | GitHub Action entry point |
+
+## Status
+
+Early. The pieces below are real and running in this repository's own CI on
+every pull request:
+
+- `prove` running a repository's own command and reporting the true exit code
+- the `cyclops / behavior-proof` Check Run, including the `neutral` case
+- the Understanding schema, its validation, and the proof page render
+- the GitHub Action, the CLI and the live workspace
+
+Known gaps, stated plainly:
+
+- tree-sitter ingest falls back to regex until the WASM grammars ship
+- the suggested patch is a stub, not a real patch
+- inline review comments are not implemented
+- the hosted dashboard works but has had one operator, so treat its setup
+  documentation as a first draft
+
+## Contributing
+
+[`CONTRIBUTING.md`](CONTRIBUTING.md). Read [`STYLE.md`](STYLE.md) before writing
+any string a human will read.
+
+Security reports go to efe@sardis.sh, not to the issue tracker.
+See [`SECURITY.md`](SECURITY.md).
+
+## License
+
+[AGPL-3.0-only](LICENSE).
