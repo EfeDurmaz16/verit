@@ -24,9 +24,9 @@ describe("pi adapter", () => {
     expect(u.proof_refs.some((r) => r.label === "changed-path")).toBe(true);
   });
 
-  it("makePiHarness returns valid Understanding without CYCLOPS_PI_BIN", async () => {
-    const prev = process.env.CYCLOPS_PI_BIN;
-    delete process.env.CYCLOPS_PI_BIN;
+  it("makePiHarness returns valid Understanding without VERIT_PI_BIN", async () => {
+    const prev = process.env.VERIT_PI_BIN;
+    delete process.env.VERIT_PI_BIN;
     try {
       const harness = makePiHarness();
       const u = await Effect.runPromise(
@@ -42,7 +42,7 @@ describe("pi adapter", () => {
       expect(u.what).toBe("t");
       expect(u.how).toContain("a.ts");
     } finally {
-      if (prev != null) process.env.CYCLOPS_PI_BIN = prev;
+      if (prev != null) process.env.VERIT_PI_BIN = prev;
     }
   });
 });

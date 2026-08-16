@@ -15,7 +15,7 @@ import type {
   WikiPage,
   WorkspaceRun,
   WorkspaceSession,
-} from "@cyclops/domain";
+} from "@verit/domain";
 import type { Effect } from "effect";
 
 export class StoreError extends Error {

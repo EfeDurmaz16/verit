@@ -12,25 +12,25 @@ import {
   runReviewUnderstand,
   stubPatch,
   stubRisk,
-} from "@cyclops/application";
-import { ingestRepoPath } from "@cyclops/adapter-fs-ingest";
-import { makeGithubChecks, makeGithubVcs } from "@cyclops/adapter-github";
-import { makeProveRunner } from "@cyclops/adapter-prove";
-import { makeLocalBlob } from "@cyclops/adapter-local-blob";
+} from "@verit/application";
+import { ingestRepoPath } from "@verit/adapter-fs-ingest";
+import { makeGithubChecks, makeGithubVcs } from "@verit/adapter-github";
+import { makeProveRunner } from "@verit/adapter-prove";
+import { makeLocalBlob } from "@verit/adapter-local-blob";
 import {
   makeHeuristicClassifier,
   makeMemoryDocumentStore,
   makeProofRender,
-} from "@cyclops/adapter-memory";
-import { makeGraphStore } from "@cyclops/adapter-neo4j";
-import { makeAgentHarness } from "@cyclops/adapter-pi";
-import { makeSqliteDocumentStore } from "@cyclops/adapter-sqlite";
-import { makeTreeSitterParser } from "@cyclops/adapter-treesitter";
-import type { PullRequest, ReviewPresets, ReviewRun, Understanding } from "@cyclops/domain";
-import type { DocumentStore, ProveOutcome } from "@cyclops/ports";
+} from "@verit/adapter-memory";
+import { makeGraphStore } from "@verit/adapter-neo4j";
+import { makeAgentHarness } from "@verit/adapter-pi";
+import { makeSqliteDocumentStore } from "@verit/adapter-sqlite";
+import { makeTreeSitterParser } from "@verit/adapter-treesitter";
+import type { PullRequest, ReviewPresets, ReviewRun, Understanding } from "@verit/domain";
+import type { DocumentStore, ProveOutcome } from "@verit/ports";
 import { buildUpload, dashboardTarget, proofPageUrl, uploadRun } from "./upload";
 
-const help = `cyclops <command>
+const help = `verit <command>
 
 Commands:
   ingest <path>              Index repo (files, symbols, wiki, chunks)
@@ -42,22 +42,22 @@ Commands:
 
 Env:
   GITHUB_TOKEN          optional for public PRs; needs checks:write to post a Check
-  CYCLOPS_SQLITE_PATH   default .data/cyclops.db (set empty to use memory)
-  CYCLOPS_LANE_HARNESS  claude | cursor asks that headless CLI for the Understanding;
+  VERIT_SQLITE_PATH   default .data/verit.db (set empty to use memory)
+  VERIT_LANE_HARNESS  claude | cursor asks that headless CLI for the Understanding;
                         anything else keeps the Pi path. Any failure falls back
-  CYCLOPS_LANE_MODEL    optional model for the selected lane harness
-  CYCLOPS_LANE_TIMEOUT_MS  hard timeout for the lane CLI, default 900000
-  CYCLOPS_PI_BIN        optional Pi binary; else deterministic stub Understanding
-  CYCLOPS_PI_ARGS       optional args (default: understand --json)
-  CYCLOPS_NEO4J_URI     optional bolt://… (memory graph fallback if unset)
-  CYCLOPS_PROVE_CWD     checkout to prove in (default GITHUB_WORKSPACE); prove is
+  VERIT_LANE_MODEL    optional model for the selected lane harness
+  VERIT_LANE_TIMEOUT_MS  hard timeout for the lane CLI, default 900000
+  VERIT_PI_BIN        optional Pi binary; else deterministic stub Understanding
+  VERIT_PI_ARGS       optional args (default: understand --json)
+  VERIT_NEO4J_URI     optional bolt://… (memory graph fallback if unset)
+  VERIT_PROVE_CWD     checkout to prove in (default GITHUB_WORKSPACE); prove is
                         refused unless that checkout IS the reviewed repo
-  CYCLOPS_PROVE_CMD     override the detected command, e.g. "cargo test --all"
-  CYCLOPS_PROVE_TIMEOUT_MS  hard timeout, default 600000
-  CYCLOPS_DASHBOARD_URL   base URL of the hosted dashboard. With CYCLOPS_INGEST_TOKEN
+  VERIT_PROVE_CMD     override the detected command, e.g. "cargo test --all"
+  VERIT_PROVE_TIMEOUT_MS  hard timeout, default 600000
+  VERIT_DASHBOARD_URL   base URL of the hosted dashboard. With VERIT_INGEST_TOKEN
                           the finished run is uploaded and the Check links its proof
                           page. Leave either unset and nothing is uploaded
-  CYCLOPS_INGEST_TOKEN    per-repo ingest token issued by the dashboard
+  VERIT_INGEST_TOKEN    per-repo ingest token issued by the dashboard
   PROOF_PAGE_URL          overrides the computed proof page link in the Check
 `;
 
@@ -70,9 +70,9 @@ const defaultPresets: ReviewPresets = {
 };
 
 const makeDocs = () => {
-  const path = process.env.CYCLOPS_SQLITE_PATH;
+  const path = process.env.VERIT_SQLITE_PATH;
   if (path === "") return makeMemoryDocumentStore();
-  return makeSqliteDocumentStore(path ?? ".data/cyclops.db");
+  return makeSqliteDocumentStore(path ?? ".data/verit.db");
 };
 
 const parsePrSpec = (spec: string): { owner: string; repo: string; number: number } => {
@@ -110,9 +110,9 @@ const proveIfPointedHere = async (
   repo: string,
   understanding: Understanding,
 ): Promise<{ understanding: Understanding; outcome: ProveOutcome | null }> => {
-  const cwd = process.env.CYCLOPS_PROVE_CWD || process.env.GITHUB_WORKSPACE;
+  const cwd = process.env.VERIT_PROVE_CWD || process.env.GITHUB_WORKSPACE;
   if (!cwd) return { understanding, outcome: null };
-  const timeoutMs = Number(process.env.CYCLOPS_PROVE_TIMEOUT_MS) || undefined;
+  const timeoutMs = Number(process.env.VERIT_PROVE_TIMEOUT_MS) || undefined;
   try {
     return await Effect.runPromise(
       runProve({ prove: makeProveRunner(), docs })({
@@ -226,7 +226,7 @@ const postBehaviorProofCheck = async (input: {
   proofPageUrl?: string;
 }) => {
   const slug = process.env.GITHUB_REPOSITORY;
-  const headSha = process.env.CYCLOPS_CHECK_SHA || process.env.GITHUB_SHA;
+  const headSha = process.env.VERIT_CHECK_SHA || process.env.GITHUB_SHA;
   if (!slug || !headSha) {
     console.error("post: no GITHUB_REPOSITORY/GITHUB_SHA, skipping check run");
     return null;
@@ -239,7 +239,7 @@ const postBehaviorProofCheck = async (input: {
     proofPageUrl: input.proofPageUrl,
     runId: input.runId,
   });
-  const dry = process.env.CYCLOPS_CHECK_DRY_RUN === "1" || !process.env.GITHUB_TOKEN;
+  const dry = process.env.VERIT_CHECK_DRY_RUN === "1" || !process.env.GITHUB_TOKEN;
   if (dry) {
     console.error(`post (dry run) ${check.name} → ${check.conclusion}: ${check.title}`);
     console.error(check.summary);
@@ -285,7 +285,7 @@ const prUpload = (pr: PullRequest) => ({
   title: pr.title,
   url: pr.url,
   author: pr.author,
-  headSha: process.env.CYCLOPS_CHECK_SHA || process.env.GITHUB_SHA || undefined,
+  headSha: process.env.VERIT_CHECK_SHA || process.env.GITHUB_SHA || undefined,
 });
 
 const ingestPr = async (spec: string) => {
@@ -401,7 +401,7 @@ const main = async () => {
 
   if (cmd === "understand") {
     const dry = rest.includes("--dry-run") || rest.includes("-n") || rest.length === 0;
-    if (!dry) throw new Error("usage: cyclops understand --dry-run");
+    if (!dry) throw new Error("usage: verit understand --dry-run");
     const context = buildReviewContext({
       pages: [],
       query: "dry-run",
@@ -446,7 +446,7 @@ const main = async () => {
     const prFlag =
       rest.find((a) => a.startsWith("--pr="))?.slice(5) ??
       (rest[0] === "--pr" ? rest[1] : rest[0]);
-    if (!prFlag) throw new Error("usage: cyclops review --pr=owner/repo#n");
+    if (!prFlag) throw new Error("usage: verit review --pr=owner/repo#n");
     const { pr: _pr, ...out } = await reviewPr(prFlag.replace(/^--pr=/, ""));
     console.log(JSON.stringify(printable(out), null, 2));
     return;

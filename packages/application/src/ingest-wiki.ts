@@ -1,4 +1,4 @@
-import type { WikiPage } from "@cyclops/domain";
+import type { WikiPage } from "@verit/domain";
 import { contentHash } from "./hash";
 
 /** Split markdown into WikiPage nodes by ATX headings. */

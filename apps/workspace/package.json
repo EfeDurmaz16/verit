@@ -1,5 +1,5 @@
 {
-  "name": "@cyclops/workspace",
+  "name": "@verit/workspace",
   "license": "AGPL-3.0-only",
   "version": "0.0.1",
   "private": true,
@@ -12,13 +12,13 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@cyclops/adapter-memory": "workspace:*",
-    "@cyclops/adapter-prove": "workspace:*",
-    "@cyclops/adapter-sqlite": "workspace:*",
-    "@cyclops/application": "workspace:*",
-    "@cyclops/domain": "workspace:*",
-    "@cyclops/ports": "workspace:*",
-    "@cyclops/proof-ui": "workspace:*",
+    "@verit/adapter-memory": "workspace:*",
+    "@verit/adapter-prove": "workspace:*",
+    "@verit/adapter-sqlite": "workspace:*",
+    "@verit/application": "workspace:*",
+    "@verit/domain": "workspace:*",
+    "@verit/ports": "workspace:*",
+    "@verit/proof-ui": "workspace:*",
     "@json-render/core": "^0.19.0",
     "@json-render/react": "^0.19.0",
     "class-variance-authority": "^0.7.1",

@@ -12,20 +12,20 @@ Nothing here needs a cloud account.
 ```bash
 docker compose up -d postgres          # host port 5433, see docker-compose.yml
 cd apps/dashboard
-export DATABASE_URL="postgres://cyclops:cyclops-dev@localhost:5433/cyclops"
-export CYCLOPS_SESSION_SECRET="$(openssl rand -base64 48)"
+export DATABASE_URL="postgres://verit:verit-dev@localhost:5433/verit"
+export VERIT_SESSION_SECRET="$(openssl rand -base64 48)"
 pnpm migrate                           # idempotent, safe to re-run
-pnpm register-repo EfeDurmaz16/cyclops # prints the ingest token once
+pnpm register-repo EfeDurmaz16/verit # prints the ingest token once
 pnpm dev                               # http://localhost:3001
 ```
 
-`register-repo` prints `CYCLOPS_INGEST_TOKEN=...` once. Only its sha256 digest is
+`register-repo` prints `VERIT_INGEST_TOKEN=...` once. Only its sha256 digest is
 stored, so a lost token is reissued by running the command again, never recovered.
 
-To skip the GitHub login while developing, set `CYCLOPS_DEV_USER` to a login:
+To skip the GitHub login while developing, set `VERIT_DEV_USER` to a login:
 
 ```bash
-CYCLOPS_DEV_USER=EfeDurmaz16 pnpm dev
+VERIT_DEV_USER=EfeDurmaz16 pnpm dev
 ```
 
 This is opt-in and has no default. With the variable unset the dashboard always
@@ -36,17 +36,17 @@ deployed environment.
 Then run the pipeline against it:
 
 ```bash
-PR_SPEC="EfeDurmaz16/cyclops#1" \
+PR_SPEC="EfeDurmaz16/verit#1" \
 GITHUB_TOKEN="$(gh auth token)" \
-CYCLOPS_PROVE_CWD="$PWD" \
-CYCLOPS_CHECK_DRY_RUN=1 \
-CYCLOPS_DASHBOARD_URL="http://localhost:3001" \
-CYCLOPS_INGEST_TOKEN="cyc_..." \
-pnpm cli dogfood "EfeDurmaz16/cyclops#1"
+VERIT_PROVE_CWD="$PWD" \
+VERIT_CHECK_DRY_RUN=1 \
+VERIT_DASHBOARD_URL="http://localhost:3001" \
+VERIT_INGEST_TOKEN="cyc_..." \
+pnpm cli dogfood "EfeDurmaz16/verit#1"
 ```
 
-The run appears at `/r/EfeDurmaz16/cyclops`, and its proof page at
-`/r/EfeDurmaz16/cyclops/runs/{runId}`, which is the URL printed as
+The run appears at `/r/EfeDurmaz16/verit`, and its proof page at
+`/r/EfeDurmaz16/verit/runs/{runId}`, which is the URL printed as
 `proofPageUrl` and linked from the Check body.
 
 ## Environment variables
@@ -54,19 +54,19 @@ The run appears at `/r/EfeDurmaz16/cyclops`, and its proof page at
 | Variable | Where | What it does |
 |---|---|---|
 | `DATABASE_URL` | dashboard | Postgres connection string. Neon in production |
-| `CYCLOPS_SESSION_SECRET` | dashboard | At least 32 chars. Seals the session cookie. Rotating it signs everyone out |
+| `VERIT_SESSION_SECRET` | dashboard | At least 32 chars. Seals the session cookie. Rotating it signs everyone out |
 | `GITHUB_CLIENT_ID` | dashboard | OAuth app client id |
 | `GITHUB_CLIENT_SECRET` | dashboard | OAuth app client secret |
-| `CYCLOPS_ACCESS_TTL_SECONDS` | dashboard | How long a cached "may read" answer is trusted. Default 600 |
-| `CYCLOPS_BLOB_DIR` | dashboard | Where the filesystem object store writes. Local only, ignored once S3 is configured |
-| `CYCLOPS_S3_ENDPOINT` | dashboard | S3 endpoint origin, no bucket. R2: `https://<account-id>.r2.cloudflarestorage.com` |
-| `CYCLOPS_S3_BUCKET` | dashboard | Bucket name, e.g. `cyclops-proofs` |
-| `CYCLOPS_S3_ACCESS_KEY_ID` | dashboard | R2 API token access key id |
-| `CYCLOPS_S3_SECRET_ACCESS_KEY` | dashboard | R2 API token secret access key |
-| `CYCLOPS_S3_REGION` | dashboard | Optional. Defaults to `auto`, which is what R2 wants. MinIO wants a real region |
-| `CYCLOPS_DEV_USER` | dashboard | Local only. Skips login as that GitHub login. Never set in a deployment |
-| `CYCLOPS_DASHBOARD_URL` | Action | Base URL of the dashboard. Unset means no upload |
-| `CYCLOPS_INGEST_TOKEN` | Action | Per-repo token from `register-repo`. Unset means no upload |
+| `VERIT_ACCESS_TTL_SECONDS` | dashboard | How long a cached "may read" answer is trusted. Default 600 |
+| `VERIT_BLOB_DIR` | dashboard | Where the filesystem object store writes. Local only, ignored once S3 is configured |
+| `VERIT_S3_ENDPOINT` | dashboard | S3 endpoint origin, no bucket. R2: `https://<account-id>.r2.cloudflarestorage.com` |
+| `VERIT_S3_BUCKET` | dashboard | Bucket name, e.g. `verit-proofs` |
+| `VERIT_S3_ACCESS_KEY_ID` | dashboard | R2 API token access key id |
+| `VERIT_S3_SECRET_ACCESS_KEY` | dashboard | R2 API token secret access key |
+| `VERIT_S3_REGION` | dashboard | Optional. Defaults to `auto`, which is what R2 wants. MinIO wants a real region |
+| `VERIT_DEV_USER` | dashboard | Local only. Skips login as that GitHub login. Never set in a deployment |
+| `VERIT_DASHBOARD_URL` | Action | Base URL of the dashboard. Unset means no upload |
+| `VERIT_INGEST_TOKEN` | Action | Per-repo token from `register-repo`. Unset means no upload |
 | `PROOF_PAGE_URL` | Action | Only to override the computed proof page link |
 
 ## Hosted checklist
@@ -81,16 +81,16 @@ Do these once, in this order.
    postgres 17.
 4. Apply the schema against it:
    ```bash
-   DATABASE_URL="postgres://...neon.tech/cyclops?sslmode=require" \
-     pnpm --filter @cyclops/dashboard migrate
+   DATABASE_URL="postgres://...neon.tech/verit?sslmode=require" \
+     pnpm --filter @verit/dashboard migrate
    ```
 5. Register each repo the same way, once per repo:
    ```bash
-   DATABASE_URL="..." pnpm --filter @cyclops/dashboard register-repo owner/name
+   DATABASE_URL="..." pnpm --filter @verit/dashboard register-repo owner/name
    ```
    Put the printed token in that repo's GitHub secrets as
-   `CYCLOPS_INGEST_TOKEN`, and set the repository variable
-   `CYCLOPS_DASHBOARD_URL` to the dashboard's URL.
+   `VERIT_INGEST_TOKEN`, and set the repository variable
+   `VERIT_DASHBOARD_URL` to the dashboard's URL.
 
 ### 2. GitHub OAuth app
 
@@ -118,7 +118,7 @@ local development needs no change. With only some of them set it refuses to
 start the request rather than falling back, because on Vercel a filesystem
 fallback loses every log while looking like it worked.
 
-1. Cloudflare, R2, create a bucket, e.g. `cyclops-proofs`.
+1. Cloudflare, R2, create a bucket, e.g. `verit-proofs`.
 2. Create an R2 API token scoped to that bucket, read and write.
 3. Note the account id, access key id and secret access key. The S3 endpoint is
    `https://<account-id>.r2.cloudflarestorage.com`, with no bucket in it: the
@@ -127,12 +127,12 @@ fallback loses every log while looking like it worked.
    `<account-id>.fedramp.`, and can only be reached through it.
 4. Set these in Vercel:
    ```
-   CYCLOPS_S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
-   CYCLOPS_S3_BUCKET=cyclops-proofs
-   CYCLOPS_S3_ACCESS_KEY_ID=<access key id>
-   CYCLOPS_S3_SECRET_ACCESS_KEY=<secret access key>
+   VERIT_S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+   VERIT_S3_BUCKET=verit-proofs
+   VERIT_S3_ACCESS_KEY_ID=<access key id>
+   VERIT_S3_SECRET_ACCESS_KEY=<secret access key>
    ```
-   `CYCLOPS_S3_REGION` is optional and defaults to `auto`, which is the region
+   `VERIT_S3_REGION` is optional and defaults to `auto`, which is the region
    R2 expects. Leave it unset for R2.
 
 To exercise the same code path locally, run MinIO instead of R2:
@@ -140,25 +140,25 @@ To exercise the same code path locally, run MinIO instead of R2:
 ```bash
 docker compose up -d minio    # S3 on :9000, console on :9001
 cd apps/dashboard
-CYCLOPS_S3_ENDPOINT=http://localhost:9000 \
-CYCLOPS_S3_BUCKET=cyclops-proofs \
-CYCLOPS_S3_ACCESS_KEY_ID=cyclops \
-CYCLOPS_S3_SECRET_ACCESS_KEY=cyclops-dev-secret \
-CYCLOPS_S3_REGION=us-east-1 \
+VERIT_S3_ENDPOINT=http://localhost:9000 \
+VERIT_S3_BUCKET=verit-proofs \
+VERIT_S3_ACCESS_KEY_ID=verit \
+VERIT_S3_SECRET_ACCESS_KEY=verit-dev-secret \
+VERIT_S3_REGION=us-east-1 \
 pnpm dev
 ```
 
 MinIO checks the region in the signature, which is why it needs
-`CYCLOPS_S3_REGION` and R2 does not. The adapter's own integration tests run
-against the same container when `CYCLOPS_S3_TEST_ENDPOINT` is set, and are
+`VERIT_S3_REGION` and R2 does not. The adapter's own integration tests run
+against the same container when `VERIT_S3_TEST_ENDPOINT` is set, and are
 skipped when it is not:
 
 ```bash
-CYCLOPS_S3_TEST_ENDPOINT=http://localhost:9000 \
-CYCLOPS_S3_TEST_BUCKET=cyclops-proofs \
-CYCLOPS_S3_TEST_ACCESS_KEY_ID=cyclops \
-CYCLOPS_S3_TEST_SECRET_ACCESS_KEY=cyclops-dev-secret \
-pnpm --filter @cyclops/adapter-s3-blob test
+VERIT_S3_TEST_ENDPOINT=http://localhost:9000 \
+VERIT_S3_TEST_BUCKET=verit-proofs \
+VERIT_S3_TEST_ACCESS_KEY_ID=verit \
+VERIT_S3_TEST_SECRET_ACCESS_KEY=verit-dev-secret \
+pnpm --filter @verit/adapter-s3-blob test
 ```
 
 ### 4. Vercel
@@ -168,12 +168,12 @@ pnpm --filter @cyclops/adapter-s3-blob test
    through pnpm workspaces.
 3. Environment variables, all environments unless noted:
    - `DATABASE_URL`, the Neon pooled string
-   - `CYCLOPS_SESSION_SECRET`, from `openssl rand -base64 48`
+   - `VERIT_SESSION_SECRET`, from `openssl rand -base64 48`
    - `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`
-   - `CYCLOPS_S3_ENDPOINT`, `CYCLOPS_S3_BUCKET`, `CYCLOPS_S3_ACCESS_KEY_ID`,
-     `CYCLOPS_S3_SECRET_ACCESS_KEY`, from the R2 step
-   - `CYCLOPS_ACCESS_TTL_SECONDS`, optional
-   - Do NOT set `CYCLOPS_DEV_USER`
+   - `VERIT_S3_ENDPOINT`, `VERIT_S3_BUCKET`, `VERIT_S3_ACCESS_KEY_ID`,
+     `VERIT_S3_SECRET_ACCESS_KEY`, from the R2 step
+   - `VERIT_ACCESS_TTL_SECONDS`, optional
+   - Do NOT set `VERIT_DEV_USER`
 4. Deploy, then update the OAuth app's callback URL to the real domain if you
    created it against a preview URL.
 5. Sign in once and confirm you land on your organization list.
@@ -182,8 +182,8 @@ pnpm --filter @cyclops/adapter-s3-blob test
 
 In each connected repo:
 
-- Repository variable `CYCLOPS_DASHBOARD_URL` = the dashboard URL.
-- Repository secret `CYCLOPS_INGEST_TOKEN` = the token from `register-repo`.
+- Repository variable `VERIT_DASHBOARD_URL` = the dashboard URL.
+- Repository secret `VERIT_INGEST_TOKEN` = the token from `register-repo`.
 
 `.github/workflows/dogfood.yml` already passes both through. With either unset
 the job runs exactly as before: no upload, no proof page link, same Check.

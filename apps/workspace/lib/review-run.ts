@@ -1,7 +1,7 @@
-import { buildReviewContext, runReviewUnderstand } from "@cyclops/application";
-import { makeHeuristicClassifier, makeMemoryGraphStore, makeProofRender } from "@cyclops/adapter-memory";
-import type { ReviewPresets, Understanding } from "@cyclops/domain";
-import type { HarnessPort } from "@cyclops/ports";
+import { buildReviewContext, runReviewUnderstand } from "@verit/application";
+import { makeHeuristicClassifier, makeMemoryGraphStore, makeProofRender } from "@verit/adapter-memory";
+import type { ReviewPresets, Understanding } from "@verit/domain";
+import type { HarnessPort } from "@verit/ports";
 import { Effect } from "effect";
 import { fetchDiff } from "./prefetch";
 import type { PRMeta } from "./schema";
@@ -26,7 +26,7 @@ const laneHarness = (understanding: Understanding): HarnessPort => ({
 });
 
 /**
- * Persist a finished workspace run through the cyclops pipeline: a ReviewRun
+ * Persist a finished workspace run through the verit pipeline: a ReviewRun
  * row, the Understanding JSON, and the rendered proof spec. Returns the
  * ReviewRun id so the session can point at it.
  */

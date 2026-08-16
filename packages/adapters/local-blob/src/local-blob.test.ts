@@ -5,7 +5,7 @@ import { Effect, Exit } from "effect";
 import { describe, expect, it } from "vitest";
 import { makeFsObjectStore } from "./index";
 
-const dir = async () => mkdtemp(join(tmpdir(), "cyclops-obj-"));
+const dir = async () => mkdtemp(join(tmpdir(), "verit-obj-"));
 
 describe("fs object store", () => {
   it("round-trips a body and its content type", async () => {

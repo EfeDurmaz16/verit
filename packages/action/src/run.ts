@@ -1,8 +1,8 @@
 /**
  * GitHub Action entry. Same pipeline as local `pnpm cli dogfood`.
- * Env: PR_SPEC=owner/repo#n, GITHUB_TOKEN, optional CYCLOPS_SQLITE_PATH / CYCLOPS_PI_BIN
+ * Env: PR_SPEC=owner/repo#n, GITHUB_TOKEN, optional VERIT_SQLITE_PATH / VERIT_PI_BIN
  *
- * Set CYCLOPS_DASHBOARD_URL and CYCLOPS_INGEST_TOKEN together to upload the
+ * Set VERIT_DASHBOARD_URL and VERIT_INGEST_TOKEN together to upload the
  * finished run and link its proof page from the Check. Leave either unset and
  * nothing is uploaded.
  */
@@ -22,6 +22,6 @@ const run = (args: string[]) => {
 };
 
 // Mirror CI locally:
-//   PR_SPEC=solana-foundation/pay#415 CYCLOPS_SQLITE_PATH=.data/cyclops.db \\
-//     pnpm --filter @cyclops/action exec tsx src/run.ts
+//   PR_SPEC=solana-foundation/pay#415 VERIT_SQLITE_PATH=.data/verit.db \\
+//     pnpm --filter @verit/action exec tsx src/run.ts
 run(["exec", "tsx", "packages/cli/src/main.ts", "dogfood", pr]);

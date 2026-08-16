@@ -26,6 +26,6 @@ body:
     id: env
     attributes:
       label: Environment
-      description: Output of `node -v` and `pnpm -v`, plus any CYCLOPS_ variables you set. Redact tokens.
+      description: Output of `node -v` and `pnpm -v`, plus any VERIT_ variables you set. Redact tokens.
     validations:
       required: false

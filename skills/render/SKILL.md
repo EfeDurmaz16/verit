@@ -1,6 +1,6 @@
 ---
 name: render
-description: Cyclops skill verb `render` (shared catalog).
+description: Verit skill verb `render` (shared catalog).
 ---
 
-Follow Cyclops Understanding schema. Author risks are hints only, never an allowlist.
+Follow Verit Understanding schema. Author risks are hints only, never an allowlist.

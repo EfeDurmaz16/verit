@@ -5,8 +5,8 @@ import {
   OUTPUT_STYLE,
   UNDERSTANDING_JSON_SHAPE,
   type Understanding,
-} from "@cyclops/domain";
-import type { HarnessPort } from "@cyclops/ports";
+} from "@verit/domain";
+import type { HarnessPort } from "@verit/ports";
 
 /* Headless coding CLIs as the Action's Understanding source.
 
@@ -80,7 +80,7 @@ export const agentPrompt = (input: UnderstandInput): string => {
     .slice(0, 3)
     .map((n) => `#${n.number} ${n.title} (${n.edgeKind})`);
 
-  return `You are the ${role} lane behind cyclops, a behaviour proof review tool.
+  return `You are the ${role} lane behind verit, a behaviour proof review tool.
 
 Produce the Understanding of one pull request: what it changes, why, how a human can verify the behaviour, and where the risk is. Everything you need is below. Do not fetch anything.
 
@@ -145,8 +145,8 @@ export const runAgentUnderstand = (
 ): Understanding | null => {
   const spec = CLI[cli];
   const prompt = agentPrompt(input);
-  const timeout = Number(process.env.CYCLOPS_LANE_TIMEOUT_MS ?? DEFAULT_TIMEOUT_MS);
-  const r = spawnSync(spec.bin, spec.args(prompt, process.env.CYCLOPS_LANE_MODEL), {
+  const timeout = Number(process.env.VERIT_LANE_TIMEOUT_MS ?? DEFAULT_TIMEOUT_MS);
+  const r = spawnSync(spec.bin, spec.args(prompt, process.env.VERIT_LANE_MODEL), {
     input: spec.promptOnStdin ? prompt : undefined,
     encoding: "utf8",
     env: process.env,
@@ -155,23 +155,23 @@ export const runAgentUnderstand = (
   });
   if (r.error || r.status !== 0) {
     console.error(
-      `[cyclops-${cli}] spawn failed status=${r.status} err=${r.error?.message ?? r.stderr?.slice(0, 400)}`,
+      `[verit-${cli}] spawn failed status=${r.status} err=${r.error?.message ?? r.stderr?.slice(0, 400)}`,
     );
     return null;
   }
   const parsed = extractUnderstanding(r.stdout ?? "");
   if (parsed === null) {
-    console.error(`[cyclops-${cli}] no JSON object in CLI output`);
+    console.error(`[verit-${cli}] no JSON object in CLI output`);
     return null;
   }
   const decoded = decodeUnderstanding(parsed);
   if (Either.isLeft(decoded)) {
-    console.error(`[cyclops-${cli}] Understanding decode failed`, decoded.left);
+    console.error(`[verit-${cli}] Understanding decode failed`, decoded.left);
     return null;
   }
   return decoded.right;
 };
 
 /** The selector, shared with the workspace lane. */
-export const agentCli = (value = process.env.CYCLOPS_LANE_HARNESS): AgentCli | null =>
+export const agentCli = (value = process.env.VERIT_LANE_HARNESS): AgentCli | null =>
   value === "claude" || value === "cursor" ? value : null;

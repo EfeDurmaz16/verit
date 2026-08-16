@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { readUnderstanding, understandingPatches, UNDERSTANDING_FILE } from "./understanding";
 
 const dirWith = (body: string): string => {
-  const dir = mkdtempSync(join(tmpdir(), "cyclops-u-"));
+  const dir = mkdtempSync(join(tmpdir(), "verit-u-"));
   writeFileSync(join(dir, UNDERSTANDING_FILE), body);
   return dir;
 };
@@ -30,7 +30,7 @@ describe("understanding lane contract", () => {
   });
 
   it("rejects a missing file, bad JSON, and a schema violation", async () => {
-    const missing = await readUnderstanding(mkdtempSync(join(tmpdir(), "cyclops-u-")));
+    const missing = await readUnderstanding(mkdtempSync(join(tmpdir(), "verit-u-")));
     expect(missing.ok).toBe(false);
 
     const torn = await readUnderstanding(dirWith("{ not json"));

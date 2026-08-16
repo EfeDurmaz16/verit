@@ -1,8 +1,8 @@
 import { Effect } from "effect";
-import type { ReviewContext, ReviewDomain, Understanding } from "@cyclops/domain";
-import type { ClassifierPort, HarnessPort, ParserPort, ProofRenderPort, VcsPort } from "@cyclops/ports";
-import { StoreError } from "@cyclops/ports";
-import { understandingToProofSpec } from "@cyclops/application";
+import type { ReviewContext, ReviewDomain, Understanding } from "@verit/domain";
+import type { ClassifierPort, HarnessPort, ParserPort, ProofRenderPort, VcsPort } from "@verit/ports";
+import { StoreError } from "@verit/ports";
+import { understandingToProofSpec } from "@verit/application";
 
 const pathDomainHints: Array<{ re: RegExp; domain: ReviewDomain }> = [
   { re: /auth|permission|secret/i, domain: "SECURITY" },
@@ -42,7 +42,7 @@ export const makeStubHarness = (): HarnessPort => ({
         what: title.trim() || `Review (${role}): untitled change`,
         why:
           (body.trim().split(/\n\n/)[0] ?? "").trim().slice(0, 280) ||
-          `Change in ${context.domain}${context.focus ? `×${context.focus}` : ""} (stub harness; set CYCLOPS_PI_BIN for live Pi).`,
+          `Change in ${context.domain}${context.focus ? `×${context.focus}` : ""} (stub harness; set VERIT_PI_BIN for live Pi).`,
         how: `Touched ${paths.length} path(s): ${pathPreview}. Diff ${diff.length} chars. Wiki: ${wikiBit}. PR-graph neighbors: ${context.pr_graph.length}.`,
         proof_refs: [
           { kind: "command", label: "diff-stats", value: `chars=${diff.length}; paths=${paths.length}` },

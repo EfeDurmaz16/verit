@@ -1,4 +1,4 @@
-name: cyclops-dogfood
+name: verit-dogfood
 
 on:
   workflow_dispatch:
@@ -21,45 +21,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # no `version:` here: package.json packageManager is the single source
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: pnpm
-      - run: pnpm install
-      # Opt-in only. With the repository variable unset this step is skipped and
-      # the pipeline runs on the Pi stub exactly as it does today. Nothing here
-      # creates or requires a secret.
-      - name: Install Claude Code
-        if: vars.CYCLOPS_LANE_HARNESS == 'claude'
-        run: npm install -g @anthropic-ai/claude-code
+      # The dogfood run consumes the published composite action from this same
+      # checkout, so every PR proves action.yml still works instead of drifting
+      # from a duplicated copy of the pipeline.
+      #
       # prove runs the repo's own `pnpm test` inside this runner, which is the
       # sandbox for v1, so it reviews *this* PR, not an unrelated repo, and
       # the ProveRunner refuses anything whose checkout is not the target.
       - name: Dogfood pipeline (ingest-pr → review → prove → post check)
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_SPEC: ${{ github.event_name == 'pull_request' && format('{0}#{1}', github.repository, github.event.number) || github.event.inputs.pr || 'solana-foundation/pay#415' }}
-          CYCLOPS_SQLITE_PATH: .data/cyclops.db
-          CYCLOPS_PROVE_TIMEOUT_MS: "900000"
+        uses: ./
+        with:
+          # Empty on a pull_request: the action defaults to the triggering PR.
+          pr: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.pr || 'solana-foundation/pay#415') || '' }}
+          prove-timeout-ms: "900000"
+          # The lane harness stays on the stub unless BOTH the variable and the
+          # key are set, so a fork PR (no secrets) or a half-configured repo
+          # falls back instead of burning the job timeout on a CLI that cannot
+          # authenticate. Set the variable to claude and add the secret to flip.
+          lane-harness: ${{ vars.VERIT_LANE_HARNESS }}
+          lane-model: ${{ vars.VERIT_LANE_MODEL }}
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           # Both must be set for the run to be uploaded. With either unset the
           # pipeline behaves exactly as it did before the dashboard existed:
           # no upload, no proof page link, same Check.
-          CYCLOPS_DASHBOARD_URL: ${{ vars.CYCLOPS_DASHBOARD_URL }}
-          CYCLOPS_INGEST_TOKEN: ${{ secrets.CYCLOPS_INGEST_TOKEN }}
-          # Only to override the computed /r/{owner}/{repo}/runs/{runId} link.
-          PROOF_PAGE_URL: ${{ vars.PROOF_PAGE_URL }}
-          # The lane harness stays empty unless BOTH the variable and the key are
-          # set, so a fork PR (no secrets) or a half-configured repo falls back
-          # to the stub instead of burning the job timeout on a CLI that cannot
-          # authenticate. Set the variable to claude and add the secret to flip.
-          CYCLOPS_LANE_HARNESS: ${{ secrets.ANTHROPIC_API_KEY != '' && vars.CYCLOPS_LANE_HARNESS || '' }}
-          CYCLOPS_LANE_MODEL: ${{ vars.CYCLOPS_LANE_MODEL }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: pnpm --filter @cyclops/action exec tsx src/run.ts
+          dashboard-url: ${{ vars.VERIT_DASHBOARD_URL }}
+          ingest-token: ${{ secrets.VERIT_INGEST_TOKEN }}
       - uses: actions/upload-artifact@v4
         with:
-          name: cyclops-proof
+          name: verit-proof
           path: .data/proofs/
           if-no-files-found: warn

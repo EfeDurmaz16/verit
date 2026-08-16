@@ -1,6 +1,6 @@
-# @cyclops/workspace
+# @verit/workspace
 
-The live review workspace: the face of cyclops. Open a PR URL and a structural
+The live review workspace: the face of verit. Open a PR URL and a structural
 shell appears instantly (files, CI, timeline, straight from the GitHub API).
 One analysis lane (Codex CLI, headless) then reads the full diff, the review
 threads and the failing CI logs, and **builds the interface itself**: it streams
@@ -8,7 +8,7 @@ threads and the failing CI logs, and **builds the interface itself**: it streams
 patch per line) into the Understanding surfaces.
 
 The lane's real output contract is `understanding.json`. It is validated against
-the cyclops `Understanding` schema (Effect Schema, `@cyclops/domain`) before
+the verit `Understanding` schema (Effect Schema, `@verit/domain`) before
 anything canonical is rendered or stored. A run that fails validation is shown
 as unverified rather than dressed up as a review.
 
@@ -58,9 +58,9 @@ workspace still renders; live analysis needs both.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `CYCLOPS_SQLITE_PATH` | `.data/cyclops.db` | Sessions, runs, Understandings |
-| `CYCLOPS_WORKSPACE_DIR` | `.data/workspace` | Per-session blob directories |
-| `CYCLOPS_LANE_MODEL` | unset | Model passed to `codex exec -m` |
+| `VERIT_SQLITE_PATH` | `.data/verit.db` | Sessions, runs, Understandings |
+| `VERIT_WORKSPACE_DIR` | `.data/workspace` | Per-session blob directories |
+| `VERIT_LANE_MODEL` | unset | Model passed to `codex exec -m` |
 
 ## Notes
 

@@ -7,7 +7,7 @@ import { makeSqliteDocumentStore, makeSqliteStores } from "./index";
 
 describe("sqlite document store", () => {
   it("persists run + understanding", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "cyclops-"));
+    const dir = mkdtempSync(join(tmpdir(), "verit-"));
     const store = makeSqliteDocumentStore(join(dir, "t.db"));
     await Effect.runPromise(
       store.upsertReviewRun({
@@ -32,7 +32,7 @@ describe("sqlite document store", () => {
   });
 
   it("indexes chunks with FTS retrieval", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "cyclops-fts-"));
+    const dir = mkdtempSync(join(tmpdir(), "verit-fts-"));
     const store = makeSqliteDocumentStore(join(dir, "t.db"));
     await Effect.runPromise(
       store.upsertChunk({
@@ -50,7 +50,7 @@ describe("sqlite document store", () => {
 
 describe("sqlite session store", () => {
   it("survives a reopen and keeps the latest run of a session", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "cyclops-sess-"));
+    const dir = mkdtempSync(join(tmpdir(), "verit-sess-"));
     const file = join(dir, "t.db");
     const first = makeSqliteStores(file);
     await Effect.runPromise(

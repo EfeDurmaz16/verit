@@ -57,7 +57,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     headers: {
       Authorization: `Bearer ${ghToken}`,
       Accept: "application/vnd.github+json",
-      "User-Agent": "cyclops-dashboard",
+      "User-Agent": "verit-dashboard",
     },
     cache: "no-store",
   });

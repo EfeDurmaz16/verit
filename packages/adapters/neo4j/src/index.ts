@@ -1,8 +1,8 @@
 import neo4j, { type Driver } from "neo4j-driver";
 import { Effect } from "effect";
-import type { GraphStore } from "@cyclops/ports";
-import { StoreError } from "@cyclops/ports";
-import { makeMemoryGraphStore } from "@cyclops/adapter-memory";
+import type { GraphStore } from "@verit/ports";
+import { StoreError } from "@verit/ports";
+import { makeMemoryGraphStore } from "@verit/adapter-memory";
 
 export const neo4jConstraints = `
 CREATE CONSTRAINT repo_id IF NOT EXISTS FOR (r:Repo) REQUIRE r.id IS UNIQUE;
@@ -13,12 +13,12 @@ CREATE CONSTRAINT pr_id IF NOT EXISTS FOR (p:PullRequest) REQUIRE p.id IS UNIQUE
 CREATE CONSTRAINT edge_id IF NOT EXISTS FOR (e:PREdge) REQUIRE e.id IS UNIQUE;
 `;
 
-/** Prefer live Neo4j when CYCLOPS_NEO4J_URI is set; otherwise memory graph (tests/dogfood without Docker). */
+/** Prefer live Neo4j when VERIT_NEO4J_URI is set; otherwise memory graph (tests/dogfood without Docker). */
 export const makeGraphStore = async (): Promise<GraphStore> => {
-  const uri = process.env.CYCLOPS_NEO4J_URI;
+  const uri = process.env.VERIT_NEO4J_URI;
   if (!uri) return makeMemoryGraphStore();
-  const user = process.env.CYCLOPS_NEO4J_USER ?? "neo4j";
-  const password = process.env.CYCLOPS_NEO4J_PASSWORD ?? "cyclops-dev";
+  const user = process.env.VERIT_NEO4J_USER ?? "neo4j";
+  const password = process.env.VERIT_NEO4J_PASSWORD ?? "verit-dev";
   const driver = neo4j.driver(uri, neo4j.auth.basic(user, password));
   try {
     await driver.verifyConnectivity();

@@ -1,8 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import { Effect } from "effect";
-import type { BlobPort, ObjectStorePort, StoredObject } from "@cyclops/ports";
-import { assertSafeObjectKey, StoreError } from "@cyclops/ports";
+import type { BlobPort, ObjectStorePort, StoredObject } from "@verit/ports";
+import { assertSafeObjectKey, StoreError } from "@verit/ports";
 
 export const makeLocalBlob = (dir = ".data/proofs"): BlobPort => ({
   writeLocal: (name, body) =>

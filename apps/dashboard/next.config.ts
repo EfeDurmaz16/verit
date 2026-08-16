@@ -1,13 +1,13 @@
 import type { NextConfig } from "next";
 
-/* The cyclops packages ship TypeScript source (exports point at ./src), so
+/* The verit packages ship TypeScript source (exports point at ./src), so
    Next has to compile them itself. */
 const nextConfig: NextConfig = {
   transpilePackages: [
-    "@cyclops/domain",
-    "@cyclops/ports",
-    "@cyclops/adapter-local-blob",
-    "@cyclops/proof-ui",
+    "@verit/domain",
+    "@verit/ports",
+    "@verit/adapter-local-blob",
+    "@verit/proof-ui",
   ],
 };
 

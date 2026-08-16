@@ -5,7 +5,7 @@ import { db, query } from "../lib/db";
  * Connects one repo and prints its ingest token once. Only the hash is stored,
  * so a lost token is reissued by running this again, never recovered.
  *
- *   pnpm --filter @cyclops/dashboard register-repo owner/name
+ *   pnpm --filter @verit/dashboard register-repo owner/name
  */
 const main = async (): Promise<void> => {
   const slug = process.argv[2];
@@ -21,7 +21,7 @@ const main = async (): Promise<void> => {
     [slug, owner, name, hashToken(token)],
   );
   console.log(`repo ${slug} connected`);
-  console.log(`CYCLOPS_INGEST_TOKEN=${token}`);
+  console.log(`VERIT_INGEST_TOKEN=${token}`);
   console.log("Store it as a repository secret now. It is not shown again.");
   await db().end();
 };

@@ -5,7 +5,7 @@ services:
       - "7474:7474"
       - "7687:7687"
     environment:
-      NEO4J_AUTH: neo4j/cyclops-dev
+      NEO4J_AUTH: neo4j/verit-dev
       NEO4J_PLUGINS: '["apoc"]'
     volumes:
       - neo4j_data:/data
@@ -19,9 +19,9 @@ services:
       # the clash is silent, you just connect to the wrong database.
       - "5433:5432"
     environment:
-      POSTGRES_USER: cyclops
-      POSTGRES_PASSWORD: cyclops-dev
-      POSTGRES_DB: cyclops
+      POSTGRES_USER: verit
+      POSTGRES_PASSWORD: verit-dev
+      POSTGRES_DB: verit
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -35,14 +35,14 @@ services:
       - "9000:9000"   # S3 API
       - "9001:9001"   # console, http://localhost:9001
     environment:
-      MINIO_ROOT_USER: cyclops
-      MINIO_ROOT_PASSWORD: cyclops-dev-secret
+      MINIO_ROOT_USER: verit
+      MINIO_ROOT_PASSWORD: verit-dev-secret
       # MinIO checks the region in the signature. R2 wants "auto"; here the
-      # adapter is pointed at us-east-1 through CYCLOPS_S3_REGION.
+      # adapter is pointed at us-east-1 through VERIT_S3_REGION.
       MINIO_REGION_NAME: us-east-1
     # A top-level directory under /data is a bucket, so the bucket exists on
     # first boot without a second container just to run `mc mb`.
-    entrypoint: sh -c 'mkdir -p /data/cyclops-proofs && exec minio server /data --console-address ":9001"'
+    entrypoint: sh -c 'mkdir -p /data/verit-proofs && exec minio server /data --console-address ":9001"'
     volumes:
       - minio_data:/data
 

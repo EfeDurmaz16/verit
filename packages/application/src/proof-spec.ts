@@ -1,4 +1,4 @@
-import type { Understanding } from "@cyclops/domain";
+import type { Understanding } from "@verit/domain";
 
 /** Lattice-inspired proof catalog Spec (json-render shaped). */
 export const understandingToProofSpec = (input: {

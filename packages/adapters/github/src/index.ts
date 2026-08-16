@@ -1,7 +1,7 @@
 import { Octokit } from "@octokit/rest";
 import { Effect } from "effect";
-import type { CheckPort, VcsPort } from "@cyclops/ports";
-import { StoreError } from "@cyclops/ports";
+import type { CheckPort, VcsPort } from "@verit/ports";
+import { StoreError } from "@verit/ports";
 
 /**
  * Check Runs need a token with `checks: write`. In an Action that is the

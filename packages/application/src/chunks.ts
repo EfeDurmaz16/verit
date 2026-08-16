@@ -1,4 +1,4 @@
-import type { IndexChunk, WikiPage } from "@cyclops/domain";
+import type { IndexChunk, WikiPage } from "@verit/domain";
 import { contentHash } from "./hash";
 
 /** Split text into overlapping IndexChunk rows for FTS / retrieval. */

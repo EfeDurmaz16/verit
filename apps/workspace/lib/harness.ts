@@ -3,7 +3,7 @@
    The analysis lane is one headless coding CLI behind a single contract: build
    argv, stream JSONL on stdout, reduce each line to a session id or a line of
    activity. Codex is the default. Claude Code and the Cursor CLI agent are drop
-   in alternatives, picked with CYCLOPS_LANE_HARNESS.
+   in alternatives, picked with VERIT_LANE_HARNESS.
 
    Everything here is pure. The spawning, streaming and SSE plumbing lives in
    lane.ts, so arg building and event parsing stay testable without a process. */
@@ -132,7 +132,7 @@ const codex: LaneAdapter = {
      `--verbose` ("When using --print, --output-format=stream-json requires
      --verbose"), so the pair is not optional.
    - `--safe-mode` drops CLAUDE.md, skills, plugins, hooks and MCP servers.
-     Session workdirs sit under the cyclops tree, so without it the lane would
+     Session workdirs sit under the verit tree, so without it the lane would
      inherit this repo's and the operator's instructions while reading someone
      else's PR. Auth and permissions still work normally.
    - `--allowedTools` is the non-interactive grant. It is variadic, which is why
@@ -223,11 +223,11 @@ const ADAPTERS: Record<LaneHarnessName, LaneAdapter> = { codex, claude, cursor }
  * back: a typo would otherwise review every PR with the wrong tool and look
  * completely normal while doing it.
  */
-export function laneAdapter(value = process.env.CYCLOPS_LANE_HARNESS): LaneAdapter {
+export function laneAdapter(value = process.env.VERIT_LANE_HARNESS): LaneAdapter {
   if (!value) return ADAPTERS.codex;
   const adapter = ADAPTERS[value as LaneHarnessName];
   if (!adapter) {
-    throw new Error(`CYCLOPS_LANE_HARNESS must be codex, claude or cursor, got "${value}"`);
+    throw new Error(`VERIT_LANE_HARNESS must be codex, claude or cursor, got "${value}"`);
   }
   return adapter;
 }

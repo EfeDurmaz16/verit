@@ -1,13 +1,13 @@
-# cyclops
+# verit
 
 **The verification layer above your AI reviewers.**
 
-AI reviewers give you opinions. cyclops gives you evidence.
+AI reviewers give you opinions. verit gives you evidence.
 
 A reviewer bot reads your diff and tells you what it thinks might break. That is
-useful, and it is still an opinion. cyclops runs your repository's own tests
+useful, and it is still an opinion. verit runs your repository's own tests
 against the pull request, records the real exit code, and posts the result as a
-`cyclops / behavior-proof` GitHub Check. If the tests did not run, the Check is
+`verit / behavior-proof` GitHub Check. If the tests did not run, the Check is
 `neutral`. It never turns green on a guess.
 
 Alongside the proof it publishes an **Understanding**: what the change does, why,
@@ -21,7 +21,7 @@ Open source, AGPL-3.0. Self-host it for free.
 ## What lands on the pull request
 
 ```
-cyclops / behavior-proof            Proof passed: pnpm test
+verit / behavior-proof            Proof passed: pnpm test
 
   What changed:  Adds the pay gate commands to the CLI.
   Why:           Gate checks were only reachable through the HTTP API.
@@ -50,8 +50,8 @@ Three states, and only three:
 Add one workflow. That is the whole install.
 
 ```yaml
-# .github/workflows/cyclops.yml
-name: cyclops
+# .github/workflows/verit.yml
+name: verit
 on: pull_request
 permissions:
   contents: read
@@ -62,14 +62,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: EfeDurmaz16/cyclops@main
+      - uses: EfeDurmaz16/verit@main
 ```
 
-cyclops detects the verification command from your repository. Override it when
+verit detects the verification command from your repository. Override it when
 the guess is wrong:
 
 ```yaml
-      - uses: EfeDurmaz16/cyclops@main
+      - uses: EfeDurmaz16/verit@main
         with:
           prove-command: cargo test --all
 ```
@@ -78,13 +78,13 @@ The Understanding is written by a headless coding CLI. With no key configured
 you get a deterministic stub, which is honest but thin. To get the real thing:
 
 ```yaml
-      - uses: EfeDurmaz16/cyclops@main
+      - uses: EfeDurmaz16/verit@main
         with:
           lane-harness: claude
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-Fork pull requests receive no secrets and a read-only token. cyclops degrades to
+Fork pull requests receive no secrets and a read-only token. verit degrades to
 a dry run and prints the Check instead of posting it. That is deliberate, and it
 is never a failed job.
 
@@ -98,8 +98,8 @@ The workspace is the live surface: paste a pull request URL and watch the
 review assemble, instead of waiting for a Check to appear.
 
 ```bash
-git clone https://github.com/EfeDurmaz16/cyclops
-cd cyclops
+git clone https://github.com/EfeDurmaz16/verit
+cd verit
 pnpm install
 pnpm workspace          # http://localhost:3000
 ```
@@ -119,7 +119,7 @@ reviewing. It refuses every other checkout, so reviewing a stranger's pull
 request never executes their code on your machine:
 
 ```bash
-CYCLOPS_PROVE_CWD=/path/to/that/repo pnpm cli review --pr=owner/repo#123
+VERIT_PROVE_CWD=/path/to/that/repo pnpm cli review --pr=owner/repo#123
 ```
 
 The hosted dashboard, with GitHub login and run history over Postgres, is
@@ -131,7 +131,7 @@ optional and documented in [`docs/dashboard-setup.md`](docs/dashboard-setup.md).
 
 Checked August 2026. Corrections by pull request are welcome, with a link.
 
-| | cyclops | CodeRabbit | Greptile | PR-Agent |
+| | verit | CodeRabbit | Greptile | PR-Agent |
 |---|---|---|---|---|
 | Source | Open, AGPL-3.0 | Closed | Closed | Open, MIT |
 | Self-host | Free | Paid enterprise contract | Paid enterprise contract | Free |
@@ -147,18 +147,18 @@ runs the changed code to confirm a suspected bug is real before reporting it.
 
 The two differences that matter are what gets run, and who can run it.
 
-**What gets run.** TREX has an agent write and drive scenarios. cyclops runs the
+**What gets run.** TREX has an agent write and drive scenarios. verit runs the
 command your repository already defines, unchanged, and reports its exit code.
 Nothing is inferred and nothing is generated. If your suite is good, the proof is
-good. If your suite is weak, cyclops tells you it passed a weak suite rather than
+good. If your suite is weak, verit tells you it passed a weak suite rather than
 claiming more than it checked.
 
 **Who can run it.** TREX is proprietary and in beta, and Greptile self-hosting
-needs an annual enterprise contract. cyclops is AGPL-3.0. Clone it and run it
+needs an annual enterprise contract. verit is AGPL-3.0. Clone it and run it
 today for nothing.
 
 Everything else in that table analyzes the diff and writes about it. That is a
-different job, and a useful one. cyclops sits above it: keep your reviewer, and
+different job, and a useful one. verit sits above it: keep your reviewer, and
 put a verdict underneath its opinion.
 
 ---
@@ -177,7 +177,7 @@ put a verdict underneath its opinion.
        │                                  full diff, threads and CI logs
        │
        │  Understanding JSON              validated against the Effect Schema
-       │  (what / why / how,              in @cyclops/domain. A run that fails
+       │  (what / why / how,              in @verit/domain. A run that fails
        │   risks, proof_refs)             validation is shown as unverified
        ▼
   prove ─────────────► ProvePort          runs the repo's OWN command as argv,
@@ -185,7 +185,7 @@ put a verdict underneath its opinion.
        │  exit code, duration,            repo. Fails closed on any mismatch
        │  log tail                        Timeout kills the process group
        ▼
-  post ──────────────► CheckPort          cyclops / behavior-proof Check Run
+  post ──────────────► CheckPort          verit / behavior-proof Check Run
        │                                  conclusion = exit code, nothing else
        ▼
   render ────────────► proof page         json-render Spec, one component
@@ -200,7 +200,7 @@ one adapter.
 
 Two stores by design. Neo4j holds the ontology and the pull request graph.
 SQLite holds runs, proof blobs and full text chunks. Neither is required to try
-cyclops: both have a memory or local fallback.
+verit: both have a memory or local fallback.
 
 Architecture notes live in [`docs/architecture/`](docs/architecture/). The exact
 meaning of every domain word is in [`CONTEXT.md`](CONTEXT.md).
@@ -221,22 +221,22 @@ org-wide dashboards and no infrastructure to run, is coming.
 | Variable | Default | Purpose |
 |---|---|---|
 | `GITHUB_TOKEN` | unset | Optional for public PRs. Needs `checks:write` to post the Check |
-| `CYCLOPS_PROVE_CWD` | `GITHUB_WORKSPACE` | Checkout prove runs in. Must be the reviewed repo |
-| `CYCLOPS_PROVE_CMD` | detected | Override the command, e.g. `cargo test --all`. Argv, never a shell string |
-| `CYCLOPS_PROVE_TIMEOUT_MS` | `600000` | Hard timeout. The process group is killed |
-| `CYCLOPS_CHECK_DRY_RUN` | unset | `1` prints the Check body instead of posting it |
-| `CYCLOPS_LANE_HARNESS` | `codex` | Coding CLI behind the analysis lane: `codex`, `claude` or `cursor`. An unknown value is an error, never a silent fallback |
-| `CYCLOPS_LANE_MODEL` | unset | Model for the analysis lane |
-| `CYCLOPS_LANE_TIMEOUT_MS` | `900000` | Hard timeout for the one-shot lane call |
-| `ANTHROPIC_API_KEY` | unset | Auth for `CYCLOPS_LANE_HARNESS=claude` in CI. Locally the CLI's own login is used |
-| `CURSOR_API_KEY` | unset | Auth for `CYCLOPS_LANE_HARNESS=cursor` in CI. Locally `cursor-agent login` is used |
-| `CYCLOPS_SQLITE_PATH` | `.data/cyclops.db` | DocumentStore path. Set `""` for in-memory |
-| `CYCLOPS_NEO4J_URI` | unset | `bolt://…`. Memory graph if unset |
-| `CYCLOPS_NEO4J_PASSWORD` | none | Neo4j auth when the URI is set |
-| `CYCLOPS_WORKSPACE_DIR` | `.data/workspace` | Workspace session blobs |
-| `CYCLOPS_PI_BIN` | unset | Path to a Pi binary. If unset, the deterministic stub |
-| `CYCLOPS_DASHBOARD_URL` | unset | Dashboard base URL. With `CYCLOPS_INGEST_TOKEN` the run is uploaded and the Check links its proof page |
-| `CYCLOPS_INGEST_TOKEN` | unset | Per-repo ingest token from `pnpm --filter @cyclops/dashboard register-repo owner/name` |
+| `VERIT_PROVE_CWD` | `GITHUB_WORKSPACE` | Checkout prove runs in. Must be the reviewed repo |
+| `VERIT_PROVE_CMD` | detected | Override the command, e.g. `cargo test --all`. Argv, never a shell string |
+| `VERIT_PROVE_TIMEOUT_MS` | `600000` | Hard timeout. The process group is killed |
+| `VERIT_CHECK_DRY_RUN` | unset | `1` prints the Check body instead of posting it |
+| `VERIT_LANE_HARNESS` | `codex` | Coding CLI behind the analysis lane: `codex`, `claude` or `cursor`. An unknown value is an error, never a silent fallback |
+| `VERIT_LANE_MODEL` | unset | Model for the analysis lane |
+| `VERIT_LANE_TIMEOUT_MS` | `900000` | Hard timeout for the one-shot lane call |
+| `ANTHROPIC_API_KEY` | unset | Auth for `VERIT_LANE_HARNESS=claude` in CI. Locally the CLI's own login is used |
+| `CURSOR_API_KEY` | unset | Auth for `VERIT_LANE_HARNESS=cursor` in CI. Locally `cursor-agent login` is used |
+| `VERIT_SQLITE_PATH` | `.data/verit.db` | DocumentStore path. Set `""` for in-memory |
+| `VERIT_NEO4J_URI` | unset | `bolt://…`. Memory graph if unset |
+| `VERIT_NEO4J_PASSWORD` | none | Neo4j auth when the URI is set |
+| `VERIT_WORKSPACE_DIR` | `.data/workspace` | Workspace session blobs |
+| `VERIT_PI_BIN` | unset | Path to a Pi binary. If unset, the deterministic stub |
+| `VERIT_DASHBOARD_URL` | unset | Dashboard base URL. With `VERIT_INGEST_TOKEN` the run is uploaded and the Check links its proof page |
+| `VERIT_INGEST_TOKEN` | unset | Per-repo ingest token from `pnpm --filter @verit/dashboard register-repo owner/name` |
 | `PROOF_PAGE_URL` | unset | Only to override the computed proof page link |
 
 ## CLI
@@ -257,15 +257,15 @@ Proof artifacts land in `.data/proofs/`, which is gitignored.
 
 | Package | Role |
 |---|---|
-| `@cyclops/domain` | Pure schemas and entities |
-| `@cyclops/ports` | Interfaces |
-| `@cyclops/application` | Use cases |
-| `@cyclops/adapters-*` | SQLite, Neo4j, tree-sitter, GitHub, Pi, prove, S3, memory |
-| `@cyclops/cli` | `ingest`, `ingest-pr`, `understand`, `review`, `dogfood` |
-| `@cyclops/workspace` | Live review workspace (Next.js, SSE, json-render) |
-| `@cyclops/dashboard` | Hosted run history and proof pages (Next.js, Postgres) |
-| `@cyclops/proof-ui` | The one component registry both surfaces render |
-| `@cyclops/action` | GitHub Action entry point |
+| `@verit/domain` | Pure schemas and entities |
+| `@verit/ports` | Interfaces |
+| `@verit/application` | Use cases |
+| `@verit/adapters-*` | SQLite, Neo4j, tree-sitter, GitHub, Pi, prove, S3, memory |
+| `@verit/cli` | `ingest`, `ingest-pr`, `understand`, `review`, `dogfood` |
+| `@verit/workspace` | Live review workspace (Next.js, SSE, json-render) |
+| `@verit/dashboard` | Hosted run history and proof pages (Next.js, Postgres) |
+| `@verit/proof-ui` | The one component registry both surfaces render |
+| `@verit/action` | GitHub Action entry point |
 
 ## Status
 
@@ -273,7 +273,7 @@ Early. The pieces below are real and running in this repository's own CI on
 every pull request:
 
 - `prove` running a repository's own command and reporting the true exit code
-- the `cyclops / behavior-proof` Check Run, including the `neutral` case
+- the `verit / behavior-proof` Check Run, including the `neutral` case
 - the Understanding schema, its validation, and the proof page render
 - the GitHub Action, the CLI and the live workspace
 

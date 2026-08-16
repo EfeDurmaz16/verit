@@ -18,10 +18,10 @@ const deny = () =>
  *
  * Order matters. Authentication runs first, against the repo named in the
  * header, so an unauthenticated caller never learns anything from a validation
- * error. Only then is the body decoded against the @cyclops/domain schema.
+ * error. Only then is the body decoded against the @verit/domain schema.
  */
 export async function POST(req: Request): Promise<NextResponse> {
-  const slug = req.headers.get("x-cyclops-repo");
+  const slug = req.headers.get("x-verit-repo");
   const token = bearerToken(req.headers.get("authorization"));
   if (!slug) return deny();
 

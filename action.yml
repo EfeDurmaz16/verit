@@ -1,4 +1,4 @@
-name: "cyclops behavior proof"
+name: "verit behavior proof"
 description: "Run the pull request's own tests and post the pass/fail result as a GitHub Check, with a structured Understanding."
 branding:
   icon: "check-circle"
@@ -34,7 +34,7 @@ inputs:
     required: false
     default: ""
   dashboard-url:
-    description: "Base URL of a cyclops dashboard. Set with ingest-token to upload the run and link its proof page."
+    description: "Base URL of a verit dashboard. Set with ingest-token to upload the run and link its proof page."
     required: false
     default: ""
   ingest-token:
@@ -45,15 +45,20 @@ inputs:
 runs:
   using: composite
   steps:
-    # cyclops runs from its own checkout, which is github.action_path. The repo
+    # verit runs from its own checkout, which is github.action_path. The repo
     # under review stays in GITHUB_WORKSPACE, which is where prove executes.
-    - uses: pnpm/action-setup@v4
-      with:
-        package_json_file: ${{ github.action_path }}/package.json
     - uses: actions/setup-node@v4
       with:
         node-version: "22"
-    - name: Install cyclops
+    # pnpm/action-setup cannot be used here. It resolves package_json_file
+    # against the caller's GITHUB_WORKSPACE, which never contains verit's
+    # checkout, and passing `version` instead makes it fail on any caller whose
+    # own package.json pins a different pnpm. Install from verit's own pin.
+    - name: Install pnpm
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm install -g "$(node -p "require('./package.json').packageManager")"
+    - name: Install verit
       shell: bash
       working-directory: ${{ github.action_path }}
       run: pnpm install --frozen-lockfile
@@ -67,18 +72,23 @@ runs:
       env:
         PR_SPEC: ${{ inputs.pr != '' && inputs.pr || format('{0}#{1}', github.repository, github.event.pull_request.number) }}
         GITHUB_TOKEN: ${{ inputs.github-token }}
+        # On a pull_request event GITHUB_SHA is the throwaway merge commit, and a
+        # Check posted there never surfaces on the pull request. Pin the Check to
+        # the head commit. Empty off a pull request, which falls back to
+        # GITHUB_SHA.
+        VERIT_CHECK_SHA: ${{ github.event.pull_request.head.sha }}
         # prove runs in the caller's checkout, and the ProveRunner refuses any
         # checkout that is not the repo under review.
-        CYCLOPS_PROVE_CWD: ${{ github.workspace }}
-        CYCLOPS_PROVE_CMD: ${{ inputs.prove-command }}
-        CYCLOPS_PROVE_TIMEOUT_MS: ${{ inputs.prove-timeout-ms }}
-        CYCLOPS_SQLITE_PATH: ${{ github.action_path }}/.data/cyclops.db
+        VERIT_PROVE_CWD: ${{ github.workspace }}
+        VERIT_PROVE_CMD: ${{ inputs.prove-command }}
+        VERIT_PROVE_TIMEOUT_MS: ${{ inputs.prove-timeout-ms }}
+        VERIT_SQLITE_PATH: ${{ github.action_path }}/.data/verit.db
         # The lane stays on the stub unless both the harness and its key are set,
         # so a fork PR with no secrets degrades instead of hanging on a CLI that
         # cannot authenticate.
-        CYCLOPS_LANE_HARNESS: ${{ inputs.anthropic-api-key != '' && inputs.lane-harness || '' }}
-        CYCLOPS_LANE_MODEL: ${{ inputs.lane-model }}
+        VERIT_LANE_HARNESS: ${{ inputs.anthropic-api-key != '' && inputs.lane-harness || '' }}
+        VERIT_LANE_MODEL: ${{ inputs.lane-model }}
         ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
-        CYCLOPS_DASHBOARD_URL: ${{ inputs.dashboard-url }}
-        CYCLOPS_INGEST_TOKEN: ${{ inputs.ingest-token }}
+        VERIT_DASHBOARD_URL: ${{ inputs.dashboard-url }}
+        VERIT_INGEST_TOKEN: ${{ inputs.ingest-token }}
       run: pnpm exec tsx packages/cli/src/main.ts dogfood "$PR_SPEC"

@@ -8,17 +8,17 @@ const SECRET = "s3cr3t-do-not-log-me";
 
 const config: S3ObjectStoreConfig = {
   endpoint: "https://acc123.r2.cloudflarestorage.com",
-  bucket: "cyclops-proofs",
+  bucket: "verit-proofs",
   accessKeyId: "AKIDEXAMPLE",
   secretAccessKey: SECRET,
   region: "auto",
 };
 
 const fullEnv = {
-  CYCLOPS_S3_ENDPOINT: "https://acc123.r2.cloudflarestorage.com",
-  CYCLOPS_S3_BUCKET: "cyclops-proofs",
-  CYCLOPS_S3_ACCESS_KEY_ID: "AKIDEXAMPLE",
-  CYCLOPS_S3_SECRET_ACCESS_KEY: SECRET,
+  VERIT_S3_ENDPOINT: "https://acc123.r2.cloudflarestorage.com",
+  VERIT_S3_BUCKET: "verit-proofs",
+  VERIT_S3_ACCESS_KEY_ID: "AKIDEXAMPLE",
+  VERIT_S3_SECRET_ACCESS_KEY: SECRET,
 };
 
 interface Sent {
@@ -49,26 +49,26 @@ describe("s3ConfigFromEnv", () => {
   });
 
   it("honours an explicit region", () => {
-    expect(s3ConfigFromEnv({ ...fullEnv, CYCLOPS_S3_REGION: "us-east-1" })?.region).toBe(
+    expect(s3ConfigFromEnv({ ...fullEnv, VERIT_S3_REGION: "us-east-1" })?.region).toBe(
       "us-east-1",
     );
   });
 
   it("strips a trailing slash so the key is not double separated", () => {
     expect(
-      s3ConfigFromEnv({ ...fullEnv, CYCLOPS_S3_ENDPOINT: "https://acc123.r2.cloudflarestorage.com/" })
+      s3ConfigFromEnv({ ...fullEnv, VERIT_S3_ENDPOINT: "https://acc123.r2.cloudflarestorage.com/" })
         ?.endpoint,
     ).toBe("https://acc123.r2.cloudflarestorage.com");
   });
 
   it("refuses a half configuration and names only the missing variables", () => {
-    const partial = { ...fullEnv, CYCLOPS_S3_SECRET_ACCESS_KEY: "" };
-    expect(() => s3ConfigFromEnv(partial)).toThrow(/CYCLOPS_S3_SECRET_ACCESS_KEY/);
+    const partial = { ...fullEnv, VERIT_S3_SECRET_ACCESS_KEY: "" };
+    expect(() => s3ConfigFromEnv(partial)).toThrow(/VERIT_S3_SECRET_ACCESS_KEY/);
   });
 
   it("never puts a credential value in the error it throws", () => {
     try {
-      s3ConfigFromEnv({ ...fullEnv, CYCLOPS_S3_BUCKET: "" });
+      s3ConfigFromEnv({ ...fullEnv, VERIT_S3_BUCKET: "" });
       expect.unreachable("expected a half configuration to throw");
     } catch (e) {
       expect(String(e)).not.toContain(SECRET);
@@ -77,10 +77,10 @@ describe("s3ConfigFromEnv", () => {
   });
 
   it("rejects an endpoint that is not a URL and a bucket that is not a bucket name", () => {
-    expect(() => s3ConfigFromEnv({ ...fullEnv, CYCLOPS_S3_ENDPOINT: "acc123" })).toThrow(
+    expect(() => s3ConfigFromEnv({ ...fullEnv, VERIT_S3_ENDPOINT: "acc123" })).toThrow(
       /not a URL/,
     );
-    expect(() => s3ConfigFromEnv({ ...fullEnv, CYCLOPS_S3_BUCKET: "Bad/Bucket" })).toThrow(
+    expect(() => s3ConfigFromEnv({ ...fullEnv, VERIT_S3_BUCKET: "Bad/Bucket" })).toThrow(
       /bucket name/,
     );
   });
@@ -97,7 +97,7 @@ describe("s3 request signing", () => {
     if (!sent) return;
     expect(sent.init.method).toBe("PUT");
     expect(sent.input).toBe(
-      "https://acc123.r2.cloudflarestorage.com/cyclops-proofs/runs/run_1/prove.log",
+      "https://acc123.r2.cloudflarestorage.com/verit-proofs/runs/run_1/prove.log",
     );
 
     const auth = sent.headers.get("authorization") ?? "";
@@ -211,21 +211,21 @@ describe("s3 object store", () => {
 /**
  * The real server. `docker compose up -d minio` then:
  *
- *   CYCLOPS_S3_TEST_ENDPOINT=http://localhost:9000 \
- *   CYCLOPS_S3_TEST_BUCKET=cyclops-proofs \
- *   CYCLOPS_S3_TEST_ACCESS_KEY_ID=cyclops \
- *   CYCLOPS_S3_TEST_SECRET_ACCESS_KEY=cyclops-dev-secret \
- *   pnpm --filter @cyclops/adapter-s3-blob test
+ *   VERIT_S3_TEST_ENDPOINT=http://localhost:9000 \
+ *   VERIT_S3_TEST_BUCKET=verit-proofs \
+ *   VERIT_S3_TEST_ACCESS_KEY_ID=verit \
+ *   VERIT_S3_TEST_SECRET_ACCESS_KEY=verit-dev-secret \
+ *   pnpm --filter @verit/adapter-s3-blob test
  *
  * Unset, this suite is skipped, so CI without a bucket stays green.
  */
-const live = process.env.CYCLOPS_S3_TEST_ENDPOINT
+const live = process.env.VERIT_S3_TEST_ENDPOINT
   ? {
-      endpoint: process.env.CYCLOPS_S3_TEST_ENDPOINT,
-      bucket: process.env.CYCLOPS_S3_TEST_BUCKET ?? "cyclops-proofs",
-      accessKeyId: process.env.CYCLOPS_S3_TEST_ACCESS_KEY_ID ?? "",
-      secretAccessKey: process.env.CYCLOPS_S3_TEST_SECRET_ACCESS_KEY ?? "",
-      region: process.env.CYCLOPS_S3_TEST_REGION ?? "us-east-1",
+      endpoint: process.env.VERIT_S3_TEST_ENDPOINT,
+      bucket: process.env.VERIT_S3_TEST_BUCKET ?? "verit-proofs",
+      accessKeyId: process.env.VERIT_S3_TEST_ACCESS_KEY_ID ?? "",
+      secretAccessKey: process.env.VERIT_S3_TEST_SECRET_ACCESS_KEY ?? "",
+      region: process.env.VERIT_S3_TEST_REGION ?? "us-east-1",
     }
   : null;
 

@@ -1,5 +1,5 @@
 {
-  "name": "@cyclops/adapter-neo4j",
+  "name": "@verit/adapter-neo4j",
   "license": "AGPL-3.0-only",
   "version": "0.0.1",
   "type": "module",
@@ -10,9 +10,9 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@cyclops/domain": "workspace:*",
-    "@cyclops/ports": "workspace:*",
-    "@cyclops/adapter-memory": "workspace:*",
+    "@verit/domain": "workspace:*",
+    "@verit/ports": "workspace:*",
+    "@verit/adapter-memory": "workspace:*",
     "effect": "^3.14.14",
     "neo4j-driver": "^5.28.1"
   },

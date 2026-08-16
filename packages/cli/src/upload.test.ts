@@ -3,8 +3,8 @@ import { buildUpload, dashboardTarget, proofPageUrl } from "./upload";
 
 describe("proof page URL", () => {
   it("is the URL shape the Check Run links to", () => {
-    expect(proofPageUrl("https://cyclops.dev", "acme/widgets", "run:abc:1")).toBe(
-      "https://cyclops.dev/r/acme/widgets/runs/run%3Aabc%3A1",
+    expect(proofPageUrl("https://verit.dev", "acme/widgets", "run:abc:1")).toBe(
+      "https://verit.dev/r/acme/widgets/runs/run%3Aabc%3A1",
     );
   });
 
@@ -18,14 +18,14 @@ describe("proof page URL", () => {
 describe("upload gating", () => {
   it("stays off unless both variables are set", () => {
     expect(dashboardTarget({})).toBeNull();
-    expect(dashboardTarget({ CYCLOPS_DASHBOARD_URL: "http://x" })).toBeNull();
-    expect(dashboardTarget({ CYCLOPS_INGEST_TOKEN: "cyc_x" })).toBeNull();
-    expect(dashboardTarget({ CYCLOPS_DASHBOARD_URL: " ", CYCLOPS_INGEST_TOKEN: "cyc_x" })).toBeNull();
+    expect(dashboardTarget({ VERIT_DASHBOARD_URL: "http://x" })).toBeNull();
+    expect(dashboardTarget({ VERIT_INGEST_TOKEN: "cyc_x" })).toBeNull();
+    expect(dashboardTarget({ VERIT_DASHBOARD_URL: " ", VERIT_INGEST_TOKEN: "cyc_x" })).toBeNull();
   });
 
   it("turns on when both are set", () => {
     expect(
-      dashboardTarget({ CYCLOPS_DASHBOARD_URL: "http://x", CYCLOPS_INGEST_TOKEN: "cyc_x" }),
+      dashboardTarget({ VERIT_DASHBOARD_URL: "http://x", VERIT_INGEST_TOKEN: "cyc_x" }),
     ).toEqual({ baseUrl: "http://x", token: "cyc_x" });
   });
 });

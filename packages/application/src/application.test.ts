@@ -6,7 +6,7 @@ import { buildWikiHits, buildReviewContext } from "./context";
 import { inferEmbeddingSimilarEdges, inferSameAuthorPathEdges } from "./edges";
 import { markdownToWikiPages } from "./ingest-wiki";
 import { understandingToProofSpec } from "./proof-spec";
-import { decodeUnderstanding, type ReviewPresets } from "@cyclops/domain";
+import { decodeUnderstanding, type ReviewPresets } from "@verit/domain";
 
 const basePresets: ReviewPresets = {
   reviewer_identity: "harsh",

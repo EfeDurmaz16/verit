@@ -4,8 +4,8 @@ import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { Effect, Either, Schema as S } from "effect";
-import type { ProveCommand, ProveOutcome, ProvePort } from "@cyclops/ports";
-import { StoreError } from "@cyclops/ports";
+import type { ProveCommand, ProveOutcome, ProvePort } from "@verit/ports";
+import { StoreError } from "@verit/ports";
 
 /*
  * THREAT MODEL: this file starts real processes on the machine running it.
@@ -16,7 +16,7 @@ import { StoreError } from "@cyclops/ports";
  *  - The binary comes from a fixed table (pnpm/npm/yarn/bun/cargo/pytest)
  *    keyed on which manifest and lockfile exist. Repo files decide *whether* a
  *    known runner applies, never *what* binary runs. The one free-form source
- *    is CYCLOPS_PROVE_CMD, which is operator config on this same machine.
+ *    is VERIT_PROVE_CMD, which is operator config on this same machine.
  *  - `run` refuses unless the checkout at `cwd` is the repo the caller named,
  *    so reviewing a stranger's fork can never run their tests in your tree.
  *    Fail closed: no remote, no match, no run.
@@ -60,14 +60,14 @@ const packageManager = (cwd: string): string => {
   return "npm";
 };
 
-/** Operator override: `CYCLOPS_PROVE_CMD="cargo test --all"`, split into argv. */
+/** Operator override: `VERIT_PROVE_CMD="cargo test --all"`, split into argv. */
 const fromEnv = (): ProveCommand | null => {
-  const raw = process.env.CYCLOPS_PROVE_CMD?.trim();
+  const raw = process.env.VERIT_PROVE_CMD?.trim();
   if (!raw) return null;
   const parts = raw.split(/\s+/);
   const [command, ...args] = parts;
   if (!command) return null;
-  return { command, args, source: "CYCLOPS_PROVE_CMD" };
+  return { command, args, source: "VERIT_PROVE_CMD" };
 };
 
 export const detectProveCommand = async (cwd: string): Promise<ProveCommand | null> => {
@@ -209,7 +209,7 @@ export const makeProveRunner = (): ProvePort => ({
         const cmd = await detectProveCommand(dir);
         if (!cmd) {
           throw new Error(
-            `no verification command found in ${dir} (set CYCLOPS_PROVE_CMD to name one)`,
+            `no verification command found in ${dir} (set VERIT_PROVE_CMD to name one)`,
           );
         }
         const startedAt = new Date().toISOString();

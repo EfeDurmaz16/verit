@@ -1,5 +1,5 @@
 {
-  "name": "@cyclops/adapter-memory",
+  "name": "@verit/adapter-memory",
   "license": "AGPL-3.0-only",
   "version": "0.0.1",
   "type": "module",
@@ -10,9 +10,9 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@cyclops/domain": "workspace:*",
-    "@cyclops/ports": "workspace:*",
-    "@cyclops/application": "workspace:*",
+    "@verit/domain": "workspace:*",
+    "@verit/ports": "workspace:*",
+    "@verit/application": "workspace:*",
     "effect": "^3.14.14"
   },
   "devDependencies": {

@@ -1,6 +1,6 @@
-import { makeFsObjectStore } from "@cyclops/adapter-local-blob";
-import { makeS3ObjectStore, s3ConfigFromEnv } from "@cyclops/adapter-s3-blob";
-import type { ObjectStorePort } from "@cyclops/ports";
+import { makeFsObjectStore } from "@verit/adapter-local-blob";
+import { makeS3ObjectStore, s3ConfigFromEnv } from "@verit/adapter-s3-blob";
+import type { ObjectStorePort } from "@verit/ports";
 
 /**
  * S3 when the deployment is configured for it, the filesystem otherwise.
@@ -14,7 +14,7 @@ export const objectStore = (): ObjectStorePort => {
   const s3 = s3ConfigFromEnv(process.env);
   return s3
     ? makeS3ObjectStore(s3)
-    : makeFsObjectStore(process.env.CYCLOPS_BLOB_DIR ?? ".data/dashboard-objects");
+    : makeFsObjectStore(process.env.VERIT_BLOB_DIR ?? ".data/dashboard-objects");
 };
 
 /** Run ids carry colons. Object keys do not, so they are flattened once, here. */

@@ -1,6 +1,6 @@
 # Architecture
 
-cyclops is an Effect onion. Dependencies point one way only:
+verit is an Effect onion. Dependencies point one way only:
 
 ```
 domain  →  ports  →  application  →  adapters
@@ -23,12 +23,12 @@ A dependency that points the other way is a bug, not a shortcut.
 | `GraphStore` | Ontology, repos, PRs, PR edges, wiki pages | Neo4j | in-memory |
 | `DocumentStore` | Runs, Understandings, proof blobs, FTS chunks | SQLite | in-memory |
 
-Neither is required to run cyclops. Both fall back, which is why the quickstart
+Neither is required to run verit. Both fall back, which is why the quickstart
 needs no Docker.
 
 ## The prove boundary
 
-`prove` is the only part of cyclops that executes someone else's code, so it is
+`prove` is the only part of verit that executes someone else's code, so it is
 the part worth reading closely.
 
 `packages/adapters/prove` spawns the reviewed repository's own verification
@@ -45,7 +45,7 @@ would be a security bug.
 
 ## The proof page
 
-One json-render component registry, `@cyclops/proof-ui`, is rendered by both the
+One json-render component registry, `@verit/proof-ui`, is rendered by both the
 live workspace and the hosted dashboard. The renderer refuses any component that
 is not in the catalog, and every prop coming from a model is validated
 defensively, because model output is untrusted input.

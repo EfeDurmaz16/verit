@@ -1,10 +1,10 @@
-import { decodeRunUpload, type RunUpload } from "@cyclops/domain";
+import { decodeRunUpload, type RunUpload } from "@verit/domain";
 import { Either } from "effect";
 import { constantTimeEqualHex, hashToken } from "./crypto";
 import type { RepoRow } from "./runs";
 
 /** A digest of the right shape that matches nothing, for the unknown-repo path. */
-const DECOY_HASH = hashToken("cyclops.ingest.decoy");
+const DECOY_HASH = hashToken("verit.ingest.decoy");
 
 export const bearerToken = (header: string | null): string | null => {
   if (!header) return null;
@@ -30,7 +30,7 @@ export type ParseResult =
   | { readonly ok: false; readonly error: string };
 
 /**
- * Validates the body against the @cyclops/domain schema. Everything past this
+ * Validates the body against the @verit/domain schema. Everything past this
  * point is a decoded RunUpload, never raw JSON, so no page renders a field
  * that was never checked.
  */

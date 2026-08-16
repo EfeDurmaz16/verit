@@ -27,7 +27,7 @@ export default async function Home({
       <div className="mx-auto max-w-[420px] pt-16 text-center">
         <h1 className="text-[15px] font-medium">Sign in to see your runs</h1>
         <p className="mt-1.5 text-[13px] text-ink-2">
-          Cyclops shows the repos you can already read on GitHub, and nothing else.
+          Verit shows the repos you can already read on GitHub, and nothing else.
         </p>
         {login && (
           <p className="mt-3 rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger">
@@ -59,7 +59,7 @@ export default async function Home({
       {owners.length === 0 ? (
         <Empty
           title="No connected repos yet"
-          hint="Register a repo with pnpm --filter @cyclops/dashboard register-repo owner/name, then run the Action there."
+          hint="Register a repo with pnpm --filter @verit/dashboard register-repo owner/name, then run the Action there."
         />
       ) : (
         <ul className="divide-y divide-line rounded-lg border border-line bg-surface">

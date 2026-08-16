@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Effect } from "effect";
-import { buildReviewContext, runReviewUnderstand } from "@cyclops/application";
+import { buildReviewContext, runReviewUnderstand } from "@verit/application";
 import {
   makeHeuristicClassifier,
   makeMemoryDocumentStore,

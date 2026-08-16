@@ -8,7 +8,7 @@ export interface AccessRow {
 export const DEFAULT_TTL_SECONDS = 600;
 
 export const ttlSeconds = (): number =>
-  Number(process.env.CYCLOPS_ACCESS_TTL_SECONDS) || DEFAULT_TTL_SECONDS;
+  Number(process.env.VERIT_ACCESS_TTL_SECONDS) || DEFAULT_TTL_SECONDS;
 
 /**
  * A cached answer is trusted only inside its TTL. A clock that has moved
@@ -80,7 +80,7 @@ export const verifyOnGithub = async (token: string, repoId: string): Promise<boo
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/vnd.github+json",
-      "User-Agent": "cyclops-dashboard",
+      "User-Agent": "verit-dashboard",
     },
     cache: "no-store",
   });

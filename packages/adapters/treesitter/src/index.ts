@@ -1,6 +1,6 @@
 import { Effect } from "effect";
-import type { ParserPort } from "@cyclops/ports";
-import { makeRegexParser } from "@cyclops/adapter-memory";
+import type { ParserPort } from "@verit/ports";
+import { makeRegexParser } from "@verit/adapter-memory";
 
 /**
  * tree-sitter when WASM grammars are configured; falls back to deterministic regex parser.

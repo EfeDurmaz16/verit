@@ -1,4 +1,4 @@
-import type { Understanding } from "@cyclops/domain";
+import type { Understanding } from "@verit/domain";
 
 /* Review verbs. `prove` is real (see ./prove.ts) and `post` is a Check Run
    (see ./check.ts); risk and patch are still stubs until their agents land. */

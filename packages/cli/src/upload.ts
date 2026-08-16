@@ -1,7 +1,7 @@
-import { encodeRunUpload, type RunUpload } from "@cyclops/domain";
-import { proveLogBody } from "@cyclops/application";
+import { encodeRunUpload, type RunUpload } from "@verit/domain";
+import { proveLogBody } from "@verit/application";
 import { Either } from "effect";
-import type { ProveOutcome } from "@cyclops/ports";
+import type { ProveOutcome } from "@verit/ports";
 
 /**
  * Where a run's proof page lives. The Check Run links here, so the shape is
@@ -17,13 +17,13 @@ export interface DashboardTarget {
 }
 
 /**
- * Both variables or nothing. An unset CYCLOPS_DASHBOARD_URL means the run is
+ * Both variables or nothing. An unset VERIT_DASHBOARD_URL means the run is
  * never uploaded and CI behaves exactly as it did before, which is the whole
  * point of gating this on env.
  */
 export const dashboardTarget = (env: NodeJS.ProcessEnv = process.env): DashboardTarget | null => {
-  const baseUrl = env.CYCLOPS_DASHBOARD_URL?.trim();
-  const token = env.CYCLOPS_INGEST_TOKEN?.trim();
+  const baseUrl = env.VERIT_DASHBOARD_URL?.trim();
+  const token = env.VERIT_INGEST_TOKEN?.trim();
   if (!baseUrl || !token) return null;
   return { baseUrl, token };
 };
@@ -83,7 +83,7 @@ export const uploadRun = async (
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${target.token}`,
-        "X-Cyclops-Repo": upload.repo,
+        "X-Verit-Repo": upload.repo,
       },
       body: JSON.stringify(encoded.right),
     });
