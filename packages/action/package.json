@@ -1,5 +1,6 @@
 {
   "name": "@cyclops/action",
+  "license": "AGPL-3.0-only",
   "version": "0.0.1",
   "type": "module",
   "exports": { ".": "./src/run.ts" },
