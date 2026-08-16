@@ -12,6 +12,8 @@
    Everything here is a pure function of its input. No I/O, no Date, no
    randomness. Same patch in, same plan out, always. */
 
+import { DIFF_BUDGET_CHARS, diffCoveragePercent } from "@verit/domain";
+
 /* ---------------------------------- types --------------------------------- */
 
 export interface DiffLine {
@@ -903,4 +905,42 @@ export const isNettable = (analysis: {
 export const netDiffChars = (patch: string): number => {
   const analysis = analyzeDiff(patch, Number.MAX_SAFE_INTEGER);
   return isNettable(analysis) ? analysis.net.stats.netChars : patch.length;
+};
+
+/**
+ * The diff as any lane sees it: net first. The deterministic pre-pass above
+ * factors moved code out before the budget applies, so the whole prompt
+ * budget goes to genuinely new content, residual edits inside moves, and
+ * deletions, ranked by path risk. Coverage is therefore net coverage:
+ * diffCoveragePercent over net chars, the same accounting run-review stamps
+ * on the Understanding. Input that does not parse as a unified diff cannot
+ * be netted and falls back to the raw slice against the gross budget.
+ * Shared by every harness (CLI and HTTP lane) so their prompts and the
+ * coverage math can never disagree.
+ */
+export const diffSection = (diff: string): string => {
+  const analysis = analyzeDiff(diff, DIFF_BUDGET_CHARS);
+  if (!isNettable(analysis)) {
+    return `UNIFIED DIFF${diff.length > DIFF_BUDGET_CHARS ? ` (first ${DIFF_BUDGET_CHARS} of ${diff.length} chars)` : ""}:
+${diff.slice(0, DIFF_BUDGET_CHARS)}`;
+  }
+  const { net, plan } = analysis;
+  const coverage = diffCoveragePercent(net.stats.netChars);
+  const missing = plan.unreviewed
+    .slice(0, 20)
+    .map((r) => `- ${r.file}:${r.startLine} (${r.kind}, ${r.lines.length} lines)`);
+  const body = plan.regions.map((r) => r.content).join("\n");
+  return `MOVE ANALYSIS (deterministic pre-pass, no model involved):
+${describeMoves(net)}
+
+NET DIFF, moves pre-factored${coverage < 100 ? ` (top regions by risk, ${coverage}% of the net content)` : ""}:
+Each region below is content to actually review: new code, a residual edit inside a moved block, or a deletion. Moved code is already accounted for above and is not repeated here.
+${body || "(no net content: every changed line is moved code)"}${
+    missing.length > 0
+      ? `
+
+NOT SHOWN, over budget. Report these as unreviewed:
+${missing.join("\n")}`
+      : ""
+  }`;
 };

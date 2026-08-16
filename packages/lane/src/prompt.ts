@@ -1,14 +1,11 @@
-import {
-  DIFF_BUDGET_CHARS,
-  OUTPUT_STYLE,
-  UNDERSTANDING_JSON_SHAPE,
-} from "@verit/domain";
+import { OUTPUT_STYLE, UNDERSTANDING_JSON_SHAPE } from "@verit/domain";
+import { diffSection } from "@verit/netdiff";
 import type { HarnessPort } from "@verit/ports";
 
 export type UnderstandInput = Parameters<HarnessPort["runUnderstand"]>[0];
 
-/** Shared with the pi lane: one diff budget, one body budget. */
-const MAX_DIFF = DIFF_BUDGET_CHARS;
+/** Body budget only, shared with the pi lane. The diff budget lives in
+    @verit/netdiff's diffSection: moves netted out first, coverage in step. */
 const MAX_BODY = 8_000;
 
 export const SUBMIT_TOOL_NAME = "submit_understanding";
@@ -57,6 +54,5 @@ ${list(wiki, 3, "(none indexed)")}
 RELATED PULL REQUESTS:
 ${list(neighbours, 3, "(none)")}
 
-UNIFIED DIFF${diff.length > MAX_DIFF ? ` (first ${MAX_DIFF} of ${diff.length} chars)` : ""}:
-${diff.slice(0, MAX_DIFF)}`;
+${diffSection(diff)}`;
 };

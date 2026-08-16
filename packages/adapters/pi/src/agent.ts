@@ -2,13 +2,11 @@ import { spawnSync } from "node:child_process";
 import { Either } from "effect";
 import {
   decodeUnderstanding,
-  DIFF_BUDGET_CHARS,
-  diffCoveragePercent,
   OUTPUT_STYLE,
   UNDERSTANDING_JSON_SHAPE,
   type Understanding,
 } from "@verit/domain";
-import { analyzeDiff, describeMoves, isNettable } from "@verit/netdiff";
+import { diffSection } from "@verit/netdiff";
 import type { HarnessPort } from "@verit/ports";
 
 /* Headless coding CLIs as the Action's Understanding source.
@@ -23,10 +21,8 @@ export type AgentCli = "claude" | "cursor";
 
 type UnderstandInput = Parameters<HarnessPort["runUnderstand"]>[0];
 
-/** Prompt budget for diff content, well under ARG_MAX on argv. It applies to
-    NET chars: @verit/netdiff factors moves out first, and the coverage
-    accounting in @verit/domain budgets against the same net size. */
-const MAX_DIFF = DIFF_BUDGET_CHARS;
+/** Body budget only: the diff budget lives in @verit/netdiff's diffSection,
+    which nets moves out first and keeps prompt and coverage math in step. */
 const MAX_BODY = 8_000;
 const DEFAULT_TIMEOUT_MS = 900_000;
 
@@ -74,42 +70,6 @@ const CLI: Record<AgentCli, CliSpec> = {
 
 const list = (items: readonly string[], max: number, empty: string): string =>
   items.length === 0 ? empty : items.slice(0, max).join("\n");
-
-/**
- * The diff as the lane sees it: net first. The deterministic @verit/netdiff
- * pass factors moved code out before the budget applies, so the whole prompt
- * budget goes to genuinely new content, residual edits inside moves, and
- * deletions, ranked by path risk. Coverage is therefore net coverage:
- * diffCoveragePercent over net chars, the same accounting run-review stamps
- * on the Understanding. Input that does not parse as a unified diff cannot
- * be netted and falls back to the raw slice against the gross budget.
- */
-const diffSection = (diff: string): string => {
-  const analysis = analyzeDiff(diff, DIFF_BUDGET_CHARS);
-  if (!isNettable(analysis)) {
-    return `UNIFIED DIFF${diff.length > MAX_DIFF ? ` (first ${MAX_DIFF} of ${diff.length} chars)` : ""}:
-${diff.slice(0, MAX_DIFF)}`;
-  }
-  const { net, plan } = analysis;
-  const coverage = diffCoveragePercent(net.stats.netChars);
-  const missing = plan.unreviewed
-    .slice(0, 20)
-    .map((r) => `- ${r.file}:${r.startLine} (${r.kind}, ${r.lines.length} lines)`);
-  const body = plan.regions.map((r) => r.content).join("\n");
-  return `MOVE ANALYSIS (deterministic pre-pass, no model involved):
-${describeMoves(net)}
-
-NET DIFF, moves pre-factored${coverage < 100 ? ` (top regions by risk, ${coverage}% of the net content)` : ""}:
-Each region below is content to actually review: new code, a residual edit inside a moved block, or a deletion. Moved code is already accounted for above and is not repeated here.
-${body || "(no net content: every changed line is moved code)"}${
-    missing.length > 0
-      ? `
-
-NOT SHOWN, over budget. Report these as unreviewed:
-${missing.join("\n")}`
-      : ""
-  }`;
-};
 
 /** The one-shot Understanding request, OUTPUT_STYLE and contract included. */
 export const agentPrompt = (input: UnderstandInput): string => {

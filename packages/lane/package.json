@@ -14,6 +14,7 @@
   "dependencies": {
     "@verit/adapter-prove": "workspace:*",
     "@verit/domain": "workspace:*",
+    "@verit/netdiff": "workspace:*",
     "@verit/ports": "workspace:*",
     "effect": "^3.14.14"
   },

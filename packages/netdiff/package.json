@@ -9,6 +9,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build": "tsc -p tsconfig.json"
   },
+  "dependencies": {
+    "@verit/domain": "workspace:*"
+  },
   "devDependencies": {
     "typescript": "^5.8.3",
     "vitest": "^3.1.2"

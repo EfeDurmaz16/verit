@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Effect } from "effect";
 import { LaneError, type LaneClient, type LaneRequest, type LaneTurn } from "./client";
 import { runLane } from "./loop";
-import { SUBMIT_TOOL_NAME } from "./prompt";
+import { laneUserPrompt, SUBMIT_TOOL_NAME } from "./prompt";
 import { submitTool, understandingJsonSchema } from "./index";
 import type { ToolOutcome } from "./tools";
 
@@ -301,5 +301,43 @@ describe("understanding tool schema", () => {
       how: SAMPLE.how,
     });
     expect(result?.proof_refs).toHaveLength(1);
+  });
+});
+
+describe("laneUserPrompt", () => {
+  const input = {
+    title: "Move settle helpers",
+    body: "Splits pay.ts.",
+    paths: ["src/pay.ts", "src/settle.ts"],
+    diff: [
+      "diff --git a/src/pay.ts b/src/pay.ts",
+      "--- a/src/pay.ts",
+      "+++ b/src/pay.ts",
+      "@@ -10,2 +10,0 @@",
+      "-export const settle = (o) => ledger.post(o);",
+      "-export const settled = (o) => ledger.has(o);",
+      "diff --git a/src/settle.ts b/src/settle.ts",
+      "--- a/src/settle.ts",
+      "+++ b/src/settle.ts",
+      "@@ -1,0 +1,3 @@",
+      "+export const settle = (o) => ledger.post(o);",
+      "+export const settled = (o) => ledger.has(o);",
+      "+export const NEW_RETRY_LIMIT = 3;",
+    ].join("\n"),
+    context: { wiki_hits: [], pr_graph: [], domain: "PAYMENTS" as const },
+    role: "review" as const,
+  };
+
+  it("feeds the net diff, same pre-pass as the pi lane", () => {
+    const prompt = laneUserPrompt(input);
+    expect(prompt).toContain("MOVE ANALYSIS");
+    expect(prompt).toContain("NET DIFF, moves pre-factored");
+    expect(prompt).toContain("NEW_RETRY_LIMIT");
+  });
+
+  it("falls back to the raw text when the input is not a unified diff", () => {
+    const prompt = laneUserPrompt({ ...input, diff: "not a diff at all" });
+    expect(prompt).toContain("UNIFIED DIFF");
+    expect(prompt).toContain("not a diff at all");
   });
 });
