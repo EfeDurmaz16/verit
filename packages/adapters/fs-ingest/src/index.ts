@@ -76,7 +76,7 @@ export const ingestRepoPath = (
         }
       }
 
-      if (/\.(ts|tsx|js|jsx|go|rs)$/i.test(path)) {
+      if (/\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|go|rs|py)$/i.test(path)) {
         const syms = yield* parser.extractSymbols(path, source);
         for (const s of syms) {
           const sym: SymbolNode = {
