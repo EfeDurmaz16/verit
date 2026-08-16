@@ -3,9 +3,13 @@ name: ci
 on:
   push:
   pull_request:
+  schedule:
+    # Nightly, so a broken adapter surfaces even in a week without PRs.
+    - cron: "17 3 * * *"
 
 jobs:
   test:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,3 +22,75 @@ jobs:
       - run: pnpm install
       - run: pnpm typecheck
       - run: pnpm test
+
+  # The same suites, but against real servers instead of stubs: the S3 adapter
+  # against MinIO, the graph adapter against Neo4j, the dashboard ingest path
+  # against Postgres. The env vars are the switches the tests already gate on.
+  integration:
+    if: github.event_name == 'pull_request' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: verit
+          POSTGRES_PASSWORD: verit-dev
+          POSTGRES_DB: verit
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U verit"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      neo4j:
+        image: neo4j:5.26-community
+        env:
+          NEO4J_AUTH: neo4j/verit-dev
+        ports:
+          - 7687:7687
+        options: >-
+          --health-cmd "wget -qO- http://localhost:7474 || exit 1"
+          --health-interval 5s
+          --health-timeout 10s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install
+      # MinIO, not LocalStack: the adapter speaks plain S3 (R2 in production),
+      # MinIO is one small image and matches docker-compose.yml exactly.
+      # A plain `docker run` because service containers cannot override the
+      # image command, and minio/minio needs `server /data` plus the bucket.
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=verit \
+            -e MINIO_ROOT_PASSWORD=verit-dev-secret \
+            -e MINIO_REGION_NAME=us-east-1 \
+            --entrypoint sh \
+            minio/minio:RELEASE.2025-04-22T22-12-26Z \
+            -c 'mkdir -p /data/verit-proofs && exec minio server /data'
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:9000/minio/health/live && exit 0
+            sleep 1
+          done
+          echo "MinIO never became healthy" >&2
+          docker logs minio >&2
+          exit 1
+      - name: Integration tests
+        env:
+          VERIT_S3_TEST_ENDPOINT: http://localhost:9000
+          VERIT_S3_TEST_BUCKET: verit-proofs
+          VERIT_S3_TEST_ACCESS_KEY_ID: verit
+          VERIT_S3_TEST_SECRET_ACCESS_KEY: verit-dev-secret
+          VERIT_NEO4J_URI: bolt://localhost:7687
+          VERIT_NEO4J_PASSWORD: verit-dev
+          VERIT_PG_TEST_URL: postgres://verit:verit-dev@localhost:5432/verit
+        run: >-
+          pnpm --filter @verit/adapter-s3-blob --filter @verit/adapter-neo4j
+          --filter @verit/dashboard test
