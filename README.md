@@ -265,7 +265,6 @@ Proof artifacts land in `.data/proofs/`, which is gitignored.
 | `@verit/workspace` | Live review workspace (Next.js, SSE, json-render) |
 | `@verit/dashboard` | Hosted run history and proof pages (Next.js, Postgres) |
 | `@verit/proof-ui` | The one component registry both surfaces render |
-| `@verit/action` | GitHub Action entry point |
 
 ## Status
 
