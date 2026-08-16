@@ -1,0 +1,24 @@
+name: Feature request
+description: Propose a change to what cyclops does.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What review situation is not covered today. Describe the situation, not the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would build
+    validations:
+      required: false
+  - type: textarea
+    id: evidence
+    attributes:
+      label: How a reviewer would verify it
+      description: cyclops is about evidence. What would prove this feature worked on a real pull request.
+    validations:
+      required: false

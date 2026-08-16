@@ -1,0 +1,31 @@
+name: Bug report
+description: Something behaved differently than documented.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, and what you got back. Paste the command and the output.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Where it ran
+      description: GitHub Action, local CLI, workspace, or dashboard. Add the commit or tag.
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: Output of `node -v` and `pnpm -v`, plus any CYCLOPS_ variables you set. Redact tokens.
+    validations:
+      required: false
