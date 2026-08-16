@@ -62,14 +62,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: EfeDurmaz16/verit@main
+      - uses: EfeDurmaz16/verit@v0
 ```
 
 verit detects the verification command from your repository. Override it when
 the guess is wrong:
 
 ```yaml
-      - uses: EfeDurmaz16/verit@main
+      - uses: EfeDurmaz16/verit@v0
         with:
           prove-command: cargo test --all
 ```
@@ -78,7 +78,7 @@ The Understanding is written by a headless coding CLI. With no key configured
 you get a deterministic stub, which is honest but thin. To get the real thing:
 
 ```yaml
-      - uses: EfeDurmaz16/verit@main
+      - uses: EfeDurmaz16/verit@v0
         with:
           lane-harness: claude
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
