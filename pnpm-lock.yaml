@@ -291,6 +291,9 @@ importers:
       '@verit/domain':
         specifier: workspace:*
         version: link:../../domain
+      '@verit/netdiff':
+        specifier: workspace:*
+        version: link:../../netdiff
       '@verit/ports':
         specifier: workspace:*
         version: link:../../ports
@@ -407,6 +410,9 @@ importers:
       '@verit/domain':
         specifier: workspace:*
         version: link:../domain
+      '@verit/netdiff':
+        specifier: workspace:*
+        version: link:../netdiff
       '@verit/ports':
         specifier: workspace:*
         version: link:../ports
@@ -478,6 +484,15 @@ importers:
       effect:
         specifier: ^3.14.14
         version: 3.22.1
+    devDependencies:
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.1.2
+        version: 3.2.7(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.1)
+
+  packages/netdiff:
     devDependencies:
       typescript:
         specifier: ^5.8.3

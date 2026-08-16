@@ -207,7 +207,8 @@ const runUnderstandPipeline = async (input: {
     run: result.run,
     spec: enrichedSpec,
     skillPackHash: result.skillPackHash,
-    diffChars: input.diff.length,
+    /** net chars, moves factored out: what the coverage check budgets against */
+    diffChars: result.netDiffChars,
     what: understanding?.what ?? null,
     risks: understanding?.risks.length ?? 0,
     proofRefs: understanding?.proof_refs.length ?? 0,

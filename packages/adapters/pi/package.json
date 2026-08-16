@@ -12,9 +12,10 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@verit/domain": "workspace:*",
+    "@verit/netdiff": "workspace:*",
     "@verit/ports": "workspace:*",
-    "effect": "^3.14.14",
-    "@verit/domain": "workspace:*"
+    "effect": "^3.14.14"
   },
   "devDependencies": {
     "typescript": "^5.8.3",
