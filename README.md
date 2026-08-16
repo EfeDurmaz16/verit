@@ -278,7 +278,10 @@ every pull request:
 
 Known gaps, stated plainly:
 
-- tree-sitter ingest falls back to regex until the WASM grammars ship
+- tree-sitter ingest is real for TypeScript, TSX, JavaScript, Python, Rust and
+  Go. The grammar wasm files ship inside the grammar npm packages, so
+  `pnpm install` is the only fetch and CI needs no compiler toolchain. Files in
+  other languages use the regex fallback parser.
 - the suggested patch is a stub, not a real patch
 - inline review comments are not implemented
 - the hosted dashboard works but has had one operator, so treat its setup
