@@ -72,6 +72,11 @@ runs:
       env:
         PR_SPEC: ${{ inputs.pr != '' && inputs.pr || format('{0}#{1}', github.repository, github.event.pull_request.number) }}
         GITHUB_TOKEN: ${{ inputs.github-token }}
+        # On a pull_request event GITHUB_SHA is the throwaway merge commit, and a
+        # Check posted there never surfaces on the pull request. Pin the Check to
+        # the head commit. Empty off a pull request, which falls back to
+        # GITHUB_SHA.
+        VERIT_CHECK_SHA: ${{ github.event.pull_request.head.sha }}
         # prove runs in the caller's checkout, and the ProveRunner refuses any
         # checkout that is not the repo under review.
         VERIT_PROVE_CWD: ${{ github.workspace }}
