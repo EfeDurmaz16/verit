@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { DIFF_BUDGET_CHARS, diffCoveragePercent } from "@verit/domain";
 import type { ReviewContext, ReviewPresets, ReviewRun, Understanding } from "@verit/domain";
 import type {
   ClassifierPort,
@@ -52,7 +53,7 @@ export const runReviewUnderstand = (deps: {
     const presets = { ...input.presets, domain, focus };
     const compiled = compileReviewPack(presets);
     const context = { ...input.context, domain, focus };
-    const understanding = yield* deps.harness.runUnderstand({
+    const raw = yield* deps.harness.runUnderstand({
       title: input.title,
       body: input.body,
       paths: input.paths,
@@ -60,6 +61,23 @@ export const runReviewUnderstand = (deps: {
       context,
       role: "review",
     });
+    // The lane only ever sees the first DIFF_BUDGET_CHARS of the diff. When
+    // the diff is bigger, the Understanding must say so out loud.
+    const coverage = diffCoveragePercent(input.diff.length);
+    const understanding: Understanding | null =
+      raw === null || coverage === 100
+        ? raw
+        : {
+            ...raw,
+            risks: [
+              ...raw.risks,
+              {
+                area: "coverage",
+                note: `Reviewed ${coverage}% of the diff (first ${DIFF_BUDGET_CHARS} of ${input.diff.length} chars). Analysis is partial.`,
+                source: "reviewer",
+              },
+            ],
+          };
     const runId = `run:${compiled.skillPackHash.slice(0, 12)}:${Date.now()}`;
     const run: ReviewRun = {
       id: runId,

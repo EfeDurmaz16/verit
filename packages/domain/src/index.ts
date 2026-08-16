@@ -310,6 +310,19 @@ export const ProveResult = S.Struct({
 export type ProveResult = S.Schema.Type<typeof ProveResult>;
 
 /**
+ * One diff budget for every lane prompt. A diff beyond it is sliced before it
+ * reaches the model, so the analysis is partial and every surface must say so:
+ * the Understanding carries a coverage risk and the Check caps at neutral.
+ */
+export const DIFF_BUDGET_CHARS = 120_000;
+
+/** Whole percent of the diff the lane actually saw. 100 when it all fit. */
+export const diffCoveragePercent = (diffChars: number): number =>
+  diffChars <= DIFF_BUDGET_CHARS
+    ? 100
+    : Math.floor((DIFF_BUDGET_CHARS / diffChars) * 100);
+
+/**
  * The one rule that turns a prove run into a verdict. The Check Run
  * conclusion and the dashboard row read it from here, so a run cannot be green
  * on one surface and neutral on the other. No prove run is never a success.

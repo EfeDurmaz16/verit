@@ -207,6 +207,7 @@ const runUnderstandPipeline = async (input: {
     run: result.run,
     spec: enrichedSpec,
     skillPackHash: result.skillPackHash,
+    diffChars: input.diff.length,
     what: understanding?.what ?? null,
     risks: understanding?.risks.length ?? 0,
     proofRefs: understanding?.proof_refs.length ?? 0,
@@ -228,6 +229,7 @@ const runUnderstandPipeline = async (input: {
 const postBehaviorProofCheck = async (input: {
   understanding: Understanding | null;
   outcome: ProveOutcome | null;
+  diffChars?: number;
   runId: string;
   proofPageUrl?: string;
 }) => {
@@ -242,6 +244,7 @@ const postBehaviorProofCheck = async (input: {
   const check = behaviorProofCheck({
     understanding: input.understanding,
     outcome: input.outcome,
+    diffChars: input.diffChars,
     proofPageUrl: input.proofPageUrl,
     runId: input.runId,
   });
@@ -498,6 +501,7 @@ const main = async () => {
     const check = await postBehaviorProofCheck({
       understanding: out.understanding,
       outcome: out.outcome,
+      diffChars: out.diffChars,
       runId: out.runId,
       proofPageUrl: pageUrl,
     });

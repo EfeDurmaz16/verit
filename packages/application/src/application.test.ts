@@ -160,6 +160,61 @@ describe("behaviorProofCheck output style", () => {
   });
 });
 
+describe("behaviorProofCheck on a truncated diff", () => {
+  const understanding = {
+    what: "w",
+    why: "y",
+    how: "h",
+    proof_refs: [],
+    risks: [],
+  };
+  const passing = {
+    command: "pnpm run test",
+    source: "package.json#scripts.test",
+    cwd: "/tmp/r",
+    repo: "acme/pay",
+    exitCode: 0,
+    durationMs: 900,
+    timedOut: false,
+    logTail: "12 passed\n",
+    log: "12 passed\n",
+    startedAt: "2026-08-09T00:00:00Z",
+  };
+
+  it("caps a passing proof at neutral and says how much it reviewed", () => {
+    const check = behaviorProofCheck({
+      understanding,
+      outcome: passing,
+      diffChars: 200_000,
+    });
+    expect(check.conclusion).toBe("neutral");
+    expect(check.summary).toContain("reviewed 60% of the diff");
+    expect(check.summary).toContain("Analysis is partial");
+    // tests passed and analysis partial are separated in the body
+    expect(check.summary).toContain("The tests passed. The analysis is partial.");
+  });
+
+  it("keeps a failing proof a failure: truncation hides nothing", () => {
+    const check = behaviorProofCheck({
+      understanding,
+      outcome: { ...passing, exitCode: 1 },
+      diffChars: 200_000,
+    });
+    expect(check.conclusion).toBe("failure");
+    expect(check.summary).toContain("reviewed 60% of the diff");
+  });
+
+  it("stays green when the whole diff fit the budget", () => {
+    const check = behaviorProofCheck({
+      understanding,
+      outcome: passing,
+      diffChars: 5_000,
+    });
+    expect(check.conclusion).toBe("success");
+    expect(check.summary).not.toContain("Coverage");
+  });
+});
+
 describe("behaviorProofCheck without an Understanding", () => {
   const passing = {
     command: "pnpm run test",

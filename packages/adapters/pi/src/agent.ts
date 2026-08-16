@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { Either } from "effect";
 import {
   decodeUnderstanding,
+  DIFF_BUDGET_CHARS,
   OUTPUT_STYLE,
   UNDERSTANDING_JSON_SHAPE,
   type Understanding,
@@ -20,8 +21,9 @@ export type AgentCli = "claude" | "cursor";
 
 type UnderstandInput = Parameters<HarnessPort["runUnderstand"]>[0];
 
-/** Diff slice that fits one prompt and stays well under ARG_MAX on argv. */
-const MAX_DIFF = 120_000;
+/** Diff slice that fits one prompt and stays well under ARG_MAX on argv.
+    The budget is shared with the coverage accounting in @verit/domain. */
+const MAX_DIFF = DIFF_BUDGET_CHARS;
 const MAX_BODY = 8_000;
 const DEFAULT_TIMEOUT_MS = 900_000;
 

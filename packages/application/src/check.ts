@@ -1,4 +1,9 @@
-import { proofVerdict, type Understanding } from "@verit/domain";
+import {
+  DIFF_BUDGET_CHARS,
+  diffCoveragePercent,
+  proofVerdict,
+  type Understanding,
+} from "@verit/domain";
 import type { CheckRunInput, ProveOutcome } from "@verit/ports";
 import { isProveRef } from "./prove";
 
@@ -33,12 +38,17 @@ export const behaviorProofCheck = (input: {
   /** Null when the lane did not complete. Analysis is then absent, not faked. */
   understanding: Understanding | null;
   outcome: ProveOutcome | null;
+  /** Gross size of the reviewed diff. Beyond the budget the analysis is partial. */
+  diffChars?: number;
   /** Hosted proof page for this run, when one has been published. */
   proofPageUrl?: string;
   runId?: string;
 }): Omit<CheckRunInput, "owner" | "repo" | "headSha"> => {
-  const { understanding: u, outcome, proofPageUrl, runId } = input;
-  const conclusion = u === null ? "neutral" : proofVerdict(outcome);
+  const { understanding: u, outcome, diffChars, proofPageUrl, runId } = input;
+  const coverage = diffChars === undefined ? 100 : diffCoveragePercent(diffChars);
+  const uncapped = u === null ? "neutral" : proofVerdict(outcome);
+  // partial analysis never turns green, however loudly the tests passed
+  const conclusion = uncapped === "success" && coverage < 100 ? "neutral" : uncapped;
   const proofTitle =
     outcome === null
       ? "No proof was run."
@@ -59,8 +69,6 @@ export const behaviorProofCheck = (input: {
     lines.push(
       "Analysis did not complete. No Understanding was produced for this run, so this check stays neutral whatever the tests say.",
       "",
-      "## Proof",
-      "",
     );
   } else {
     const reviewerRisks = u.risks.filter((r) => r.source === "reviewer").length;
@@ -73,10 +81,15 @@ export const behaviorProofCheck = (input: {
       "",
       `**Risks:** ${u.risks.length} in total. ${reviewerRisks} found by review.`,
       "",
-      "## Proof",
+    );
+  }
+  if (coverage < 100 && diffChars !== undefined) {
+    lines.push(
+      `**Coverage:** reviewed ${coverage}% of the diff (first ${DIFF_BUDGET_CHARS} of ${diffChars} chars). Analysis is partial, so a passing proof caps this check at neutral.`,
       "",
     );
   }
+  lines.push("## Proof", "");
 
   if (outcome === null) {
     lines.push(
@@ -96,6 +109,12 @@ export const behaviorProofCheck = (input: {
       "",
       "</details>",
     );
+    if (outcome.exitCode === 0 && coverage < 100) {
+      lines.push(
+        "",
+        "The tests passed. The analysis is partial. Those are different claims, so the conclusion stays neutral.",
+      );
+    }
   }
 
   const otherRefs = u === null ? [] : u.proof_refs.filter((r) => !isProveRef(r));
