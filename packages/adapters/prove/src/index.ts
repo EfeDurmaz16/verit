@@ -22,6 +22,9 @@ import { StoreError } from "@verit/ports";
  *    Fail closed: no remote, no match, no run.
  *  - Hard timeout, killed as a process group so runners cannot outlive it, and
  *    output is capped so a chatty suite cannot exhaust memory.
+ *  - Locally the child env is an allowlist (see proveChildEnv), so keys and
+ *    tokens in the operator's shell never leak into a repo's test scripts. On
+ *    GitHub Actions the runner is the boundary and the env passes through.
  *
  * This is not a sandbox. It is "run the command the user already runs, where
  * they already run it." In CI the GitHub runner is the isolation boundary.
@@ -116,6 +119,71 @@ export const repoSlugAt = async (cwd: string): Promise<string | null> => {
   }
 };
 
+/* Exact env keys a local test run may inherit. Everything else, and every
+   credential in particular, must be named in VERIT_PROVE_ENV to pass. */
+const ENV_ALLOWLIST = new Set([
+  "PATH",
+  "HOME",
+  "TMPDIR",
+  "TEMP",
+  "TMP",
+  "LANG",
+  "LC_ALL",
+  "SHELL",
+  "USER",
+  "CI",
+  // language toolchains
+  "CARGO_HOME",
+  "RUSTUP_HOME",
+  "GOPATH",
+  "GOROOT",
+  "GOCACHE",
+  "GOMODCACHE",
+  "PNPM_HOME",
+  "NVM_DIR",
+  "VOLTA_HOME",
+  "PYTHONPATH",
+  "VIRTUAL_ENV",
+]);
+
+const ENV_ALLOWED_PREFIXES = ["npm_config_"];
+
+/**
+ * The environment the untrusted verification command runs with.
+ *
+ * Locally this is an allowlist: PATH, HOME, toolchain vars, npm_config_*, and
+ * whatever the operator names in VERIT_PROVE_ENV (comma-separated keys). API
+ * keys and tokens sitting in the operator's shell (ANTHROPIC_API_KEY,
+ * GITHUB_TOKEN, ...) never reach a repo's test scripts implicitly.
+ *
+ * On GitHub Actions the runner is the isolation boundary and workflows rely on
+ * job-level env, so the full environment passes through unchanged there.
+ */
+export const proveChildEnv = (
+  base: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv => {
+  const forced = { CI: "1", FORCE_COLOR: "0", NO_COLOR: "1" };
+  if (base.GITHUB_ACTIONS === "true") {
+    return { ...base, ...forced };
+  }
+  const declared = new Set(
+    (base.VERIT_PROVE_ENV ?? "")
+      .split(",")
+      .map((k) => k.trim())
+      .filter(Boolean),
+  );
+  const child: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(base)) {
+    if (value === undefined) continue;
+    const allowed =
+      ENV_ALLOWLIST.has(key) ||
+      declared.has(key) ||
+      ENV_ALLOWED_PREFIXES.some((p) => key.startsWith(p));
+    if (allowed) child[key] = value;
+  }
+  return { ...child, ...forced };
+};
+
 const tail = (text: string): string => {
   const lines = text.split("\n");
   return lines.slice(-TAIL_LINES).join("\n").trimEnd();
@@ -138,7 +206,7 @@ const spawnCaptured = (cmd: ProveCommand, cwd: string, timeoutMs: number): Promi
       shell: false,
       // own process group, so the timeout kills the whole runner tree
       detached: process.platform !== "win32",
-      env: { ...process.env, CI: "1", FORCE_COLOR: "0", NO_COLOR: "1" },
+      env: proveChildEnv(),
       stdio: ["ignore", "pipe", "pipe"],
     });
 

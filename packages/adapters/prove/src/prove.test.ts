@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
-import { detectProveCommand, makeProveRunner } from "./index";
+import { detectProveCommand, makeProveRunner, proveChildEnv } from "./index";
 
 const tmp = () => mkdtemp(join(tmpdir(), "verit-prove-"));
 
@@ -58,6 +58,57 @@ describe("detectProveCommand", () => {
       args: ["-e", "process.exit(0)"],
       source: "VERIT_PROVE_CMD",
     });
+  });
+});
+
+describe("proveChildEnv", () => {
+  const base: NodeJS.ProcessEnv = {
+    PATH: "/usr/bin",
+    HOME: "/Users/x",
+    ANTHROPIC_API_KEY: "sk-ant-secret",
+    OPENAI_API_KEY: "sk-secret",
+    GITHUB_TOKEN: "ghp_secret",
+    GH_TOKEN: "ghs_secret",
+    VERIT_INGEST_TOKEN: "vit_secret",
+    AWS_SECRET_ACCESS_KEY: "aws_secret",
+    CARGO_HOME: "/Users/x/.cargo",
+    npm_config_registry: "https://registry.npmjs.org",
+  };
+
+  it("keeps secrets out of the local child env", () => {
+    const env = proveChildEnv(base);
+    expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(env.OPENAI_API_KEY).toBeUndefined();
+    expect(env.GITHUB_TOKEN).toBeUndefined();
+    expect(env.GH_TOKEN).toBeUndefined();
+    expect(env.VERIT_INGEST_TOKEN).toBeUndefined();
+    expect(env.AWS_SECRET_ACCESS_KEY).toBeUndefined();
+    // the command still runs: tools, home, toolchain and npm config survive
+    expect(env.PATH).toBe("/usr/bin");
+    expect(env.HOME).toBe("/Users/x");
+    expect(env.CARGO_HOME).toBe("/Users/x/.cargo");
+    expect(env.npm_config_registry).toBe("https://registry.npmjs.org");
+    expect(env.CI).toBe("1");
+    expect(env.NO_COLOR).toBe("1");
+  });
+
+  it("passes only the keys the operator names in VERIT_PROVE_ENV", () => {
+    const env = proveChildEnv({
+      ...base,
+      VERIT_PROVE_ENV: "DATABASE_URL, MY_FLAG",
+      DATABASE_URL: "postgres://localhost/x",
+      MY_FLAG: "on",
+    });
+    expect(env.DATABASE_URL).toBe("postgres://localhost/x");
+    expect(env.MY_FLAG).toBe("on");
+    expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+  });
+
+  it("keeps the full env on GitHub Actions, where the runner is the boundary", () => {
+    const env = proveChildEnv({ ...base, GITHUB_ACTIONS: "true" });
+    expect(env.GITHUB_TOKEN).toBe("ghp_secret");
+    expect(env.ANTHROPIC_API_KEY).toBe("sk-ant-secret");
+    expect(env.CI).toBe("1");
   });
 });
 
