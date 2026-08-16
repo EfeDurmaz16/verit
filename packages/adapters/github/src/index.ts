@@ -7,13 +7,23 @@ import { StoreError } from "@verit/ports";
  * Check Runs need a token with `checks: write`. In an Action that is the
  * job's own GITHUB_TOKEN. Without one this is a dry run: the body is returned
  * for the caller to print, and nothing is posted. No GitHub App in v1.
+ *
+ * `options.fetch` is the transport seam: tests inject a fake fetch here and
+ * assert the exact request GitHub would have received.
  */
-export const makeGithubChecks = (token?: string): CheckPort => ({
+export const makeGithubChecks = (
+  token?: string,
+  options?: { fetch?: typeof globalThis.fetch },
+): CheckPort => ({
   postCheckRun: ({ owner, repo, headSha, name, conclusion, title, summary }) =>
     token
       ? Effect.tryPromise({
           try: async () => {
-            const { data } = await new Octokit({ auth: token }).checks.create({
+            const octokit = new Octokit({
+              auth: token,
+              ...(options?.fetch ? { request: { fetch: options.fetch } } : {}),
+            });
+            const { data } = await octokit.checks.create({
               owner,
               repo,
               name,
