@@ -3,9 +3,17 @@ packages:
   - "packages/*"
   - "packages/adapters/*"
 
+# tree-sitter grammar packages ship prebuilt wasm. Their install scripts build
+# native bindings we never use, so builds stay denied: no compiler toolchain
+# needed, CI installs offline from the store.
 allowBuilds:
   esbuild: true
   sharp: true
+  tree-sitter-go: false
+  tree-sitter-javascript: false
+  tree-sitter-python: false
+  tree-sitter-rust: false
+  tree-sitter-typescript: false
 
 onlyBuiltDependencies:
   - esbuild

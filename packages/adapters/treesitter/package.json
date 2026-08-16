@@ -3,16 +3,23 @@
   "license": "AGPL-3.0-only",
   "version": "0.0.1",
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@verit/ports": "workspace:*",
     "@verit/adapter-memory": "workspace:*",
+    "@verit/ports": "workspace:*",
     "effect": "^3.14.14",
+    "tree-sitter-go": "0.25.0",
+    "tree-sitter-javascript": "0.25.0",
+    "tree-sitter-python": "0.25.0",
+    "tree-sitter-rust": "0.24.0",
+    "tree-sitter-typescript": "0.23.2",
     "web-tree-sitter": "^0.25.3"
   },
   "devDependencies": {
