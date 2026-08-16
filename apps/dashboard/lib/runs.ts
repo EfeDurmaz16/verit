@@ -1,4 +1,5 @@
-import { proofVerdict, type RunUpload, type Understanding } from "@verit/domain";
+import { decodeUnderstanding, proofVerdict, type RunUpload, type Understanding } from "@verit/domain";
+import { Either } from "effect";
 import { query } from "./db";
 
 export interface RepoRow {
@@ -30,7 +31,8 @@ export interface RunDetail extends RunSummary {
   readonly proofSource: string | null;
   readonly logTail: string | null;
   readonly logKeys: readonly string[];
-  readonly understanding: Understanding;
+  /** Null when the stored blob fails the schema: unverified, not trusted. */
+  readonly understanding: Understanding | null;
   readonly proofSpec: { root: string; elements: Record<string, unknown> };
 }
 
@@ -149,12 +151,19 @@ export const getRun = async (repoId: string, runId: string): Promise<RunDetail |
       proof_source: string | null;
       log_tail: string | null;
       log_keys: string[];
-      understanding: Understanding;
+      understanding: unknown;
       proof_spec: { root: string; elements: Record<string, unknown> };
     }
   >(`SELECT * FROM runs WHERE repo_id = $1 AND id = $2`, [repoId, runId]);
   const row = rows[0];
   if (!row) return null;
+  // Decode on read. The column was validated at ingest, but the database is
+  // still a trust boundary: bad or migrated data reads as unverified, not as
+  // a trusted Understanding via a cast.
+  const decoded = decodeUnderstanding(row.understanding);
+  if (Either.isLeft(decoded)) {
+    console.error(`[verit-dashboard] run ${runId}: stored understanding fails the schema`);
+  }
   return {
     ...toSummary(row),
     repoId: row.repo_id,
@@ -165,7 +174,7 @@ export const getRun = async (repoId: string, runId: string): Promise<RunDetail |
     proofSource: row.proof_source,
     logTail: row.log_tail,
     logKeys: row.log_keys,
-    understanding: row.understanding,
+    understanding: Either.isRight(decoded) ? decoded.right : null,
     proofSpec: row.proof_spec,
   };
 };

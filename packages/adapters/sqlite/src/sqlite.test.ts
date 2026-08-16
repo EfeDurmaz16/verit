@@ -1,6 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { Effect } from "effect";
 import { makeSqliteDocumentStore, makeSqliteStores } from "./index";
@@ -29,6 +30,33 @@ describe("sqlite document store", () => {
     );
     const u = await Effect.runPromise(store.getUnderstandingJson("run:1"));
     expect(u?.what).toBe("w");
+  });
+
+  it("treats an invalid stored understanding as absent, not as trusted data", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "verit-bad-"));
+    const path = join(dir, "t.db");
+    const store = makeSqliteDocumentStore(path);
+    await Effect.runPromise(
+      store.upsertReviewRun({
+        id: "run:bad",
+        repoId: "r",
+        skillPackHash: "abc",
+        domain: "GENERAL",
+        createdAt: "2026-01-01T00:00:00Z",
+      }),
+    );
+    // corrupt the row behind the store's back: schema-invalid and non-JSON
+    const db = new DatabaseSync(path);
+    db.prepare(`UPDATE review_runs SET understanding_json = ? WHERE id = ?`).run(
+      JSON.stringify({ what: "w" }),
+      "run:bad",
+    );
+    expect(await Effect.runPromise(store.getUnderstandingJson("run:bad"))).toBeNull();
+    db.prepare(`UPDATE review_runs SET understanding_json = ? WHERE id = ?`).run(
+      "not json at all",
+      "run:bad",
+    );
+    expect(await Effect.runPromise(store.getUnderstandingJson("run:bad"))).toBeNull();
   });
 
   it("indexes chunks with FTS retrieval", async () => {

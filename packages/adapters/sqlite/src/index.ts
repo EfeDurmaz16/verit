@@ -1,12 +1,12 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { Effect } from "effect";
+import { Effect, Either } from "effect";
+import { decodeUnderstanding } from "@verit/domain";
 import type {
   IndexChunk,
   ProofArtifact,
   ReviewRun,
-  Understanding,
   WorkspaceRun,
 } from "@verit/domain";
 import type { DocumentStore, SessionStore } from "@verit/ports";
@@ -302,7 +302,23 @@ const documentStoreOn = (db: DatabaseSync): DocumentStore => {
           .prepare(`SELECT understanding_json FROM review_runs WHERE id = ?`)
           .get(runId) as { understanding_json?: string } | undefined;
         if (!row?.understanding_json) return null;
-        return JSON.parse(row.understanding_json) as Understanding;
+        // Decode on read: a stored blob is a trust boundary like any other.
+        // Invalid data means the run is unverified, never a blind cast.
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(row.understanding_json);
+        } catch {
+          console.error(`[verit-sqlite] run ${runId}: stored understanding is not JSON`);
+          return null;
+        }
+        const decoded = decodeUnderstanding(parsed);
+        if (Either.isLeft(decoded)) {
+          console.error(
+            `[verit-sqlite] run ${runId}: stored understanding fails the schema, treating as absent`,
+          );
+          return null;
+        }
+        return decoded.right;
       }),
   };
 };
