@@ -1,0 +1,84 @@
+name: "cyclops behavior proof"
+description: "Run the pull request's own tests and post the pass/fail result as a GitHub Check, with a structured Understanding."
+branding:
+  icon: "check-circle"
+  color: "purple"
+
+inputs:
+  pr:
+    description: "owner/repo#number to review. Defaults to the pull request that triggered this run."
+    required: false
+    default: ""
+  github-token:
+    description: "Token used to read the PR and post the Check. Needs checks:write to post. Without it the Check is printed, not posted."
+    required: false
+    default: ${{ github.token }}
+  prove-command:
+    description: "Override the detected verification command, as argv, e.g. 'pnpm test'. Detected from the repo when empty."
+    required: false
+    default: ""
+  prove-timeout-ms:
+    description: "Hard timeout for the verification command. The process group is killed."
+    required: false
+    default: "600000"
+  lane-harness:
+    description: "Headless coding CLI that writes the Understanding: claude or cursor. Empty uses the deterministic stub."
+    required: false
+    default: ""
+  lane-model:
+    description: "Model passed to the selected lane harness."
+    required: false
+    default: ""
+  anthropic-api-key:
+    description: "Auth for lane-harness: claude. Leave empty and the lane falls back to the stub."
+    required: false
+    default: ""
+  dashboard-url:
+    description: "Base URL of a cyclops dashboard. Set with ingest-token to upload the run and link its proof page."
+    required: false
+    default: ""
+  ingest-token:
+    description: "Per-repo ingest token issued by the dashboard. Set with dashboard-url."
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    # cyclops runs from its own checkout, which is github.action_path. The repo
+    # under review stays in GITHUB_WORKSPACE, which is where prove executes.
+    - uses: pnpm/action-setup@v4
+      with:
+        package_json_file: ${{ github.action_path }}/package.json
+    - uses: actions/setup-node@v4
+      with:
+        node-version: "22"
+    - name: Install cyclops
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: pnpm install --frozen-lockfile
+    - name: Install Claude Code
+      if: inputs.lane-harness == 'claude' && inputs.anthropic-api-key != ''
+      shell: bash
+      run: npm install -g @anthropic-ai/claude-code
+    - name: Review, prove and post the Check
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        PR_SPEC: ${{ inputs.pr != '' && inputs.pr || format('{0}#{1}', github.repository, github.event.pull_request.number) }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        # prove runs in the caller's checkout, and the ProveRunner refuses any
+        # checkout that is not the repo under review.
+        CYCLOPS_PROVE_CWD: ${{ github.workspace }}
+        CYCLOPS_PROVE_CMD: ${{ inputs.prove-command }}
+        CYCLOPS_PROVE_TIMEOUT_MS: ${{ inputs.prove-timeout-ms }}
+        CYCLOPS_SQLITE_PATH: ${{ github.action_path }}/.data/cyclops.db
+        # The lane stays on the stub unless both the harness and its key are set,
+        # so a fork PR with no secrets degrades instead of hanging on a CLI that
+        # cannot authenticate.
+        CYCLOPS_LANE_HARNESS: ${{ inputs.anthropic-api-key != '' && inputs.lane-harness || '' }}
+        CYCLOPS_LANE_MODEL: ${{ inputs.lane-model }}
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        CYCLOPS_DASHBOARD_URL: ${{ inputs.dashboard-url }}
+        CYCLOPS_INGEST_TOKEN: ${{ inputs.ingest-token }}
+      run: pnpm exec tsx packages/cli/src/main.ts dogfood "$PR_SPEC"
