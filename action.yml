@@ -47,12 +47,17 @@ runs:
   steps:
     # verit runs from its own checkout, which is github.action_path. The repo
     # under review stays in GITHUB_WORKSPACE, which is where prove executes.
-    - uses: pnpm/action-setup@v4
-      with:
-        package_json_file: ${{ github.action_path }}/package.json
     - uses: actions/setup-node@v4
       with:
         node-version: "22"
+    # pnpm/action-setup cannot be used here. It resolves package_json_file
+    # against the caller's GITHUB_WORKSPACE, which never contains verit's
+    # checkout, and passing `version` instead makes it fail on any caller whose
+    # own package.json pins a different pnpm. Install from verit's own pin.
+    - name: Install pnpm
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm install -g "$(node -p "require('./package.json').packageManager")"
     - name: Install verit
       shell: bash
       working-directory: ${{ github.action_path }}
