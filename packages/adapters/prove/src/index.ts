@@ -132,6 +132,7 @@ const ENV_ALLOWLIST = new Set([
   "SHELL",
   "USER",
   "CI",
+  "NODE_ENV",
   // language toolchains
   "CARGO_HOME",
   "RUSTUP_HOME",
@@ -172,14 +173,15 @@ export const proveChildEnv = (
       .map((k) => k.trim())
       .filter(Boolean),
   );
-  const child: NodeJS.ProcessEnv = {};
-  for (const [key, value] of Object.entries(base)) {
-    if (value === undefined) continue;
+  // Scrub by deletion so the augmented ProcessEnv shape (e.g. Next's required
+  // NODE_ENV) stays satisfied without a cast.
+  const child = { ...base };
+  for (const key of Object.keys(child)) {
     const allowed =
       ENV_ALLOWLIST.has(key) ||
       declared.has(key) ||
       ENV_ALLOWED_PREFIXES.some((p) => key.startsWith(p));
-    if (allowed) child[key] = value;
+    if (!allowed) delete child[key];
   }
   return { ...child, ...forced };
 };

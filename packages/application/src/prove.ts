@@ -50,17 +50,21 @@ export const runProve = (deps: { prove: ProvePort; docs: DocumentStore }) =>
   runId: string;
   cwd: string;
   expectRepo: string;
-  understanding: Understanding;
+  /** Null when the lane produced no analysis. Prove still runs and logs. */
+  understanding: Understanding | null;
   timeoutMs?: number;
-}): Effect.Effect<{ understanding: Understanding; outcome: ProveOutcome }, StoreError> =>
+}): Effect.Effect<{ understanding: Understanding | null; outcome: ProveOutcome }, StoreError> =>
   Effect.gen(function* () {
     const outcome = yield* deps.prove.run({
       cwd: input.cwd,
       expectRepo: input.expectRepo,
       timeoutMs: input.timeoutMs,
     });
-    const understanding = withProveRef(input.understanding, outcome);
-    yield* deps.docs.saveUnderstandingJson(input.runId, understanding);
+    const understanding =
+      input.understanding === null ? null : withProveRef(input.understanding, outcome);
+    if (understanding !== null) {
+      yield* deps.docs.saveUnderstandingJson(input.runId, understanding);
+    }
     const body = proveLogBody(outcome);
     yield* deps.docs.upsertProofArtifact({
       id: `proof:${input.runId}:prove`,

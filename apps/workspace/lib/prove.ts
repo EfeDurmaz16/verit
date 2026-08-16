@@ -68,7 +68,7 @@ export async function proveReviewRun(input: {
   repo: string;
   understanding: Understanding;
 }): Promise<{ understanding: Understanding; outcome: ProveOutcome }> {
-  return Effect.runPromise(
+  const result = await Effect.runPromise(
     runProve({ prove: runner, docs: docs() })({
       runId: input.reviewRunId,
       cwd: PROVE_CWD,
@@ -77,6 +77,12 @@ export async function proveReviewRun(input: {
       timeoutMs: TIMEOUT_MS,
     }),
   );
+  // runProve keeps the Understanding it was given; null only enters when the
+  // caller had none, and this caller always has one.
+  return {
+    understanding: result.understanding ?? input.understanding,
+    outcome: result.outcome,
+  };
 }
 
 const PROVE_KEY = "u-prove-action";

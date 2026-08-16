@@ -96,6 +96,12 @@ export interface ClassifierPort {
   }) => Effect.Effect<{ domain: ReviewDomain; focus?: ReviewDomain; confidence: number }, StoreError>;
 }
 
+/**
+ * Produces the Understanding of one change, or null when the lane did not
+ * complete (no harness configured, spawn failure, timeout, invalid output).
+ * Null is an honest answer: the pipeline reports "analysis did not complete"
+ * and the Check goes neutral. No adapter may invent an Understanding instead.
+ */
 export interface HarnessPort {
   readonly runUnderstand: (input: {
     title: string;
@@ -104,7 +110,7 @@ export interface HarnessPort {
     diff: string;
     context: ReviewContext;
     role: "implement" | "review";
-  }) => Effect.Effect<Understanding, StoreError>;
+  }) => Effect.Effect<Understanding | null, StoreError>;
 }
 
 export interface CompilerPort {

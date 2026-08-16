@@ -102,32 +102,34 @@ describe("understanding extraction", () => {
   });
 });
 
-describe("agent harness fallback", () => {
-  it("keeps producing an Understanding when no CLI harness is selected", async () => {
-    const prev = process.env.VERIT_LANE_HARNESS;
+describe("agent harness failure", () => {
+  it("returns null when no CLI harness is selected and Pi is unset", async () => {
+    const prevHarness = process.env.VERIT_LANE_HARNESS;
+    const prevPi = process.env.VERIT_PI_BIN;
     delete process.env.VERIT_LANE_HARNESS;
+    delete process.env.VERIT_PI_BIN;
     try {
-      const u = await Effect.runPromise(makeAgentHarness().runUnderstand(INPUT));
-      expect(u.what).toContain("unlisted mints");
-      expect(u.how).toContain("src/pay.ts");
+      expect(await Effect.runPromise(makeAgentHarness().runUnderstand(INPUT))).toBeNull();
     } finally {
-      if (prev != null) process.env.VERIT_LANE_HARNESS = prev;
+      if (prevHarness != null) process.env.VERIT_LANE_HARNESS = prevHarness;
+      if (prevPi != null) process.env.VERIT_PI_BIN = prevPi;
     }
   });
 
-  it("falls back to the stub when the selected CLI is not on PATH", async () => {
+  it("returns null when the selected CLI is not on PATH: no invented Understanding", async () => {
     const prevHarness = process.env.VERIT_LANE_HARNESS;
+    const prevPi = process.env.VERIT_PI_BIN;
     const prevPath = process.env.PATH;
     process.env.VERIT_LANE_HARNESS = "claude";
+    delete process.env.VERIT_PI_BIN;
     process.env.PATH = "/nonexistent-verit-test-path";
     try {
-      const u = await Effect.runPromise(makeAgentHarness().runUnderstand(INPUT));
-      expect(u.what).toContain("unlisted mints");
-      expect(u.risks.some((r) => r.area === "harness")).toBe(true);
+      expect(await Effect.runPromise(makeAgentHarness().runUnderstand(INPUT))).toBeNull();
     } finally {
       process.env.PATH = prevPath;
       if (prevHarness == null) delete process.env.VERIT_LANE_HARNESS;
       else process.env.VERIT_LANE_HARNESS = prevHarness;
+      if (prevPi != null) process.env.VERIT_PI_BIN = prevPi;
     }
   });
 });

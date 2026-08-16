@@ -108,8 +108,8 @@ const proveIfPointedHere = async (
   docs: DocumentStore,
   runId: string,
   repo: string,
-  understanding: Understanding,
-): Promise<{ understanding: Understanding; outcome: ProveOutcome | null }> => {
+  understanding: Understanding | null,
+): Promise<{ understanding: Understanding | null; outcome: ProveOutcome | null }> => {
   const cwd = process.env.VERIT_PROVE_CWD || process.env.GITHUB_WORKSPACE;
   if (!cwd) return { understanding, outcome: null };
   const timeoutMs = Number(process.env.VERIT_PROVE_TIMEOUT_MS) || undefined;
@@ -162,7 +162,11 @@ const runUnderstandPipeline = async (input: {
       nowIso: new Date().toISOString(),
     }),
   );
-  let understanding = stubRisk(result.understanding);
+  let understanding =
+    result.understanding === null ? null : stubRisk(result.understanding);
+  if (understanding === null) {
+    console.error("understand: the lane produced no Understanding, this run has no analysis");
+  }
   let outcome: ProveOutcome | null = null;
   if (input.repo) {
     const proved = await proveIfPointedHere(docs, result.runId, input.repo, understanding);
@@ -170,40 +174,42 @@ const runUnderstandPipeline = async (input: {
     outcome = proved.outcome;
   }
   const patch = stubPatch();
-  // Re-render with prove/risk stubs so Spec matches enriched Understanding
-  const render = makeProofRender();
-  const enrichedSpec = render.toSpec({
-    understanding,
-    context: {
-      ...input.context,
-      domain: understanding.what ? input.context.domain : input.context.domain,
-    },
-    risksReviewer: understanding.risks.filter((r) => r.source === "reviewer"),
-    archNodes: input.paths.slice(0, 24).map((p) => ({
-      id: p,
-      label: p.split("/").pop() ?? p,
-    })),
-    archEdges:
-      input.paths.length > 1
-        ? input.paths.slice(1, 24).map((p) => ({
-            from: input.paths[0]!,
-            to: p,
-            kind: "co-changed",
-          }))
-        : [],
-    suggestedPatch: patch.diff || undefined,
-  });
-  await Effect.runPromise(docs.saveUnderstandingJson(result.runId, understanding));
-  const blob = makeLocalBlob();
-  const specPath = await writeProofArtifacts(blob, result.runId, enrichedSpec, input.alias);
+  // Re-render with prove/risk stubs so Spec matches enriched Understanding.
+  // Without an Understanding there is nothing to render and no spec to write.
+  let enrichedSpec: unknown = null;
+  let specPath: string | null = null;
+  if (understanding !== null) {
+    const render = makeProofRender();
+    enrichedSpec = render.toSpec({
+      understanding,
+      context: input.context,
+      risksReviewer: understanding.risks.filter((r) => r.source === "reviewer"),
+      archNodes: input.paths.slice(0, 24).map((p) => ({
+        id: p,
+        label: p.split("/").pop() ?? p,
+      })),
+      archEdges:
+        input.paths.length > 1
+          ? input.paths.slice(1, 24).map((p) => ({
+              from: input.paths[0]!,
+              to: p,
+              kind: "co-changed",
+            }))
+          : [],
+      suggestedPatch: patch.diff || undefined,
+    });
+    await Effect.runPromise(docs.saveUnderstandingJson(result.runId, understanding));
+    const blob = makeLocalBlob();
+    specPath = await writeProofArtifacts(blob, result.runId, enrichedSpec, input.alias);
+  }
   return {
     runId: result.runId,
     run: result.run,
     spec: enrichedSpec,
     skillPackHash: result.skillPackHash,
-    what: understanding.what,
-    risks: understanding.risks.length,
-    proofRefs: understanding.proof_refs.length,
+    what: understanding?.what ?? null,
+    risks: understanding?.risks.length ?? 0,
+    proofRefs: understanding?.proof_refs.length ?? 0,
     patch: patch.summary,
     specPath,
     understanding,
@@ -220,7 +226,7 @@ const runUnderstandPipeline = async (input: {
  * is posted, and no green check is ever invented for an unproven change.
  */
 const postBehaviorProofCheck = async (input: {
-  understanding: Understanding;
+  understanding: Understanding | null;
   outcome: ProveOutcome | null;
   runId: string;
   proofPageUrl?: string;
@@ -267,7 +273,7 @@ const postBehaviorProofCheck = async (input: {
 /** The pipeline result minus the bulky objects the caller keeps for itself. */
 const printable = <
   T extends {
-    understanding: Understanding;
+    understanding: Understanding | null;
     outcome: ProveOutcome | null;
     run: ReviewRun;
     spec: unknown;
@@ -470,7 +476,7 @@ const main = async () => {
       process.env.PROOF_PAGE_URL ||
       (target ? proofPageUrl(target.baseUrl, out.repoSlug, out.runId) : undefined);
     let upload: { uploaded: boolean; error?: string } | null = null;
-    if (target) {
+    if (target && out.understanding !== null) {
       console.error(`dogfood: upload run to ${target.baseUrl}`);
       upload = await uploadRun(
         target,
@@ -484,6 +490,8 @@ const main = async () => {
         }),
       );
       if (!upload.uploaded) console.error(`dashboard upload failed: ${upload.error}`);
+    } else if (target) {
+      console.error("dogfood: no Understanding, nothing to upload");
     }
 
     console.error(`dogfood: post check`);

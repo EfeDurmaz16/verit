@@ -34,7 +34,8 @@ export const runReviewUnderstand = (deps: {
     runId: string;
     /** The row this verb wrote. The dashboard upload posts it verbatim. */
     run: ReviewRun;
-    understanding: Understanding;
+    /** Null when the lane did not complete. The run then has no analysis. */
+    understanding: Understanding | null;
     spec: unknown;
     skillPackHash: string;
   },
@@ -70,6 +71,15 @@ export const runReviewUnderstand = (deps: {
       createdAt: input.nowIso,
     };
     yield* deps.docs.upsertReviewRun(run);
+    if (understanding === null) {
+      // The lane failed. Record the run, store nothing invented, render no
+      // spec. The caller reports "analysis did not complete" and the Check
+      // goes neutral whatever the prove result says.
+      if (input.prId) {
+        yield* deps.graph.linkRunToPr(runId, input.prId);
+      }
+      return { runId, run, understanding: null, spec: null, skillPackHash: compiled.skillPackHash };
+    }
     yield* deps.docs.saveUnderstandingJson(runId, understanding);
     const archNodes = input.paths.slice(0, 24).map((p) => ({
       id: p,

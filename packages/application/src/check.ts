@@ -17,46 +17,66 @@ const logExcerpt = (o: ProveOutcome): string =>
   o.logTail.split("\n").slice(-LOG_LINES).join("\n").slice(-LOG_CHARS);
 
 /**
- * The `post` verb: the review outcome as a Check Run body. The conclusion is
- * the prove exit code and nothing else. An Understanding without a run is
- * `neutral`, never a green check.
+ * The `post` verb: the review outcome as a Check Run body.
+ *
+ * The conclusion is honest or it is nothing:
+ * - No Understanding (the lane failed): `neutral`, whatever the tests said.
+ *   The prove result still reports its own pass or fail inside the body.
+ * - An Understanding without a prove run: `neutral`, never a green check.
+ * - Both present: the prove exit code decides, except a run whose analysis
+ *   only covered part of the diff caps success at `neutral`.
  *
  * Copy follows STYLE.md: plain labels, short sentences, no em dash. The
  * Understanding's own prose is normalized in @verit/domain when it decodes.
  */
 export const behaviorProofCheck = (input: {
-  understanding: Understanding;
+  /** Null when the lane did not complete. Analysis is then absent, not faked. */
+  understanding: Understanding | null;
   outcome: ProveOutcome | null;
   /** Hosted proof page for this run, when one has been published. */
   proofPageUrl?: string;
   runId?: string;
 }): Omit<CheckRunInput, "owner" | "repo" | "headSha"> => {
   const { understanding: u, outcome, proofPageUrl, runId } = input;
-  const conclusion = proofVerdict(outcome);
-  const title =
+  const conclusion = u === null ? "neutral" : proofVerdict(outcome);
+  const proofTitle =
     outcome === null
-      ? "No proof was run. Understanding only."
+      ? "No proof was run."
       : outcome.timedOut
         ? `Proof timed out: ${outcome.command}`
         : outcome.exitCode === 0
           ? `Proof passed: ${outcome.command}`
           : `Proof failed: ${outcome.command} (exit ${outcome.exitCode})`;
+  const title =
+    u === null
+      ? `Analysis did not complete. ${proofTitle}`
+      : outcome === null
+        ? "No proof was run. Understanding only."
+        : proofTitle;
 
-  const reviewerRisks = u.risks.filter((r) => r.source === "reviewer").length;
-  const otherRefs = u.proof_refs.filter((r) => !isProveRef(r));
-
-  const lines = [
-    `**What changed:** ${condense(u.what, 400)}`,
-    "",
-    `**Why:** ${condense(u.why, 400)}`,
-    "",
-    `**How:** ${condense(u.how, 600)}`,
-    "",
-    `**Risks:** ${u.risks.length} in total. ${reviewerRisks} found by review.`,
-    "",
-    "## Proof",
-    "",
-  ];
+  const lines: string[] = [];
+  if (u === null) {
+    lines.push(
+      "Analysis did not complete. No Understanding was produced for this run, so this check stays neutral whatever the tests say.",
+      "",
+      "## Proof",
+      "",
+    );
+  } else {
+    const reviewerRisks = u.risks.filter((r) => r.source === "reviewer").length;
+    lines.push(
+      `**What changed:** ${condense(u.what, 400)}`,
+      "",
+      `**Why:** ${condense(u.why, 400)}`,
+      "",
+      `**How:** ${condense(u.how, 600)}`,
+      "",
+      `**Risks:** ${u.risks.length} in total. ${reviewerRisks} found by review.`,
+      "",
+      "## Proof",
+      "",
+    );
+  }
 
   if (outcome === null) {
     lines.push(
@@ -78,6 +98,7 @@ export const behaviorProofCheck = (input: {
     );
   }
 
+  const otherRefs = u === null ? [] : u.proof_refs.filter((r) => !isProveRef(r));
   if (otherRefs.length > 0) {
     lines.push("", "### Other evidence", "");
     for (const r of otherRefs) {

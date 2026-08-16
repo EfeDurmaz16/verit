@@ -159,3 +159,42 @@ describe("behaviorProofCheck output style", () => {
     }
   });
 });
+
+describe("behaviorProofCheck without an Understanding", () => {
+  const passing = {
+    command: "pnpm run test",
+    source: "package.json#scripts.test",
+    cwd: "/tmp/r",
+    repo: "acme/pay",
+    exitCode: 0,
+    durationMs: 900,
+    timedOut: false,
+    logTail: "12 passed\n",
+    log: "running 12 tests\n12 passed\n",
+    startedAt: "2026-08-09T00:00:00Z",
+  };
+
+  it("lane fails + tests pass: conclusion is neutral, never success", () => {
+    const check = behaviorProofCheck({ understanding: null, outcome: passing });
+    expect(check.conclusion).toBe("neutral");
+    expect(check.title).toContain("Analysis did not complete");
+    // the prove result still reports its own pass inside the neutral body
+    expect(check.summary).toContain("Analysis did not complete");
+    expect(check.summary).toContain("exited **0**");
+  });
+
+  it("lane fails + tests fail: still neutral, with the failure in the body", () => {
+    const check = behaviorProofCheck({
+      understanding: null,
+      outcome: { ...passing, exitCode: 1, logTail: "1 failed\n" },
+    });
+    expect(check.conclusion).toBe("neutral");
+    expect(check.summary).toContain("exited **1**");
+  });
+
+  it("lane fails + no proof: neutral and says nothing ran", () => {
+    const check = behaviorProofCheck({ understanding: null, outcome: null });
+    expect(check.conclusion).toBe("neutral");
+    expect(check.summary).toContain("Nothing was run to check this change");
+  });
+});
