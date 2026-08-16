@@ -17,3 +17,6 @@ next-env.d.ts
 
 # Dashboard blobs written by the filesystem object store adapter
 .data/dashboard-objects/
+
+# Local design system scratch, not part of the shipped repo
+design/
