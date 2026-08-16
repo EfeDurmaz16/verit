@@ -24,6 +24,7 @@ import {
 } from "@verit/adapter-memory";
 import { makeGraphStore } from "@verit/adapter-neo4j";
 import { makeAgentHarness } from "@verit/adapter-pi";
+import { laneEnabled, makeLaneHarness } from "@verit/lane";
 import { makeSqliteDocumentStore } from "@verit/adapter-sqlite";
 import { makeTreeSitterParser } from "@verit/adapter-treesitter";
 import type { PullRequest, ReviewPresets, ReviewRun, Understanding } from "@verit/domain";
@@ -43,10 +44,21 @@ Commands:
 Env:
   GITHUB_TOKEN          optional for public PRs; needs checks:write to post a Check
   VERIT_SQLITE_PATH   default .data/verit.db (set empty to use memory)
-  VERIT_LANE_HARNESS  claude | cursor asks that headless CLI for the Understanding;
-                        anything else keeps the Pi path. Any failure falls back
-  VERIT_LANE_MODEL    optional model for the selected lane harness
-  VERIT_LANE_TIMEOUT_MS  hard timeout for the lane CLI, default 900000
+  VERIT_LANE_PROVIDER anthropic | openai-compat runs the built-in HTTP lane, the
+                        default whenever it is set. No coding CLI is involved
+  VERIT_LANE_MODEL    model id for the lane. Required with VERIT_LANE_PROVIDER:
+                        the lane pins its model and never guesses one.
+                        Optional model override for the CLI harnesses below
+  VERIT_LANE_BASE_URL API base URL override. openai-compat covers OpenAI, Grok
+                        (https://api.x.ai/v1), DeepSeek, GLM, and local vLLM
+  VERIT_LANE_API_KEY  lane API key. Falls back to ANTHROPIC_API_KEY or
+                        OPENAI_API_KEY to match the provider
+  VERIT_LANE_MAX_TURNS       lane model-call cap, default 40
+  VERIT_LANE_MAX_TOTAL_TOKENS  lane total token cap, default 4000000
+  VERIT_LANE_HARNESS  claude | cursor asks that headless CLI for the Understanding
+                        when no VERIT_LANE_PROVIDER is set; anything else keeps
+                        the Pi path. Any failure falls back
+  VERIT_LANE_TIMEOUT_MS  hard timeout for the lane, default 900000
   VERIT_PI_BIN        optional Pi binary; else deterministic stub Understanding
   VERIT_PI_ARGS       optional args (default: understand --json)
   VERIT_NEO4J_URI     optional bolt://… (memory graph fallback if unset)
@@ -68,6 +80,13 @@ const defaultPresets: ReviewPresets = {
   inline_comments: "high_conf_only",
   domain: "GENERAL",
 };
+
+/**
+ * The Understanding lane for this run. Naming VERIT_LANE_PROVIDER selects the
+ * built-in HTTP lane and pins its model; that is the default path. Unset, the
+ * CLI-harness adapters (claude/cursor/pi) keep working as before.
+ */
+const makeHarness = () => (laneEnabled() ? makeLaneHarness() : makeAgentHarness());
 
 const makeDocs = () => {
   const path = process.env.VERIT_SQLITE_PATH;
@@ -147,7 +166,7 @@ const runUnderstandPipeline = async (input: {
     runReviewUnderstand({
       docs,
       graph,
-      harness: makeAgentHarness(),
+      harness: makeHarness(),
       classifier: makeHeuristicClassifier(),
       render: makeProofRender(),
     })({
