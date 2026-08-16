@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Cyclops workspace",
+  title: "Verit workspace",
   description: "Behaviour-proof review workspace over GitHub pull requests",
 };
 

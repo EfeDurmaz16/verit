@@ -28,7 +28,7 @@ export default async function RepoPage({
       {runs.length === 0 ? (
         <Empty
           title="No runs yet"
-          hint="Runs appear here once the Action uploads one. Set CYCLOPS_DASHBOARD_URL and CYCLOPS_INGEST_TOKEN in the workflow."
+          hint="Runs appear here once the Action uploads one. Set VERIT_DASHBOARD_URL and VERIT_INGEST_TOKEN in the workflow."
         />
       ) : (
         <div className="overflow-x-auto rounded-lg border border-line bg-surface">

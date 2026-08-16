@@ -23,27 +23,27 @@ importers:
 
   apps/dashboard:
     dependencies:
-      '@cyclops/adapter-local-blob':
-        specifier: workspace:*
-        version: link:../../packages/adapters/local-blob
-      '@cyclops/adapter-s3-blob':
-        specifier: workspace:*
-        version: link:../../packages/adapters/s3-blob
-      '@cyclops/domain':
-        specifier: workspace:*
-        version: link:../../packages/domain
-      '@cyclops/ports':
-        specifier: workspace:*
-        version: link:../../packages/ports
-      '@cyclops/proof-ui':
-        specifier: workspace:*
-        version: link:../../packages/proof-ui
       '@json-render/core':
         specifier: ^0.19.0
         version: 0.19.0(zod@4.4.3)
       '@json-render/react':
         specifier: ^0.19.0
         version: 0.19.0(react@19.2.4)(zod@4.4.3)
+      '@verit/adapter-local-blob':
+        specifier: workspace:*
+        version: link:../../packages/adapters/local-blob
+      '@verit/adapter-s3-blob':
+        specifier: workspace:*
+        version: link:../../packages/adapters/s3-blob
+      '@verit/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+      '@verit/ports':
+        specifier: workspace:*
+        version: link:../../packages/ports
+      '@verit/proof-ui':
+        specifier: workspace:*
+        version: link:../../packages/proof-ui
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -93,33 +93,33 @@ importers:
 
   apps/workspace:
     dependencies:
-      '@cyclops/adapter-memory':
-        specifier: workspace:*
-        version: link:../../packages/adapters/memory
-      '@cyclops/adapter-prove':
-        specifier: workspace:*
-        version: link:../../packages/adapters/prove
-      '@cyclops/adapter-sqlite':
-        specifier: workspace:*
-        version: link:../../packages/adapters/sqlite
-      '@cyclops/application':
-        specifier: workspace:*
-        version: link:../../packages/application
-      '@cyclops/domain':
-        specifier: workspace:*
-        version: link:../../packages/domain
-      '@cyclops/ports':
-        specifier: workspace:*
-        version: link:../../packages/ports
-      '@cyclops/proof-ui':
-        specifier: workspace:*
-        version: link:../../packages/proof-ui
       '@json-render/core':
         specifier: ^0.19.0
         version: 0.19.0(zod@4.4.3)
       '@json-render/react':
         specifier: ^0.19.0
         version: 0.19.0(react@19.2.4)(zod@4.4.3)
+      '@verit/adapter-memory':
+        specifier: workspace:*
+        version: link:../../packages/adapters/memory
+      '@verit/adapter-prove':
+        specifier: workspace:*
+        version: link:../../packages/adapters/prove
+      '@verit/adapter-sqlite':
+        specifier: workspace:*
+        version: link:../../packages/adapters/sqlite
+      '@verit/application':
+        specifier: workspace:*
+        version: link:../../packages/application
+      '@verit/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+      '@verit/ports':
+        specifier: workspace:*
+        version: link:../../packages/ports
+      '@verit/proof-ui':
+        specifier: workspace:*
+        version: link:../../packages/proof-ui
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -181,7 +181,7 @@ importers:
 
   packages/action:
     dependencies:
-      '@cyclops/cli':
+      '@verit/cli':
         specifier: workspace:*
         version: link:../cli
     devDependencies:
@@ -194,13 +194,13 @@ importers:
 
   packages/adapters/fs-ingest:
     dependencies:
-      '@cyclops/application':
+      '@verit/application':
         specifier: workspace:*
         version: link:../../application
-      '@cyclops/domain':
+      '@verit/domain':
         specifier: workspace:*
         version: link:../../domain
-      '@cyclops/ports':
+      '@verit/ports':
         specifier: workspace:*
         version: link:../../ports
       effect:
@@ -216,15 +216,15 @@ importers:
 
   packages/adapters/github:
     dependencies:
-      '@cyclops/domain':
-        specifier: workspace:*
-        version: link:../../domain
-      '@cyclops/ports':
-        specifier: workspace:*
-        version: link:../../ports
       '@octokit/rest':
         specifier: ^21.1.1
         version: 21.1.1
+      '@verit/domain':
+        specifier: workspace:*
+        version: link:../../domain
+      '@verit/ports':
+        specifier: workspace:*
+        version: link:../../ports
       effect:
         specifier: ^3.14.14
         version: 3.22.1
@@ -238,7 +238,7 @@ importers:
 
   packages/adapters/local-blob:
     dependencies:
-      '@cyclops/ports':
+      '@verit/ports':
         specifier: workspace:*
         version: link:../../ports
       effect:
@@ -254,13 +254,13 @@ importers:
 
   packages/adapters/memory:
     dependencies:
-      '@cyclops/application':
+      '@verit/application':
         specifier: workspace:*
         version: link:../../application
-      '@cyclops/domain':
+      '@verit/domain':
         specifier: workspace:*
         version: link:../../domain
-      '@cyclops/ports':
+      '@verit/ports':
         specifier: workspace:*
         version: link:../../ports
       effect:
@@ -276,13 +276,13 @@ importers:
 
   packages/adapters/neo4j:
     dependencies:
-      '@cyclops/adapter-memory':
+      '@verit/adapter-memory':
         specifier: workspace:*
         version: link:../memory
-      '@cyclops/domain':
+      '@verit/domain':
         specifier: workspace:*
         version: link:../../domain
-      '@cyclops/ports':
+      '@verit/ports':
         specifier: workspace:*
         version: link:../../ports
       effect:
@@ -301,10 +301,10 @@ importers:
 
   packages/adapters/pi:
     dependencies:
-      '@cyclops/domain':
+      '@verit/domain':
         specifier: workspace:*
         version: link:../../domain
-      '@cyclops/ports':
+      '@verit/ports':
         specifier: workspace:*
         version: link:../../ports
       effect:
@@ -320,10 +320,10 @@ importers:
 
   packages/adapters/prove:
     dependencies:
-      '@cyclops/domain':
+      '@verit/domain':
         specifier: workspace:*
         version: link:../../domain
-      '@cyclops/ports':
+      '@verit/ports':
         specifier: workspace:*
         version: link:../../ports
       effect:
@@ -339,7 +339,7 @@ importers:
 
   packages/adapters/s3-blob:
     dependencies:
-      '@cyclops/ports':
+      '@verit/ports':
         specifier: workspace:*
         version: link:../../ports
       aws4fetch:
@@ -361,10 +361,10 @@ importers:
 
   packages/adapters/sqlite:
     dependencies:
-      '@cyclops/domain':
+      '@verit/domain':
         specifier: workspace:*
         version: link:../../domain
-      '@cyclops/ports':
+      '@verit/ports':
         specifier: workspace:*
         version: link:../../ports
       effect:
@@ -380,10 +380,10 @@ importers:
 
   packages/adapters/treesitter:
     dependencies:
-      '@cyclops/adapter-memory':
+      '@verit/adapter-memory':
         specifier: workspace:*
         version: link:../memory
-      '@cyclops/ports':
+      '@verit/ports':
         specifier: workspace:*
         version: link:../../ports
       effect:
@@ -402,10 +402,10 @@ importers:
 
   packages/application:
     dependencies:
-      '@cyclops/domain':
+      '@verit/domain':
         specifier: workspace:*
         version: link:../domain
-      '@cyclops/ports':
+      '@verit/ports':
         specifier: workspace:*
         version: link:../ports
       effect:
@@ -421,40 +421,40 @@ importers:
 
   packages/cli:
     dependencies:
-      '@cyclops/adapter-fs-ingest':
+      '@verit/adapter-fs-ingest':
         specifier: workspace:*
         version: link:../adapters/fs-ingest
-      '@cyclops/adapter-github':
+      '@verit/adapter-github':
         specifier: workspace:*
         version: link:../adapters/github
-      '@cyclops/adapter-local-blob':
+      '@verit/adapter-local-blob':
         specifier: workspace:*
         version: link:../adapters/local-blob
-      '@cyclops/adapter-memory':
+      '@verit/adapter-memory':
         specifier: workspace:*
         version: link:../adapters/memory
-      '@cyclops/adapter-neo4j':
+      '@verit/adapter-neo4j':
         specifier: workspace:*
         version: link:../adapters/neo4j
-      '@cyclops/adapter-pi':
+      '@verit/adapter-pi':
         specifier: workspace:*
         version: link:../adapters/pi
-      '@cyclops/adapter-prove':
+      '@verit/adapter-prove':
         specifier: workspace:*
         version: link:../adapters/prove
-      '@cyclops/adapter-sqlite':
+      '@verit/adapter-sqlite':
         specifier: workspace:*
         version: link:../adapters/sqlite
-      '@cyclops/adapter-treesitter':
+      '@verit/adapter-treesitter':
         specifier: workspace:*
         version: link:../adapters/treesitter
-      '@cyclops/application':
+      '@verit/application':
         specifier: workspace:*
         version: link:../application
-      '@cyclops/domain':
+      '@verit/domain':
         specifier: workspace:*
         version: link:../domain
-      '@cyclops/ports':
+      '@verit/ports':
         specifier: workspace:*
         version: link:../ports
       effect:
@@ -486,7 +486,7 @@ importers:
 
   packages/ports:
     dependencies:
-      '@cyclops/domain':
+      '@verit/domain':
         specifier: workspace:*
         version: link:../domain
       effect:

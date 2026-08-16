@@ -1,5 +1,5 @@
 {
-  "name": "@cyclops/adapter-pi",
+  "name": "@verit/adapter-pi",
   "license": "AGPL-3.0-only",
   "version": "0.0.1",
   "type": "module",
@@ -12,9 +12,9 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@cyclops/ports": "workspace:*",
+    "@verit/ports": "workspace:*",
     "effect": "^3.14.14",
-    "@cyclops/domain": "workspace:*"
+    "@verit/domain": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.8.3",

@@ -1,5 +1,5 @@
 {
-  "name": "@cyclops/action",
+  "name": "@verit/action",
   "license": "AGPL-3.0-only",
   "version": "0.0.1",
   "type": "module",
@@ -10,7 +10,7 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@cyclops/cli": "workspace:*"
+    "@verit/cli": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.8.3",

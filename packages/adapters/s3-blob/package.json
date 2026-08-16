@@ -1,5 +1,5 @@
 {
-  "name": "@cyclops/adapter-s3-blob",
+  "name": "@verit/adapter-s3-blob",
   "license": "AGPL-3.0-only",
   "version": "0.0.1",
   "type": "module",
@@ -12,7 +12,7 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@cyclops/ports": "workspace:*",
+    "@verit/ports": "workspace:*",
     "aws4fetch": "^1.0.20",
     "effect": "^3.14.14"
   },

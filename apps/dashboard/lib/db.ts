@@ -13,7 +13,7 @@ export const db = (): Pool => {
   if (!pool) {
     pool = new Pool({
       connectionString,
-      max: Number(process.env.CYCLOPS_DB_POOL_MAX) || 5,
+      max: Number(process.env.VERIT_DB_POOL_MAX) || 5,
       ssl: /\bsslmode=require\b/.test(connectionString) ? { rejectUnauthorized: true } : undefined,
     });
   }

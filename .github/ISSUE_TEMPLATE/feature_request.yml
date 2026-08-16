@@ -1,5 +1,5 @@
 name: Feature request
-description: Propose a change to what cyclops does.
+description: Propose a change to what verit does.
 labels: ["enhancement"]
 body:
   - type: textarea
@@ -19,6 +19,6 @@ body:
     id: evidence
     attributes:
       label: How a reviewer would verify it
-      description: cyclops is about evidence. What would prove this feature worked on a real pull request.
+      description: verit is about evidence. What would prove this feature worked on a real pull request.
     validations:
       required: false

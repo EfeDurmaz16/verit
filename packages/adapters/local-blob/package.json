@@ -1,5 +1,5 @@
 {
-  "name": "@cyclops/adapter-local-blob",
+  "name": "@verit/adapter-local-blob",
   "license": "AGPL-3.0-only",
   "version": "0.0.1",
   "type": "module",
@@ -10,7 +10,7 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@cyclops/ports": "workspace:*",
+    "@verit/ports": "workspace:*",
     "effect": "^3.14.14"
   },
   "devDependencies": {

@@ -1,6 +1,6 @@
 # Output style
 
-Every string cyclops shows a human follows these rules: prompts, Check Run bodies, UI copy, docs.
+Every string verit shows a human follows these rules: prompts, Check Run bodies, UI copy, docs.
 
 1. Never use the em dash character. Use a period, a comma, or a colon.
 2. Short sentences. One idea each.

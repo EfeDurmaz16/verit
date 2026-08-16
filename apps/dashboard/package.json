@@ -1,5 +1,5 @@
 {
-  "name": "@cyclops/dashboard",
+  "name": "@verit/dashboard",
   "license": "AGPL-3.0-only",
   "version": "0.0.1",
   "private": true,
@@ -14,11 +14,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@cyclops/domain": "workspace:*",
-    "@cyclops/adapter-local-blob": "workspace:*",
-    "@cyclops/adapter-s3-blob": "workspace:*",
-    "@cyclops/ports": "workspace:*",
-    "@cyclops/proof-ui": "workspace:*",
+    "@verit/domain": "workspace:*",
+    "@verit/adapter-local-blob": "workspace:*",
+    "@verit/adapter-s3-blob": "workspace:*",
+    "@verit/ports": "workspace:*",
+    "@verit/proof-ui": "workspace:*",
     "@json-render/core": "^0.19.0",
     "@json-render/react": "^0.19.0",
     "clsx": "^2.1.1",

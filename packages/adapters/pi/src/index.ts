@@ -1,9 +1,9 @@
 import { spawnSync } from "node:child_process";
 import { Either } from "effect";
 import { Effect } from "effect";
-import { decodeUnderstanding, type Understanding } from "@cyclops/domain";
-import type { HarnessPort } from "@cyclops/ports";
-import { StoreError } from "@cyclops/ports";
+import { decodeUnderstanding, type Understanding } from "@verit/domain";
+import type { HarnessPort } from "@verit/ports";
+import { StoreError } from "@verit/ports";
 import { agentCli, runAgentUnderstand } from "./agent";
 
 type UnderstandInput = Parameters<HarnessPort["runUnderstand"]>[0];
@@ -94,9 +94,9 @@ export const buildDeterministicUnderstanding = (input: UnderstandInput): Underst
       {
         area: "harness",
         note:
-          process.env.CYCLOPS_PI_BIN != null
-            ? "CYCLOPS_PI_BIN set but stub path active (spawn failed or returned invalid JSON)."
-            : "CYCLOPS_PI_BIN unset. Using deterministic stub Understanding.",
+          process.env.VERIT_PI_BIN != null
+            ? "VERIT_PI_BIN set but stub path active (spawn failed or returned invalid JSON)."
+            : "VERIT_PI_BIN unset. Using deterministic stub Understanding.",
         source: "reviewer",
       },
     ],
@@ -122,7 +122,7 @@ const extractAuthorRiskHints = (body: string): Array<{ area: string; note: strin
 };
 
 const trySpawnPi = (input: UnderstandInput): Understanding | null => {
-  const bin = process.env.CYCLOPS_PI_BIN;
+  const bin = process.env.VERIT_PI_BIN;
   if (!bin) return null;
   const payload = JSON.stringify({
     verb: "understand",
@@ -133,7 +133,7 @@ const trySpawnPi = (input: UnderstandInput): Understanding | null => {
     diff: input.diff,
     context: input.context,
   });
-  const args = (process.env.CYCLOPS_PI_ARGS ?? "understand --json").split(/\s+/).filter(Boolean);
+  const args = (process.env.VERIT_PI_ARGS ?? "understand --json").split(/\s+/).filter(Boolean);
   const r = spawnSync(bin, args, {
     input: payload,
     encoding: "utf8",
@@ -142,7 +142,7 @@ const trySpawnPi = (input: UnderstandInput): Understanding | null => {
   });
   if (r.error || r.status !== 0) {
     console.error(
-      `[cyclops-pi] spawn failed status=${r.status} err=${r.error?.message ?? r.stderr?.slice(0, 400)}`,
+      `[verit-pi] spawn failed status=${r.status} err=${r.error?.message ?? r.stderr?.slice(0, 400)}`,
     );
     return null;
   }
@@ -166,7 +166,7 @@ const trySpawnPi = (input: UnderstandInput): Understanding | null => {
   }
   const decoded = decodeUnderstanding(parsed);
   if (Either.isLeft(decoded)) {
-    console.error("[cyclops-pi] Understanding decode failed", decoded.left);
+    console.error("[verit-pi] Understanding decode failed", decoded.left);
     return null;
   }
   return decoded.right;
@@ -174,7 +174,7 @@ const trySpawnPi = (input: UnderstandInput): Understanding | null => {
 
 /**
  * Pi harness adapter.
- * - If `CYCLOPS_PI_BIN` is set, spawn that binary with JSON stdin (`CYCLOPS_PI_ARGS`, default `understand --json`).
+ * - If `VERIT_PI_BIN` is set, spawn that binary with JSON stdin (`VERIT_PI_ARGS`, default `understand --json`).
  * - Otherwise (or on spawn/decode failure) return a high-quality deterministic stub from ReviewContext.
  */
 export const makePiHarness = (): HarnessPort => ({
@@ -187,7 +187,7 @@ export const makePiHarness = (): HarnessPort => ({
 
 /**
  * Harness for the CLI and Action path, with the same selector the workspace
- * lane uses. `CYCLOPS_LANE_HARNESS=claude|cursor` asks that CLI for the
+ * lane uses. `VERIT_LANE_HARNESS=claude|cursor` asks that CLI for the
  * Understanding; anything else keeps Pi.
  *
  * Every failure degrades instead of throwing: no API key, no CLI on PATH, a

@@ -4,7 +4,7 @@ import { useWorkspace } from "@/lib/store";
 import { clsx } from "clsx";
 import { Command } from "cmdk";
 import { useEffect, useState } from "react";
-import { Kbd } from "@cyclops/proof-ui";
+import { Kbd } from "@verit/proof-ui";
 
 /* ---------------- header ---------------- */
 
@@ -16,7 +16,7 @@ export function Header() {
     <header className="flex h-11 shrink-0 items-center gap-3 border-b border-line bg-surface px-4">
       <span className="flex items-center gap-1.5 text-[13px] font-semibold tracking-tight">
         <span className="inline-block size-[9px] rounded-[2px] bg-accent" />
-        Cyclops
+        Verit
       </span>
       <span className="h-4 w-px bg-line" />
       {pr ? (

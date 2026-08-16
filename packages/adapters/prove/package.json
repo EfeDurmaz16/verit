@@ -1,5 +1,5 @@
 {
-  "name": "@cyclops/adapter-prove",
+  "name": "@verit/adapter-prove",
   "license": "AGPL-3.0-only",
   "version": "0.0.1",
   "type": "module",
@@ -10,8 +10,8 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@cyclops/domain": "workspace:*",
-    "@cyclops/ports": "workspace:*",
+    "@verit/domain": "workspace:*",
+    "@verit/ports": "workspace:*",
     "effect": "^3.14.14"
   },
   "devDependencies": {

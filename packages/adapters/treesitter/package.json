@@ -1,5 +1,5 @@
 {
-  "name": "@cyclops/adapter-treesitter",
+  "name": "@verit/adapter-treesitter",
   "license": "AGPL-3.0-only",
   "version": "0.0.1",
   "type": "module",
@@ -10,8 +10,8 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@cyclops/ports": "workspace:*",
-    "@cyclops/adapter-memory": "workspace:*",
+    "@verit/ports": "workspace:*",
+    "@verit/adapter-memory": "workspace:*",
     "effect": "^3.14.14",
     "web-tree-sitter": "^0.25.3"
   },

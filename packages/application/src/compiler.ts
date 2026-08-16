@@ -4,8 +4,8 @@ import {
   OUTPUT_STYLE,
   REVIEW_SKILLS,
   type ReviewPresets,
-} from "@cyclops/domain";
-import type { CompilerPort } from "@cyclops/ports";
+} from "@verit/domain";
+import type { CompilerPort } from "@verit/ports";
 import { contentHash } from "./hash";
 
 const skillBlock = (id: string, path: string, extra = ""): string =>

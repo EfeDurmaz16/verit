@@ -10,8 +10,8 @@ import type {
   SymbolNode,
   Understanding,
   WikiPage,
-} from "@cyclops/domain";
-import type { DocumentStore, GraphStore } from "@cyclops/ports";
+} from "@verit/domain";
+import type { DocumentStore, GraphStore } from "@verit/ports";
 
 export const makeMemoryDocumentStore = (): DocumentStore => {
   const runs = new Map<string, ReviewRun>();

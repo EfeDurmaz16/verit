@@ -1,5 +1,5 @@
 {
-  "name": "cyclops",
+  "name": "verit",
   "private": true,
   "description": "Behavior-proof PR review: understanding-first, dual stores, generative proof UI",
   "license": "AGPL-3.0-only",
@@ -10,7 +10,7 @@
     "test": "pnpm -r run test",
     "typecheck": "pnpm -r run typecheck",
     "cli": "tsx packages/cli/src/main.ts",
-    "workspace": "pnpm --filter @cyclops/workspace dev"
+    "workspace": "pnpm --filter @verit/workspace dev"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

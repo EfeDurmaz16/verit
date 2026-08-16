@@ -188,7 +188,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setFocus("all");
       setPrUrl(url);
       try {
-        localStorage.setItem("cyclops:pr", url);
+        localStorage.setItem("verit:pr", url);
       } catch {}
       session.current = {};
       try {
@@ -233,7 +233,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (booted.current) return;
     booted.current = true;
-    const last = localStorage.getItem("cyclops:pr");
+    const last = localStorage.getItem("verit:pr");
     if (last) analyze(last);
   }, [analyze]);
 
@@ -330,9 +330,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [prUrl]);
 
   useEffect(() => {
-    if (status === "streaming" || status === "fetching") document.title = "⟳ Cyclops: Compiling";
-    else if (status === "ready") document.title = "✓ Cyclops: Ready";
-    else document.title = "Cyclops";
+    if (status === "streaming" || status === "fetching") document.title = "⟳ Verit: Compiling";
+    else if (status === "ready") document.title = "✓ Verit: Ready";
+    else document.title = "Verit";
   }, [status]);
 
   const select = useCallback((s: Selection | null) => setSelection(s), []);

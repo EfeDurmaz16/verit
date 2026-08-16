@@ -1,9 +1,9 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join, relative, extname } from "node:path";
 import { Effect } from "effect";
-import { markdownToWikiPages, wikiPagesToChunks, chunkText } from "@cyclops/application";
-import type { FileNode, SymbolNode, WikiPage } from "@cyclops/domain";
-import type { DocumentStore, GraphStore, ParserPort, StoreError } from "@cyclops/ports";
+import { markdownToWikiPages, wikiPagesToChunks, chunkText } from "@verit/application";
+import type { FileNode, SymbolNode, WikiPage } from "@verit/domain";
+import type { DocumentStore, GraphStore, ParserPort, StoreError } from "@verit/ports";
 
 const SKIP = new Set(["node_modules", ".git", "dist", "coverage", ".data", "tmp"]);
 

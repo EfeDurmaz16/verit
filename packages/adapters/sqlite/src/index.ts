@@ -8,9 +8,9 @@ import type {
   ReviewRun,
   Understanding,
   WorkspaceRun,
-} from "@cyclops/domain";
-import type { DocumentStore, SessionStore } from "@cyclops/ports";
-import { StoreError } from "@cyclops/ports";
+} from "@verit/domain";
+import type { DocumentStore, SessionStore } from "@verit/ports";
+import { StoreError } from "@verit/ports";
 
 export const migrateSqlite = (db: DatabaseSync): void => {
   db.exec(`

@@ -5,7 +5,7 @@ import { currentSession, type Session } from "./session";
 
 /**
  * A dev session has no GitHub token, so there is nothing to check against.
- * It only exists when CYCLOPS_DEV_USER names a login, which is never a
+ * It only exists when VERIT_DEV_USER names a login, which is never a
  * default, and it is the one path that skips the access check.
  */
 export const allowed = async (session: Session, repoId: string): Promise<boolean> =>

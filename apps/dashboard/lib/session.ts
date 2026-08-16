@@ -1,8 +1,8 @@
 import { cookies } from "next/headers";
 import { open, seal } from "./crypto";
 
-export const SESSION_COOKIE = "cyclops_session";
-export const STATE_COOKIE = "cyclops_oauth_state";
+export const SESSION_COOKIE = "verit_session";
+export const STATE_COOKIE = "verit_oauth_state";
 export const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 export interface Session {
@@ -12,7 +12,7 @@ export interface Session {
   readonly ghToken: string | null;
   /** Unix seconds. */
   readonly exp: number;
-  /** True for a CYCLOPS_DEV_USER session, which never sees GitHub. */
+  /** True for a VERIT_DEV_USER session, which never sees GitHub. */
   readonly dev?: boolean;
 }
 
@@ -54,13 +54,13 @@ export const cookieOptions = (maxAge: number) =>
   }) as const;
 
 /**
- * The local shortcut. It exists only when CYCLOPS_DEV_USER names a login, and
+ * The local shortcut. It exists only when VERIT_DEV_USER names a login, and
  * there is no default: with the variable unset the dashboard always asks GitHub
  * who you are. A dev session carries no GitHub token, so it is also the reason
  * the dev path grants repo access without an access check.
  */
 export const devSession = (): Session | null => {
-  const login = process.env.CYCLOPS_DEV_USER;
+  const login = process.env.VERIT_DEV_USER;
   if (!login) return null;
   return {
     login,

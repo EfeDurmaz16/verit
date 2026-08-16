@@ -1,4 +1,4 @@
-# Cyclops domain language
+# Verit domain language
 
 | Term | Meaning |
 |---|---|
@@ -12,4 +12,4 @@
 | author risks | Hints only. Never allowlist for reviewers |
 | prove | Run the reviewed repo's own verification command; refuses any other checkout |
 | ProofRef status | Verdict of an executed ref: `pass`/`fail`; absent means nothing was run |
-| behavior-proof Check | `cyclops / behavior-proof` Check Run; neutral when no proof ran |
+| behavior-proof Check | `verit / behavior-proof` Check Run; neutral when no proof ran |

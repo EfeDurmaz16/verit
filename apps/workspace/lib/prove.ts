@@ -1,16 +1,16 @@
 import path from "node:path";
-import { runProve } from "@cyclops/application";
-import { makeProveRunner } from "@cyclops/adapter-prove";
-import type { Understanding } from "@cyclops/domain";
-import type { ProveOutcome } from "@cyclops/ports";
+import { runProve } from "@verit/application";
+import { makeProveRunner } from "@verit/adapter-prove";
+import type { Understanding } from "@verit/domain";
+import type { ProveOutcome } from "@verit/ports";
 import { Effect } from "effect";
 import { docs } from "./stores";
 
 /* The workspace reviews any PR, but it may only *run* code for the repo the
-   operator pointed cyclops at: this checkout. Prove never fires on its own
+   operator pointed verit at: this checkout. Prove never fires on its own
    here. The UI shows the exact command and the user clicks it. */
 
-export const PROVE_CWD = path.resolve(process.env.CYCLOPS_PROVE_CWD ?? process.cwd());
+export const PROVE_CWD = path.resolve(process.env.VERIT_PROVE_CWD ?? process.cwd());
 
 const runner = makeProveRunner();
 
@@ -40,7 +40,7 @@ export async function proveOffer(repo: string): Promise<ProveOffer> {
       allowed: false,
       command: null,
       cwd: PROVE_CWD,
-      reason: `This workspace runs in ${local}; proving ${repo} would mean executing another repo's code here. Point CYCLOPS_PROVE_CWD at a ${repo} checkout to enable it.`,
+      reason: `This workspace runs in ${local}; proving ${repo} would mean executing another repo's code here. Point VERIT_PROVE_CWD at a ${repo} checkout to enable it.`,
     };
   }
   const cmd = await Effect.runPromise(runner.detect(PROVE_CWD)).catch(() => null);
@@ -49,7 +49,7 @@ export async function proveOffer(repo: string): Promise<ProveOffer> {
       allowed: false,
       command: null,
       cwd: PROVE_CWD,
-      reason: `No test or build command found in ${PROVE_CWD}. Set CYCLOPS_PROVE_CMD to name one.`,
+      reason: `No test or build command found in ${PROVE_CWD}. Set VERIT_PROVE_CMD to name one.`,
     };
   }
   return {
@@ -60,7 +60,7 @@ export async function proveOffer(repo: string): Promise<ProveOffer> {
   };
 }
 
-const TIMEOUT_MS = Number(process.env.CYCLOPS_PROVE_TIMEOUT_MS) || undefined;
+const TIMEOUT_MS = Number(process.env.VERIT_PROVE_TIMEOUT_MS) || undefined;
 
 /** Run prove for a finished ReviewRun and persist the evidence it produced. */
 export async function proveReviewRun(input: {

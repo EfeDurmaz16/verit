@@ -1,6 +1,6 @@
 "use client";
 
-import { registry } from "@cyclops/proof-ui";
+import { registry } from "@verit/proof-ui";
 import { JSONUIProvider, Renderer } from "@json-render/react";
 import type { Spec } from "@json-render/core";
 

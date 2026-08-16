@@ -12,14 +12,14 @@ given in the release notes unless you ask otherwise.
 
 ## What is in scope
 
-cyclops runs code, so the sharp edges are worth naming.
+verit runs code, so the sharp edges are worth naming.
 
 - **`prove` executing the wrong code.** `prove` runs a repository's own
   verification command. It is meant to run only in a checkout of the repository
   under review and refuses anything else. A way to make it execute in a
   different checkout, or to run a command the target repository did not define,
   is a vulnerability.
-- **A green Check nobody earned.** The `cyclops / behavior-proof` conclusion is
+- **A green Check nobody earned.** The `verit / behavior-proof` conclusion is
   the exit code of the command that ran, and `neutral` when nothing ran. Any
   path that produces a passing Check without a passing run is a vulnerability,
   not a cosmetic bug.
@@ -35,17 +35,17 @@ cyclops runs code, so the sharp edges are worth naming.
 
 ## What is not in scope
 
-- Running cyclops against a repository you control and having it execute that
+- Running verit against a repository you control and having it execute that
   repository's test command. That is the product.
-- `CYCLOPS_DEV_USER`, which skips GitHub login. It is local only, has no
+- `VERIT_DEV_USER`, which skips GitHub login. It is local only, has no
   default, and is documented as never being set in a deployment.
 - Findings in a self-hosted deployment that come from missing configuration,
   for example a dashboard published with no session secret set.
 
 ## Self-hosting notes
 
-- Set `CYCLOPS_SESSION_SECRET` to at least 32 random bytes. Rotating it signs
+- Set `VERIT_SESSION_SECRET` to at least 32 random bytes. Rotating it signs
   everyone out, which is the intended lever.
-- Never set `CYCLOPS_DEV_USER` anywhere that is reachable from the internet.
+- Never set `VERIT_DEV_USER` anywhere that is reachable from the internet.
 - On a fork pull request GitHub withholds secrets and issues a read-only token.
-  cyclops degrades to a dry run rather than failing. That is deliberate.
+  verit degrades to a dry run rather than failing. That is deliberate.

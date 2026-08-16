@@ -5,10 +5,10 @@ import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import { detectProveCommand, makeProveRunner } from "./index";
 
-const tmp = () => mkdtemp(join(tmpdir(), "cyclops-prove-"));
+const tmp = () => mkdtemp(join(tmpdir(), "verit-prove-"));
 
 afterEach(() => {
-  delete process.env.CYCLOPS_PROVE_CMD;
+  delete process.env.VERIT_PROVE_CMD;
 });
 
 describe("detectProveCommand", () => {
@@ -52,11 +52,11 @@ describe("detectProveCommand", () => {
   });
 
   it("takes the operator override as argv, not as a shell string", async () => {
-    process.env.CYCLOPS_PROVE_CMD = "node -e process.exit(0)";
+    process.env.VERIT_PROVE_CMD = "node -e process.exit(0)";
     expect(await detectProveCommand(await tmp())).toEqual({
       command: "node",
       args: ["-e", "process.exit(0)"],
-      source: "CYCLOPS_PROVE_CMD",
+      source: "VERIT_PROVE_CMD",
     });
   });
 });
@@ -65,13 +65,13 @@ describe("prove runner", () => {
   it("refuses to run outside the repo the caller named", async () => {
     const dir = await tmp();
     const result = await Effect.runPromiseExit(
-      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/cyclops" }),
+      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit" }),
     );
     expect(result._tag).toBe("Failure");
   });
 
   it("records the real exit code, duration and log tail of a failing command", async () => {
-    process.env.CYCLOPS_PROVE_CMD = "node -e console.log('hello');process.exit(3)";
+    process.env.VERIT_PROVE_CMD = "node -e console.log('hello');process.exit(3)";
     // run against this checkout, naming it correctly, so the guard passes
     const runner = makeProveRunner();
     const repo = await Effect.runPromise(runner.repoAt(process.cwd()));
@@ -84,7 +84,7 @@ describe("prove runner", () => {
   });
 
   it("kills a command that overruns its timeout", async () => {
-    process.env.CYCLOPS_PROVE_CMD = "node -e setTimeout(()=>{},60000)";
+    process.env.VERIT_PROVE_CMD = "node -e setTimeout(()=>{},60000)";
     const runner = makeProveRunner();
     const repo = await Effect.runPromise(runner.repoAt(process.cwd()));
     if (!repo) return;

@@ -4,7 +4,7 @@ import { CommandBar } from "@/components/command-bar";
 import { ContextPanel } from "@/components/context-panel";
 import { Header, Palette, Rail } from "@/components/shell";
 import { useWorkspace, WorkspaceProvider } from "@/lib/store";
-import { ProofUiProvider, registry, type ProofUiHost } from "@cyclops/proof-ui";
+import { ProofUiProvider, registry, type ProofUiHost } from "@verit/proof-ui";
 import { JSONUIProvider, Renderer } from "@json-render/react";
 import { clsx } from "clsx";
 import { useMemo, type ReactNode } from "react";

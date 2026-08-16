@@ -104,30 +104,30 @@ describe("understanding extraction", () => {
 
 describe("agent harness fallback", () => {
   it("keeps producing an Understanding when no CLI harness is selected", async () => {
-    const prev = process.env.CYCLOPS_LANE_HARNESS;
-    delete process.env.CYCLOPS_LANE_HARNESS;
+    const prev = process.env.VERIT_LANE_HARNESS;
+    delete process.env.VERIT_LANE_HARNESS;
     try {
       const u = await Effect.runPromise(makeAgentHarness().runUnderstand(INPUT));
       expect(u.what).toContain("unlisted mints");
       expect(u.how).toContain("src/pay.ts");
     } finally {
-      if (prev != null) process.env.CYCLOPS_LANE_HARNESS = prev;
+      if (prev != null) process.env.VERIT_LANE_HARNESS = prev;
     }
   });
 
   it("falls back to the stub when the selected CLI is not on PATH", async () => {
-    const prevHarness = process.env.CYCLOPS_LANE_HARNESS;
+    const prevHarness = process.env.VERIT_LANE_HARNESS;
     const prevPath = process.env.PATH;
-    process.env.CYCLOPS_LANE_HARNESS = "claude";
-    process.env.PATH = "/nonexistent-cyclops-test-path";
+    process.env.VERIT_LANE_HARNESS = "claude";
+    process.env.PATH = "/nonexistent-verit-test-path";
     try {
       const u = await Effect.runPromise(makeAgentHarness().runUnderstand(INPUT));
       expect(u.what).toContain("unlisted mints");
       expect(u.risks.some((r) => r.area === "harness")).toBe(true);
     } finally {
       process.env.PATH = prevPath;
-      if (prevHarness == null) delete process.env.CYCLOPS_LANE_HARNESS;
-      else process.env.CYCLOPS_LANE_HARNESS = prevHarness;
+      if (prevHarness == null) delete process.env.VERIT_LANE_HARNESS;
+      else process.env.VERIT_LANE_HARNESS = prevHarness;
     }
   });
 });

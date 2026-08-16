@@ -1,9 +1,9 @@
 {
-  "name": "@cyclops/cli",
+  "name": "@verit/cli",
   "license": "AGPL-3.0-only",
   "version": "0.0.1",
   "type": "module",
-  "bin": { "cyclops": "./src/main.ts" },
+  "bin": { "verit": "./src/main.ts" },
   "exports": { ".": "./src/main.ts" },
   "scripts": {
     "test": "vitest run --passWithNoTests",
@@ -11,18 +11,18 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@cyclops/adapter-fs-ingest": "workspace:*",
-    "@cyclops/adapter-github": "workspace:*",
-    "@cyclops/adapter-local-blob": "workspace:*",
-    "@cyclops/adapter-memory": "workspace:*",
-    "@cyclops/adapter-neo4j": "workspace:*",
-    "@cyclops/adapter-pi": "workspace:*",
-    "@cyclops/adapter-prove": "workspace:*",
-    "@cyclops/adapter-sqlite": "workspace:*",
-    "@cyclops/adapter-treesitter": "workspace:*",
-    "@cyclops/application": "workspace:*",
-    "@cyclops/domain": "workspace:*",
-    "@cyclops/ports": "workspace:*",
+    "@verit/adapter-fs-ingest": "workspace:*",
+    "@verit/adapter-github": "workspace:*",
+    "@verit/adapter-local-blob": "workspace:*",
+    "@verit/adapter-memory": "workspace:*",
+    "@verit/adapter-neo4j": "workspace:*",
+    "@verit/adapter-pi": "workspace:*",
+    "@verit/adapter-prove": "workspace:*",
+    "@verit/adapter-sqlite": "workspace:*",
+    "@verit/adapter-treesitter": "workspace:*",
+    "@verit/application": "workspace:*",
+    "@verit/domain": "workspace:*",
+    "@verit/ports": "workspace:*",
     "effect": "^3.14.14"
   },
   "devDependencies": {

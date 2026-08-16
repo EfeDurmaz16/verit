@@ -36,8 +36,8 @@ export interface LiveSession {
   writes: Promise<void>;
 }
 
-const g = globalThis as unknown as { __cyclopsLive?: Map<string, LiveSession> };
-const liveSessions = (g.__cyclopsLive ??= new Map<string, LiveSession>());
+const g = globalThis as unknown as { __veritLive?: Map<string, LiveSession> };
+const liveSessions = (g.__veritLive ??= new Map<string, LiveSession>());
 
 /** Stable per PR head and prompt version, and safe as a directory name. */
 export function sessionId(pr: PRMeta): string {
@@ -67,7 +67,7 @@ export function stopSession(pr: PRMeta): boolean {
   return true;
 }
 
-const MODEL = process.env.CYCLOPS_LANE_MODEL;
+const MODEL = process.env.VERIT_LANE_MODEL;
 
 function broadcast(s: LiveSession, ev: StreamEvent) {
   if (ev.kind === "session" && ev.threadId) s.threadId = ev.threadId;

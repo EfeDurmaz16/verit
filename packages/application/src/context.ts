@@ -1,5 +1,5 @@
-import type { PrGraphNeighbor, ReviewContext, WikiHit, WikiPage, PREdge, PullRequest } from "@cyclops/domain";
-import type { ReviewDomain } from "@cyclops/domain";
+import type { PrGraphNeighbor, ReviewContext, WikiHit, WikiPage, PREdge, PullRequest } from "@verit/domain";
+import type { ReviewDomain } from "@verit/domain";
 
 export const buildWikiHits = (pages: readonly WikiPage[], q: string, limit = 5): WikiHit[] => {
   const needle = q.toLowerCase();

@@ -4,7 +4,7 @@
     {
       "name": "workspace",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@cyclops/workspace", "dev"],
+      "runtimeArgs": ["--filter", "@verit/workspace", "dev"],
       "port": 3000
     }
   ]

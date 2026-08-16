@@ -8,19 +8,19 @@ import {
 } from "node:crypto";
 
 /**
- * One secret, one primitive. CYCLOPS_SESSION_SECRET derives an AES-256-GCM key,
+ * One secret, one primitive. VERIT_SESSION_SECRET derives an AES-256-GCM key,
  * and the session cookie is sealed with it rather than merely signed: GCM
  * authenticates the cookie the way a signature would, and also keeps the user's
  * GitHub token out of anything a browser extension or a log can read.
  */
-const keyFor = (secret: string): Buffer => scryptSync(secret, "cyclops.session.v1", 32);
+const keyFor = (secret: string): Buffer => scryptSync(secret, "verit.session.v1", 32);
 
 let cachedKey: { secret: string; key: Buffer } | null = null;
 
 const sessionKey = (): Buffer => {
-  const secret = process.env.CYCLOPS_SESSION_SECRET;
+  const secret = process.env.VERIT_SESSION_SECRET;
   if (!secret || secret.length < 32) {
-    throw new Error("CYCLOPS_SESSION_SECRET must be set to at least 32 characters");
+    throw new Error("VERIT_SESSION_SECRET must be set to at least 32 characters");
   }
   if (cachedKey?.secret !== secret) cachedKey = { secret, key: keyFor(secret) };
   return cachedKey.key;

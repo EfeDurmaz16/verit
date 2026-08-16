@@ -1,8 +1,8 @@
-import { proofVerdict, type Understanding } from "@cyclops/domain";
-import type { CheckRunInput, ProveOutcome } from "@cyclops/ports";
+import { proofVerdict, type Understanding } from "@verit/domain";
+import type { CheckRunInput, ProveOutcome } from "@verit/ports";
 import { isProveRef } from "./prove";
 
-export const CHECK_NAME = "cyclops / behavior-proof";
+export const CHECK_NAME = "verit / behavior-proof";
 
 /** GitHub caps a check summary at 65535 chars; stay well under with room to spare. */
 const LOG_CHARS = 8_000;
@@ -22,7 +22,7 @@ const logExcerpt = (o: ProveOutcome): string =>
  * `neutral`, never a green check.
  *
  * Copy follows STYLE.md: plain labels, short sentences, no em dash. The
- * Understanding's own prose is normalized in @cyclops/domain when it decodes.
+ * Understanding's own prose is normalized in @verit/domain when it decodes.
  */
 export const behaviorProofCheck = (input: {
   understanding: Understanding;
@@ -91,7 +91,7 @@ export const behaviorProofCheck = (input: {
       ? `[Full proof page](${proofPageUrl})`
       : "_This run has no hosted proof page. Set `PROOF_PAGE_URL` to link one._",
   );
-  if (runId) lines.push("", `<sub>cyclops run \`${runId}\`</sub>`);
+  if (runId) lines.push("", `<sub>verit run \`${runId}\`</sub>`);
 
   return { name: CHECK_NAME, conclusion, title, summary: lines.join("\n") };
 };

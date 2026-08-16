@@ -1,11 +1,11 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { decodeUnderstanding, type Understanding } from "@cyclops/domain";
+import { decodeUnderstanding, type Understanding } from "@verit/domain";
 import { Either } from "effect";
 
 /* The analysis lane's machine-readable output contract. Everything the lane
    streams into the workspace is a draft; this file is what gets validated
-   against the cyclops Understanding schema and persisted. */
+   against the verit Understanding schema and persisted. */
 
 export const UNDERSTANDING_FILE = "understanding.json";
 

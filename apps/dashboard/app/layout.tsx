@@ -8,7 +8,7 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Cyclops",
+  title: "Verit",
   description: "Behavior proof for pull requests: run history and proof pages",
 };
 
@@ -20,7 +20,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <header className="border-b border-line bg-surface">
           <div className="mx-auto flex max-w-[1080px] flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 sm:px-6">
             <Link href="/" className="text-[13px] font-medium">
-              cyclops
+              verit
             </Link>
             <span className="text-[12px] text-ink-3">behavior proof</span>
             {session ? (

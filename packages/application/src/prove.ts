@@ -1,6 +1,6 @@
 import { Effect } from "effect";
-import type { ProofRef, Understanding } from "@cyclops/domain";
-import type { DocumentStore, ProveOutcome, ProvePort, StoreError } from "@cyclops/ports";
+import type { ProofRef, Understanding } from "@verit/domain";
+import type { DocumentStore, ProveOutcome, ProvePort, StoreError } from "@verit/ports";
 import { contentHash } from "./edges";
 
 /** Marks the refs this verb owns, so a re-run replaces its own evidence only. */

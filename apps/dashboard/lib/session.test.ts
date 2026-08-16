@@ -5,7 +5,7 @@ const now = 1_800_000_000;
 const session: Session = { login: "efe", userId: 7, ghToken: "gho_x", exp: now + 60 };
 
 beforeEach(() => {
-  process.env.CYCLOPS_SESSION_SECRET = "x".repeat(48);
+  process.env.VERIT_SESSION_SECRET = "x".repeat(48);
 });
 
 describe("session cookie", () => {
@@ -15,7 +15,7 @@ describe("session cookie", () => {
 
   it("rejects a cookie sealed with a different secret", () => {
     const sealed = sealSession(session);
-    process.env.CYCLOPS_SESSION_SECRET = "y".repeat(48);
+    process.env.VERIT_SESSION_SECRET = "y".repeat(48);
     expect(parseSession(sealed, now)).toBeNull();
   });
 

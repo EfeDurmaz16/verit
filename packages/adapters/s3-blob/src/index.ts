@@ -1,7 +1,7 @@
 import { AwsV4Signer } from "aws4fetch";
 import { Effect } from "effect";
-import type { ObjectStorePort, StoredObject } from "@cyclops/ports";
-import { assertSafeObjectKey, StoreError } from "@cyclops/ports";
+import type { ObjectStorePort, StoredObject } from "@verit/ports";
+import { assertSafeObjectKey, StoreError } from "@verit/ports";
 
 export interface S3ObjectStoreConfig {
   /** Origin only, no bucket and no trailing slash, e.g. `https://<account>.r2.cloudflarestorage.com`. */
@@ -18,14 +18,14 @@ const BUCKET = /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/;
 
 /** The variable names. Only a name from here ever appears in an error. */
 const ENV = {
-  endpoint: "CYCLOPS_S3_ENDPOINT",
-  bucket: "CYCLOPS_S3_BUCKET",
-  accessKeyId: "CYCLOPS_S3_ACCESS_KEY_ID",
-  secretAccessKey: "CYCLOPS_S3_SECRET_ACCESS_KEY",
+  endpoint: "VERIT_S3_ENDPOINT",
+  bucket: "VERIT_S3_BUCKET",
+  accessKeyId: "VERIT_S3_ACCESS_KEY_ID",
+  secretAccessKey: "VERIT_S3_SECRET_ACCESS_KEY",
 } as const;
 
 /** Optional, so it is not part of the all-or-nothing check above. */
-const REGION_ENV = "CYCLOPS_S3_REGION";
+const REGION_ENV = "VERIT_S3_REGION";
 
 /**
  * Reads the S3 configuration out of an environment.

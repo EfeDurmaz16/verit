@@ -294,7 +294,7 @@ export type ProofArtifact = S.Schema.Type<typeof ProofArtifact>;
 
 /**
  * What `prove` actually did, as a schema. Structurally the same as ProveOutcome
- * in @cyclops/ports, which stays an interface because nothing decodes it in
+ * in @verit/ports, which stays an interface because nothing decodes it in
  * process. This one crosses the network, so it is validated.
  */
 export const ProveResult = S.Struct({

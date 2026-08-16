@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Cyclops skill verb `verify` (shared catalog).
+description: Verit skill verb `verify` (shared catalog).
 ---
 
-Follow Cyclops Understanding schema. Author risks are hints only, never an allowlist.
+Follow Verit Understanding schema. Author risks are hints only, never an allowlist.

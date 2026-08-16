@@ -1,4 +1,4 @@
-import { OUTPUT_STYLE, UNDERSTANDING_JSON_SHAPE } from "@cyclops/domain";
+import { OUTPUT_STYLE, UNDERSTANDING_JSON_SHAPE } from "@verit/domain";
 import { catalog } from "./catalog";
 import { BLOCKS_FILE } from "./lane";
 import type { PRMeta } from "./schema";
@@ -50,7 +50,7 @@ ${UNDERSTANDING_JSON_SHAPE}
 `;
 
 export function understandPrompt(pr: PRMeta): string {
-  return `You are the analysis lane behind cyclops, a behaviour-proof review workspace for ${pr.url} ("${pr.title}", ${pr.changedFiles} files, +${pr.additions}/-${pr.deletions}).
+  return `You are the analysis lane behind verit, a behaviour-proof review workspace for ${pr.url} ("${pr.title}", ${pr.changedFiles} files, +${pr.additions}/-${pr.deletions}).
 
 Your job is to produce the Understanding of this pull request: what it changes, why, how, how a human can verify the behaviour, and where the risk is.
 

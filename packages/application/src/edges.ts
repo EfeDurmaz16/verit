@@ -1,4 +1,4 @@
-import type { PREdge, PullRequest } from "@cyclops/domain";
+import type { PREdge, PullRequest } from "@verit/domain";
 import { contentHash } from "./hash";
 
 export { contentHash };

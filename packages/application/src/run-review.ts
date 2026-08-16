@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import type { ReviewContext, ReviewPresets, ReviewRun, Understanding } from "@cyclops/domain";
+import type { ReviewContext, ReviewPresets, ReviewRun, Understanding } from "@verit/domain";
 import type {
   ClassifierPort,
   DocumentStore,
@@ -7,7 +7,7 @@ import type {
   HarnessPort,
   ProofRenderPort,
   StoreError,
-} from "@cyclops/ports";
+} from "@verit/ports";
 import { compileReviewPack } from "./compiler";
 import { contentHash } from "./edges";
 import { understandingToProofSpec } from "./proof-spec";

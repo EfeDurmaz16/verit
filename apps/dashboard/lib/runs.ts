@@ -1,4 +1,4 @@
-import { proofVerdict, type RunUpload, type Understanding } from "@cyclops/domain";
+import { proofVerdict, type RunUpload, type Understanding } from "@verit/domain";
 import { query } from "./db";
 
 export interface RepoRow {
