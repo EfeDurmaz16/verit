@@ -74,21 +74,52 @@ the guess is wrong:
           prove-command: cargo test --all
 ```
 
-The Understanding is written by a headless coding CLI. With no key configured
-you get a deterministic stub, which is honest but thin. To get the real thing:
+The Understanding is written by the analysis lane. Bring an API key, pin a
+model, and the built-in lane talks straight to the model API. No coding CLI
+is involved. With no key configured you get a deterministic stub, which is
+honest but thin. To get the real thing:
 
 ```yaml
       - uses: EfeDurmaz16/verit@v0
-        with:
-          lane-harness: claude
-          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+        env:
+          VERIT_LANE_PROVIDER: anthropic
+          VERIT_LANE_MODEL: claude-opus-5
+          VERIT_LANE_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
+
+`VERIT_LANE_PROVIDER` takes `anthropic` or `openai-compat`. The `openai-compat`
+provider plus `VERIT_LANE_BASE_URL` covers OpenAI, Grok, DeepSeek, GLM, and a
+local vLLM. `VERIT_LANE_MODEL` is required: the lane pins its model and never
+guesses one.
+
+Legacy path: the `lane-harness: claude` and `lane-harness: cursor` inputs still
+drive those headless coding CLIs, and are used only when no
+`VERIT_LANE_PROVIDER` is set.
 
 Fork pull requests receive no secrets and a read-only token. verit degrades to
 a dry run and prints the Check instead of posting it. That is deliberate, and it
 is never a failed job.
 
 Every input is listed in [`action.yml`](action.yml).
+
+### Choosing models
+
+Two tiers cover the pipeline. A cheap fast model handles the mechanical
+passes: triage, summaries, diffs that net down to little after moves are
+factored out. A strong model reads the must-review regions: auth, payments,
+migrations, whatever the review plan ranks highest.
+
+Numbers from the Artificial Analysis Intelligence Index v4.1.1, August 2026:
+
+| Tier | Model | Index | Cost per task | Notes |
+|---|---|---|---|---|
+| Triage | GPT-5.6 Luna high | 47 | $0.02 | 178 tok/s, 1M context, $0.20 in / $1.20 out per M tokens |
+| Judgment | Grok 4.6 high | 61 | $0.84 | Cheapest of the strong three |
+| Judgment | Claude Opus 5 | 63 | $2.34 | Highest index |
+| Judgment | Claude Fable 5 | 62 | $3.14 | Pareto-dominated: Opus 5 scores higher for less |
+
+Model names live in this README on purpose. The code only knows tiers, and
+rankings shift quarterly. Update this table, not the code.
 
 ---
 
@@ -104,9 +135,10 @@ pnpm install
 pnpm workspace          # http://localhost:3000
 ```
 
-Node 22 and pnpm 11. Needs `gh` authenticated, and one of `codex`, `claude` or
-`cursor` on PATH for live analysis. No Docker, no database, no account. The
-graph store falls back to memory and runs land in `.data/`.
+Node 22 and pnpm 11. Needs `gh` authenticated, plus `VERIT_LANE_PROVIDER`,
+`VERIT_LANE_MODEL` and an API key for live analysis. No coding CLI, no Docker,
+no database, no account. The graph store falls back to memory and runs land in
+`.data/`.
 
 Run the same pipeline headless:
 
@@ -173,8 +205,9 @@ put a verdict underneath its opinion.
        │                                  wiki pages and file symbols
        │
        ▼
-  understand ────────► lane harness       one headless coding CLI reads the
-       │                                  full diff, threads and CI logs
+  understand ────────► analysis lane      the model you pinned reads the NET
+       │                                  diff, moves factored out first,
+       │                                  plus threads and CI logs
        │
        │  Understanding JSON              validated against the Effect Schema
        │  (what / why / how,              in @verit/domain. A run that fails
@@ -195,8 +228,8 @@ put a verdict underneath its opinion.
 
 The code is an Effect onion. `domain` holds pure schemas, `ports` holds
 interfaces, `application` holds use cases, and every I/O concern is an adapter
-behind a port. Swapping Neo4j for memory, or Codex for Claude Code, is swapping
-one adapter.
+behind a port. Swapping Neo4j for memory, or one lane provider for another, is
+swapping one adapter.
 
 Two stores by design. Neo4j holds the ontology and the pull request graph.
 SQLite holds runs, proof blobs and full text chunks. Neither is required to try
@@ -225,10 +258,15 @@ org-wide dashboards and no infrastructure to run, is coming.
 | `VERIT_PROVE_CMD` | detected | Override the command, e.g. `cargo test --all`. Argv, never a shell string |
 | `VERIT_PROVE_TIMEOUT_MS` | `600000` | Hard timeout. The process group is killed |
 | `VERIT_CHECK_DRY_RUN` | unset | `1` prints the Check body instead of posting it |
-| `VERIT_LANE_HARNESS` | `codex` | Coding CLI behind the analysis lane: `codex`, `claude` or `cursor`. An unknown value is an error, never a silent fallback |
-| `VERIT_LANE_MODEL` | unset | Model for the analysis lane |
-| `VERIT_LANE_TIMEOUT_MS` | `900000` | Hard timeout for the one-shot lane call |
-| `ANTHROPIC_API_KEY` | unset | Auth for `VERIT_LANE_HARNESS=claude` in CI. Locally the CLI's own login is used |
+| `VERIT_LANE_PROVIDER` | unset | `anthropic` or `openai-compat` turns on the built-in HTTP lane, the default path whenever it is set. An unknown value is an error, never a silent fallback |
+| `VERIT_LANE_MODEL` | unset | Model id for the lane. Required with `VERIT_LANE_PROVIDER`: the lane pins its model and never guesses one. Also the optional model override for the legacy CLI harnesses |
+| `VERIT_LANE_BASE_URL` | provider default | API base URL override. `openai-compat` covers OpenAI, Grok (`https://api.x.ai/v1`), DeepSeek, GLM, and local vLLM |
+| `VERIT_LANE_API_KEY` | unset | Lane API key. Falls back to `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` to match the provider |
+| `VERIT_LANE_MAX_TURNS` | `40` | Lane model-call cap |
+| `VERIT_LANE_MAX_TOTAL_TOKENS` | `4000000` | Lane total token cap |
+| `VERIT_LANE_TIMEOUT_MS` | `900000` | Hard timeout for the lane |
+| `VERIT_LANE_HARNESS` | unset | Legacy: `claude` or `cursor` asks that headless coding CLI, only when no `VERIT_LANE_PROVIDER` is set |
+| `ANTHROPIC_API_KEY` | unset | Auth for the `anthropic` provider, or for `VERIT_LANE_HARNESS=claude` in CI |
 | `CURSOR_API_KEY` | unset | Auth for `VERIT_LANE_HARNESS=cursor` in CI. Locally `cursor-agent login` is used |
 | `VERIT_SQLITE_PATH` | `.data/verit.db` | DocumentStore path. Set `""` for in-memory |
 | `VERIT_NEO4J_URI` | unset | `bolt://…`. Memory graph if unset |
