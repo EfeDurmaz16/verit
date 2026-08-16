@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import { DIFF_BUDGET_CHARS, diffCoveragePercent } from "@verit/domain";
+import { netDiffChars } from "@verit/netdiff";
 import type { ReviewContext, ReviewPresets, ReviewRun, Understanding } from "@verit/domain";
 import type {
   ClassifierPort,
@@ -39,6 +40,8 @@ export const runReviewUnderstand = (deps: {
     understanding: Understanding | null;
     spec: unknown;
     skillPackHash: string;
+    /** Net size of the diff, moves factored out: the coverage denominator. */
+    netDiffChars: number;
   },
   StoreError
 > =>
@@ -61,9 +64,12 @@ export const runReviewUnderstand = (deps: {
       context,
       role: "review",
     });
-    // The lane only ever sees the first DIFF_BUDGET_CHARS of the diff. When
-    // the diff is bigger, the Understanding must say so out loud.
-    const coverage = diffCoveragePercent(input.diff.length);
+    // The lane reviews the NET diff: @verit/netdiff factors moved code out
+    // before the budget applies, so the denominator here is net chars, not
+    // gross. When even the net content does not fit DIFF_BUDGET_CHARS, the
+    // analysis is partial and the Understanding must say so out loud.
+    const netChars = netDiffChars(input.diff);
+    const coverage = diffCoveragePercent(netChars);
     const understanding: Understanding | null =
       raw === null || coverage === 100
         ? raw
@@ -73,7 +79,7 @@ export const runReviewUnderstand = (deps: {
               ...raw.risks,
               {
                 area: "coverage",
-                note: `Reviewed ${coverage}% of the diff (first ${DIFF_BUDGET_CHARS} of ${input.diff.length} chars). Analysis is partial.`,
+                note: `Reviewed ${coverage}% of the net diff, code moves factored out (${DIFF_BUDGET_CHARS} of ${netChars} net chars). Analysis is partial.`,
                 source: "reviewer",
               },
             ],
@@ -96,7 +102,14 @@ export const runReviewUnderstand = (deps: {
       if (input.prId) {
         yield* deps.graph.linkRunToPr(runId, input.prId);
       }
-      return { runId, run, understanding: null, spec: null, skillPackHash: compiled.skillPackHash };
+      return {
+        runId,
+        run,
+        understanding: null,
+        spec: null,
+        skillPackHash: compiled.skillPackHash,
+        netDiffChars: netChars,
+      };
     }
     yield* deps.docs.saveUnderstandingJson(runId, understanding);
     const archNodes = input.paths.slice(0, 24).map((p) => ({
@@ -130,5 +143,12 @@ export const runReviewUnderstand = (deps: {
     if (input.prId) {
       yield* deps.graph.linkRunToPr(runId, input.prId);
     }
-    return { runId, run, understanding, spec, skillPackHash: compiled.skillPackHash };
+    return {
+      runId,
+      run,
+      understanding,
+      spec,
+      skillPackHash: compiled.skillPackHash,
+      netDiffChars: netChars,
+    };
   });

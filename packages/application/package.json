@@ -3,7 +3,9 @@
   "license": "AGPL-3.0-only",
   "version": "0.0.1",
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -11,6 +13,7 @@
   },
   "dependencies": {
     "@verit/domain": "workspace:*",
+    "@verit/netdiff": "workspace:*",
     "@verit/ports": "workspace:*",
     "effect": "^3.14.14"
   },

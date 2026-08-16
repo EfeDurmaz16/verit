@@ -38,7 +38,8 @@ export const behaviorProofCheck = (input: {
   /** Null when the lane did not complete. Analysis is then absent, not faked. */
   understanding: Understanding | null;
   outcome: ProveOutcome | null;
-  /** Gross size of the reviewed diff. Beyond the budget the analysis is partial. */
+  /** Net size of the reviewed diff in chars, code moves factored out by
+      @verit/netdiff. Beyond the budget the analysis is partial. */
   diffChars?: number;
   /** Hosted proof page for this run, when one has been published. */
   proofPageUrl?: string;
@@ -85,7 +86,7 @@ export const behaviorProofCheck = (input: {
   }
   if (coverage < 100 && diffChars !== undefined) {
     lines.push(
-      `**Coverage:** reviewed ${coverage}% of the diff (first ${DIFF_BUDGET_CHARS} of ${diffChars} chars). Analysis is partial, so a passing proof caps this check at neutral.`,
+      `**Coverage:** reviewed ${coverage}% of the net diff, code moves factored out (${DIFF_BUDGET_CHARS} of ${diffChars} net chars). Analysis is partial, so a passing proof caps this check at neutral.`,
       "",
     );
   }

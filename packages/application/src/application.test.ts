@@ -188,7 +188,7 @@ describe("behaviorProofCheck on a truncated diff", () => {
       diffChars: 200_000,
     });
     expect(check.conclusion).toBe("neutral");
-    expect(check.summary).toContain("reviewed 60% of the diff");
+    expect(check.summary).toContain("reviewed 60% of the net diff");
     expect(check.summary).toContain("Analysis is partial");
     // tests passed and analysis partial are separated in the body
     expect(check.summary).toContain("The tests passed. The analysis is partial.");
@@ -201,7 +201,7 @@ describe("behaviorProofCheck on a truncated diff", () => {
       diffChars: 200_000,
     });
     expect(check.conclusion).toBe("failure");
-    expect(check.summary).toContain("reviewed 60% of the diff");
+    expect(check.summary).toContain("reviewed 60% of the net diff");
   });
 
   it("stays green when the whole diff fit the budget", () => {

@@ -64,10 +64,82 @@ describe("agent prompt", () => {
     expect(prompt).toContain("#12 Add allowlist (linked)");
   });
 
-  it("caps the diff and says so instead of truncating silently", () => {
+  it("caps a non-diff payload and says so instead of truncating silently", () => {
+    // not a unified diff: netting is impossible, the raw slice ships instead
     const huge = agentPrompt({ ...INPUT, diff: "x".repeat(200_000) });
     expect(huge).toContain("first 120000 of 200000 chars");
     expect(huge.length).toBeLessThan(140_000);
+  });
+});
+
+describe("agent prompt net diff", () => {
+  const moved = [
+    "export const settle = (o: Order): Receipt => {",
+    "  const fee = o.amount * FEE_RATE;",
+    "  const total = o.amount + fee;",
+    "  return { id: o.id, total, settledAt: clock() };",
+    "};",
+  ];
+  const movePatch = [
+    "diff --git a/src/pay.ts b/src/pay.ts",
+    "--- a/src/pay.ts",
+    "+++ b/src/pay.ts",
+    `@@ -10,${moved.length} +10,0 @@`,
+    ...moved.map((l) => `-${l}`),
+    "diff --git a/src/settle.ts b/src/settle.ts",
+    "--- a/src/settle.ts",
+    "+++ b/src/settle.ts",
+    `@@ -40,0 +40,${moved.length + 2} @@`,
+    ...moved.map((l) => `+${l}`),
+    "+",
+    "+export const NEW_RETRY_LIMIT = 3;",
+  ].join("\n");
+
+  it("feeds the net diff with the move summary instead of the raw slice", () => {
+    const prompt = agentPrompt({ ...INPUT, diff: movePatch });
+    expect(prompt).toContain("MOVE ANALYSIS");
+    expect(prompt).toContain("moved without edit");
+    expect(prompt).toContain("NET DIFF, moves pre-factored");
+    // the genuinely new line is in, the moved body is factored out
+    expect(prompt).toContain("NEW_RETRY_LIMIT");
+    expect(prompt).not.toContain("settledAt: clock()");
+  });
+
+  it("keeps a small parseable diff fully covered: no truncation note", () => {
+    const prompt = agentPrompt({ ...INPUT, diff: movePatch });
+    expect(prompt).not.toContain("% of the net content");
+    expect(prompt).not.toContain("NOT SHOWN");
+  });
+
+  it("packs an oversized net diff by risk and lists the rest as unreviewed", () => {
+    const bigBody = (name: string, n: number): string[] =>
+      Array.from({ length: n }, (_, i) => `export const ${name}${i} = compute("${name}", ${i});`);
+    const file = (path: string, lines: string[]): string =>
+      [
+        `diff --git a/${path} b/${path}`,
+        "--- /dev/null",
+        `+++ b/${path}`,
+        `@@ -0,0 +1,${lines.length} @@`,
+        ...lines.map((l) => `+${l}`),
+      ].join("\n");
+    const patch = [
+      file("src/auth/guard.ts", ["export const guard = (s: Session) => s.valid;"]),
+      file("src/lib/big-a.ts", bigBody("alpha", 1_800)),
+      file("src/lib/big-b.ts", bigBody("bravo", 1_800)),
+      file("src/lib/big-c.ts", bigBody("charlie", 1_800)),
+    ].join("\n");
+    const prompt = agentPrompt({ ...INPUT, diff: patch });
+    expect(prompt).toContain("% of the net content");
+    expect(prompt).toContain("NOT SHOWN, over budget");
+    // the risky one-liner always makes the cut
+    expect(prompt).toContain("src/auth/guard.ts");
+    expect(prompt.length).toBeLessThan(140_000);
+  });
+
+  it("is deterministic: same diff, same prompt", () => {
+    expect(agentPrompt({ ...INPUT, diff: movePatch })).toBe(
+      agentPrompt({ ...INPUT, diff: movePatch }),
+    );
   });
 });
 
