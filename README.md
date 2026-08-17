@@ -228,6 +228,14 @@ put a verdict underneath its opinion.
                                           and the dashboard
 ```
 
+### Net diff
+
+Most of a large diff is moved code. Before any model call, `@verit/netdiff`
+factors moves out deterministically and keeps what a reviewer must actually
+read: new code, residual edits inside moved blocks, and deletions. Residuals
+resolve down to token level: a moved block that changed by three words shows
+exactly those three words.
+
 The code is an Effect onion. `domain` holds pure schemas, `ports` holds
 interfaces, `application` holds use cases, and every I/O concern is an adapter
 behind a port. Swapping Neo4j for memory, or one lane provider for another, is
@@ -328,6 +336,20 @@ Known gaps, stated plainly:
 - inline review comments are not implemented
 - the hosted dashboard works but has had one operator, so treat its setup
   documentation as a first draft
+
+## Roadmap
+
+1. **Suggested proof.** When the review finds a risk, verit will write the
+   smallest failing test that would prove it, run it through prove in the
+   same checkout, and attach the real exit code. A confirmed risk arrives
+   with evidence. A refuted one is dropped. verit will keep refusing to
+   suggest fix diffs: the fix belongs to the author, the proof belongs to
+   the reviewer.
+2. **Multi-suite prove.** Monorepos with per-language test commands get one
+   proof per suite instead of one detected command.
+3. **Hosted verit.** Org-wide install, run history, memory across pull
+   requests, and a fan-out engine for pull requests too large for one
+   context window.
 
 ## Contributing
 
