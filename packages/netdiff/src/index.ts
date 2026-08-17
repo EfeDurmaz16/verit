@@ -71,6 +71,10 @@ export interface TokenEdit {
 /** One removed residual line matched to one added residual line, with the
     token-level edit between them. */
 export interface ResidualPair {
+  /** index of `removedLine` in the removed input of `pairResidualLines` */
+  readonly removedIndex: number;
+  /** index of `addedLine` in the added input of `pairResidualLines` */
+  readonly addedIndex: number;
   readonly removedLine: string;
   readonly addedLine: string;
   readonly edit: TokenEdit;
@@ -82,6 +86,24 @@ export interface ResidualPairing {
   readonly unmatchedRemoved: readonly string[];
   /** added residual lines no removed line matched: plain additions */
   readonly unmatchedAdded: readonly string[];
+}
+
+/**
+ * One in-place edit: inside one hunk, a removed line paired to the added line
+ * that replaces it, with the token-level edit between them. In-place edits are
+ * not moves and never touch the stats. The added lines stay in the net content
+ * as new lines (or as residual lines when the replacement also clears the move
+ * threshold); this report only directs attention to the exact tokens that
+ * changed. A replacement that is also detected as a move is still listed here,
+ * so the whole-diff aggregation counts every occurrence.
+ */
+export interface InlineEdit {
+  readonly file: string;
+  /** new-file line number of the added line */
+  readonly line: number;
+  readonly removedLine: string;
+  readonly addedLine: string;
+  readonly edit: TokenEdit;
 }
 
 export interface MovePair {
@@ -163,6 +185,9 @@ export interface NetDiff {
   readonly stats: NetDiffStats;
   readonly renameCandidates: readonly RenameCandidate[];
   readonly moves: MoveReport;
+  /** in-place token edits found inside replacement hunks, sorted by file then
+      line; attention direction only, never part of the stats */
+  readonly inlineEdits: readonly InlineEdit[];
 }
 
 export interface PlannedRegion extends NetRegion {
@@ -680,11 +705,87 @@ export const pairResidualLines = (
     pairs: matched.map(({ ri, ai }) => {
       const removedLine = removed[ri] ?? "";
       const addedLine = added[ai] ?? "";
-      return { removedLine, addedLine, edit: tokenDiff(removedLine, addedLine) };
+      return {
+        removedIndex: ri,
+        addedIndex: ai,
+        removedLine,
+        addedLine,
+        edit: tokenDiff(removedLine, addedLine),
+      };
     }),
     unmatchedRemoved: removed.filter((_, i) => !usedRemoved.has(i)),
     unmatchedAdded: added.filter((_, i) => !usedAdded.has(i)),
   };
+};
+
+/* ------------------------------ in-place edits ----------------------------- */
+
+/**
+ * Token-level edits inside plain replacement hunks. Each adjacent removed-run/
+ * added-run pair (the standard shape a diff prints for an in-place edit) has
+ * its lines matched by pairResidualLines and token-diffed. Whitespace-only
+ * replacements produce the empty edit and are dropped. Renamed files are
+ * covered for free: their hunks parse like any other and the location carries
+ * the new path. A hunk whose adjacent runs multiply past
+ * RESIDUAL_PAIR_CELL_CAP yields nothing: fail open, stay deterministic.
+ */
+const detectInlineEdits = (deltas: readonly FileDelta[]): InlineEdit[] => {
+  interface Run {
+    readonly kind: "add" | "del";
+    /** new-file number for add runs, old-file for del runs */
+    readonly start: number;
+    readonly texts: string[];
+  }
+  const out: InlineEdit[] = [];
+  for (const d of deltas) {
+    const file = d.newPath ?? d.oldPath ?? "(unknown)";
+    for (const h of d.hunks) {
+      // runs in hunk order; null marks a context break, so only truly adjacent
+      // del-run/add-run pairs (nothing between them) count as replacements
+      const segs: (Run | null)[] = [];
+      for (const l of h.lines) {
+        if (l.kind === "ctx") {
+          if (segs.length > 0 && segs[segs.length - 1] !== null) segs.push(null);
+          continue;
+        }
+        const prev = segs[segs.length - 1];
+        if (prev && prev.kind === l.kind) {
+          prev.texts.push(l.text);
+          continue;
+        }
+        segs.push({
+          kind: l.kind,
+          start: (l.kind === "add" ? l.newNo : l.oldNo) ?? 0,
+          texts: [l.text],
+        });
+      }
+      const replacements: { del: Run; add: Run }[] = [];
+      for (let i = 0; i + 1 < segs.length; i++) {
+        const a = segs[i];
+        const b = segs[i + 1];
+        if (a && b && a.kind === "del" && b.kind === "add") replacements.push({ del: a, add: b });
+      }
+      const cells = replacements.reduce(
+        (n, r) => n + r.del.texts.length * r.add.texts.length,
+        0,
+      );
+      if (cells > RESIDUAL_PAIR_CELL_CAP) continue;
+      for (const { del, add } of replacements) {
+        for (const p of pairResidualLines(del.texts, add.texts).pairs) {
+          if (p.edit.removedTokens.length === 0 && p.edit.addedTokens.length === 0) continue;
+          out.push({
+            file,
+            line: add.start + p.addedIndex,
+            removedLine: p.removedLine,
+            addedLine: p.addedLine,
+            edit: p.edit,
+          });
+        }
+      }
+    }
+  }
+  out.sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : a.line - b.line));
+  return out;
 };
 
 /* ----------------------------- near-move pass ------------------------------ */
@@ -881,6 +982,8 @@ const RENAME_COVERAGE = 0.9;
  * Stats reconstruct the gross counts exactly:
  * grossAdded = movedAdded + residualAdded + newLines and
  * grossRemoved = movedRemoved + residualRemoved + deletedLines.
+ * In-place token edits ride along as `inlineEdits`; they change no count and
+ * no region, they only mark where the real change sits inside a replacement.
  */
 export const computeNetDiff = (
   deltas: readonly FileDelta[],
@@ -1021,6 +1124,7 @@ export const computeNetDiff = (
     },
     renameCandidates,
     moves,
+    inlineEdits: detectInlineEdits(deltas),
   };
 };
 
