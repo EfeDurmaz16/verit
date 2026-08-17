@@ -68,6 +68,22 @@ export interface TokenEdit {
   readonly afterContext: string;
 }
 
+/** One removed residual line matched to one added residual line, with the
+    token-level edit between them. */
+export interface ResidualPair {
+  readonly removedLine: string;
+  readonly addedLine: string;
+  readonly edit: TokenEdit;
+}
+
+export interface ResidualPairing {
+  readonly pairs: readonly ResidualPair[];
+  /** removed residual lines no added line matched: plain deletions */
+  readonly unmatchedRemoved: readonly string[];
+  /** added residual lines no removed line matched: plain additions */
+  readonly unmatchedAdded: readonly string[];
+}
+
 export interface MovePair {
   readonly kind: "pure_move" | "move_with_edit";
   readonly from: Block;
@@ -600,6 +616,59 @@ export const tokenDiff = (before: string, after: string): TokenEdit => {
       Math.max(0, p - FOCUS_CONTEXT_TOKENS),
       Math.min(b.length, b.length - s + FOCUS_CONTEXT_TOKENS),
     ),
+  };
+};
+
+/** Minimum token Jaccard for a removed and an added residual line to pair. */
+export const RESIDUAL_PAIR_THRESHOLD = 0.5;
+
+const lineTokenSet = (line: string): Set<string> =>
+  new Set(tokenizeLine(line).map((t) => t.text));
+
+/**
+ * Match the removed residual lines of one move_with_edit block to its added
+ * residual lines, so each matched pair can carry a token-level edit. Greedy
+ * over all cross pairs by token-set Jaccard, best score first, deterministic
+ * index tie-break, each line used at most once, scores below 0.5 never pair.
+ * Unmatched lines stay plain deletions and additions. Residual counts are
+ * small, so the quadratic scoring does not matter. Pure and deterministic.
+ */
+export const pairResidualLines = (
+  removed: readonly string[],
+  added: readonly string[],
+): ResidualPairing => {
+  const removedSets = removed.map(lineTokenSet);
+  const addedSets = added.map(lineTokenSet);
+  const candidates: { ri: number; ai: number; score: number }[] = [];
+  for (let ri = 0; ri < removed.length; ri++) {
+    const rSet = removedSets[ri];
+    if (rSet === undefined || rSet.size === 0) continue;
+    for (let ai = 0; ai < added.length; ai++) {
+      const aSet = addedSets[ai];
+      if (aSet === undefined || aSet.size === 0) continue;
+      const score = jaccard(rSet, aSet);
+      if (score >= RESIDUAL_PAIR_THRESHOLD) candidates.push({ ri, ai, score });
+    }
+  }
+  candidates.sort((x, y) => y.score - x.score || x.ri - y.ri || x.ai - y.ai);
+  const usedRemoved = new Set<number>();
+  const usedAdded = new Set<number>();
+  const matched: { ri: number; ai: number }[] = [];
+  for (const c of candidates) {
+    if (usedRemoved.has(c.ri) || usedAdded.has(c.ai)) continue;
+    usedRemoved.add(c.ri);
+    usedAdded.add(c.ai);
+    matched.push({ ri: c.ri, ai: c.ai });
+  }
+  matched.sort((x, y) => x.ri - y.ri || x.ai - y.ai);
+  return {
+    pairs: matched.map(({ ri, ai }) => {
+      const removedLine = removed[ri] ?? "";
+      const addedLine = added[ai] ?? "";
+      return { removedLine, addedLine, edit: tokenDiff(removedLine, addedLine) };
+    }),
+    unmatchedRemoved: removed.filter((_, i) => !usedRemoved.has(i)),
+    unmatchedAdded: added.filter((_, i) => !usedAdded.has(i)),
   };
 };
 

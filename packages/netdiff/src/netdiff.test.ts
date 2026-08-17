@@ -7,6 +7,7 @@ import {
   netDiffChars,
   parseDiff,
   planReview,
+  pairResidualLines,
   tokenDiff,
   type NetDiff,
   type TokenEdit,
@@ -412,6 +413,78 @@ describe("tokenDiff", () => {
     const a = "if (state === OPEN && !frozen) enqueue(job);";
     const b = "if (state === OPEN && !frozen && quota(user)) enqueue(job);";
     expect(JSON.stringify(tokenDiff(a, b))).toBe(JSON.stringify(tokenDiff(a, b)));
+  });
+});
+
+describe("pairResidualLines", () => {
+  it("pairs the near-identical line and leaves the strangers unmatched", () => {
+    const pairing = pairResidualLines(
+      ["  const a = parse(x);", "  teardown();"],
+      ["  const a = parseStrict(x);", "  brandNewThing(q, r, s, t);"],
+    );
+    expect(pairing.pairs).toHaveLength(1);
+    expect(pairing.pairs[0]?.removedLine).toBe("  const a = parse(x);");
+    expect(pairing.pairs[0]?.addedLine).toBe("  const a = parseStrict(x);");
+    expect(pairing.pairs[0]?.edit.removedTokens).toEqual(["parse"]);
+    expect(pairing.pairs[0]?.edit.addedTokens).toEqual(["parseStrict"]);
+    expect(pairing.unmatchedRemoved).toEqual(["  teardown();"]);
+    expect(pairing.unmatchedAdded).toEqual(["  brandNewThing(q, r, s, t);"]);
+  });
+
+  it("never pairs below the 0.5 Jaccard threshold", () => {
+    const pairing = pairResidualLines(
+      ["const legacy = parseCsv(row);"],
+      ["let modern = decodeJson(payload).field;"],
+    );
+    expect(pairing.pairs).toEqual([]);
+    expect(pairing.unmatchedRemoved).toHaveLength(1);
+    expect(pairing.unmatchedAdded).toHaveLength(1);
+  });
+
+  it("assigns the best partner first when scores differ", () => {
+    // both added lines clear the threshold against v3, but v3' scores higher
+    const pairing = pairResidualLines(
+      ['const relay_v3 = x * 5 + weight("relay", 3);', 'const relay_v8 = x * 10 + weight("relay", 8);'],
+      ['const relay_v8 = x * 100 + weight("relay", 8);', 'const relay_v3 = x * 50 + weight("relay", 3);'],
+    );
+    expect(pairing.pairs.map((p) => [p.removedLine.slice(6, 14), p.addedLine.slice(6, 14)])).toEqual([
+      ["relay_v3", "relay_v3"],
+      ["relay_v8", "relay_v8"],
+    ]);
+    expect(pairing.unmatchedRemoved).toEqual([]);
+    expect(pairing.unmatchedAdded).toEqual([]);
+  });
+
+  it("uses each repeated identical line exactly once, in index order", () => {
+    const pairing = pairResidualLines(
+      ["retry(op, 3);", "retry(op, 3);"],
+      ["retry(op, 4);", "retry(op, 5);"],
+    );
+    expect(pairing.pairs).toHaveLength(2);
+    expect(pairing.pairs[0]?.addedLine).toBe("retry(op, 4);");
+    expect(pairing.pairs[1]?.addedLine).toBe("retry(op, 5);");
+    expect(pairing.pairs[0]?.edit.removedTokens).toEqual(["3"]);
+    expect(pairing.pairs[0]?.edit.addedTokens).toEqual(["4"]);
+    expect(pairing.unmatchedRemoved).toEqual([]);
+    expect(pairing.unmatchedAdded).toEqual([]);
+  });
+
+  it("handles empty sides and is deterministic", () => {
+    expect(pairResidualLines([], [])).toEqual({
+      pairs: [],
+      unmatchedRemoved: [],
+      unmatchedAdded: [],
+    });
+    expect(pairResidualLines(["only(removed);"], [])).toEqual({
+      pairs: [],
+      unmatchedRemoved: ["only(removed);"],
+      unmatchedAdded: [],
+    });
+    const removed = ["a(1, 2);", "b(3, 4);", "a(9, 2);"];
+    const added = ["a(1, 20);", "b(3, 40);", "a(9, 20);"];
+    expect(JSON.stringify(pairResidualLines(removed, added))).toBe(
+      JSON.stringify(pairResidualLines(removed, added)),
+    );
   });
 });
 
