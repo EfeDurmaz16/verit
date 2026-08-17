@@ -81,16 +81,19 @@ honest but thin. To get the real thing:
 
 ```yaml
       - uses: EfeDurmaz16/verit@v0
+        with:
+          lane-model: claude-opus-5
         env:
           VERIT_LANE_PROVIDER: anthropic
-          VERIT_LANE_MODEL: claude-opus-5
           VERIT_LANE_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
 `VERIT_LANE_PROVIDER` takes `anthropic` or `openai-compat`. The `openai-compat`
 provider plus `VERIT_LANE_BASE_URL` covers OpenAI, Grok, DeepSeek, GLM, and a
-local vLLM. `VERIT_LANE_MODEL` is required: the lane pins its model and never
-guesses one.
+local vLLM. A model is required: the lane pins its model and never guesses one.
+In the Action, set it through the `lane-model` input. The Action writes
+`VERIT_LANE_MODEL` itself, so an `env:` value for it is overwritten. Outside
+the Action, set `VERIT_LANE_MODEL` directly.
 
 Legacy path: the `lane-harness: claude` and `lane-harness: cursor` inputs still
 drive those headless coding CLIs, and are used only when no
@@ -245,7 +248,8 @@ meaning of every domain word is in [`CONTEXT.md`](CONTEXT.md).
 Self-hosting is free and always will be. A hosted version, with run history,
 org-wide dashboards and no infrastructure to run, is coming.
 
-**Waitlist: TODO add link before launch**
+Want in early? Email [efe@sardis.sh](mailto:efe@sardis.sh) with "verit" in the
+subject.
 
 ---
 
@@ -270,6 +274,7 @@ org-wide dashboards and no infrastructure to run, is coming.
 | `CURSOR_API_KEY` | unset | Auth for `VERIT_LANE_HARNESS=cursor` in CI. Locally `cursor-agent login` is used |
 | `VERIT_SQLITE_PATH` | `.data/verit.db` | DocumentStore path. Set `""` for in-memory |
 | `VERIT_NEO4J_URI` | unset | `bolt://…`. Memory graph if unset |
+| `VERIT_NEO4J_USER` | `neo4j` | Neo4j username when the URI is set |
 | `VERIT_NEO4J_PASSWORD` | none | Neo4j auth when the URI is set |
 | `VERIT_WORKSPACE_DIR` | `.data/workspace` | Workspace session blobs |
 | `VERIT_PI_BIN` | unset | Path to a Pi binary. If unset, the deterministic stub |
