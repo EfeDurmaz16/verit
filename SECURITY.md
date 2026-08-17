@@ -42,6 +42,17 @@ verit runs code, so the sharp edges are worth naming.
 - Findings in a self-hosted deployment that come from missing configuration,
   for example a dashboard published with no session secret set.
 
+## Workflow advice for repositories that install verit
+
+- Trigger verit with `on: pull_request`, never `pull_request_target`. A
+  `pull_request_target` workflow that checks out the pull request head hands
+  attacker-controlled code a token with write access. verit never needs that:
+  on a fork pull request it expects the read-only token and degrades to a dry
+  run on purpose.
+- Pass the lane key through `lane-api-key` from a repository secret. GitHub
+  withholds secrets from fork pull requests, the lane disables itself, and the
+  Check is `neutral`. That is the designed behavior, not a failure to fix.
+
 ## Self-hosting notes
 
 - Set `VERIT_SESSION_SECRET` to at least 32 random bytes. Rotating it signs

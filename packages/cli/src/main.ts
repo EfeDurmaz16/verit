@@ -57,9 +57,11 @@ Env:
   VERIT_LANE_MAX_TOTAL_TOKENS  lane total token cap, default 4000000
   VERIT_LANE_HARNESS  claude | cursor asks that headless CLI for the Understanding
                         when no VERIT_LANE_PROVIDER is set; anything else keeps
-                        the Pi path. Any failure falls back
+                        the Pi path. Any failure means no Understanding, and
+                        the Check is neutral
   VERIT_LANE_TIMEOUT_MS  hard timeout for the lane, default 900000
-  VERIT_PI_BIN        optional Pi binary; else deterministic stub Understanding
+  VERIT_PI_BIN        optional Pi binary for the legacy Pi harness; unset means
+                        that harness produces no Understanding
   VERIT_PI_ARGS       optional args (default: understand --json)
   VERIT_NEO4J_URI     optional bolt://… (memory graph fallback if unset)
   VERIT_PROVE_CWD     checkout to prove in (default GITHUB_WORKSPACE); prove is

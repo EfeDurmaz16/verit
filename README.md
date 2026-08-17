@@ -76,28 +76,27 @@ the guess is wrong:
 
 The Understanding is written by the analysis lane. Bring an API key, pin a
 model, and the built-in lane talks straight to the model API. No coding CLI
-is involved. With no key configured you get a deterministic stub, which is
-honest but thin. To get the real thing:
+is involved. With no key configured, no Understanding is written and the
+Check is `neutral`. To get the real thing:
 
 ```yaml
       - uses: EfeDurmaz16/verit@v0
         with:
+          lane-provider: anthropic
           lane-model: claude-opus-5
-        env:
-          VERIT_LANE_PROVIDER: anthropic
-          VERIT_LANE_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          lane-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-`VERIT_LANE_PROVIDER` takes `anthropic` or `openai-compat`. The `openai-compat`
-provider plus `VERIT_LANE_BASE_URL` covers OpenAI, Grok, DeepSeek, GLM, and a
-local vLLM. A model is required: the lane pins its model and never guesses one.
-In the Action, set it through the `lane-model` input. The Action writes
-`VERIT_LANE_MODEL` itself, so an `env:` value for it is overwritten. Outside
-the Action, set `VERIT_LANE_MODEL` directly.
+`lane-provider` takes `anthropic` or `openai-compat`. The `openai-compat`
+provider plus `lane-base-url` covers OpenAI, Grok, DeepSeek, GLM, and a local
+vLLM. A model is required: the lane pins its model and never guesses one.
+The same settings also work as `VERIT_LANE_*` env on the step; a non-empty
+input wins over the env. On a fork pull request secrets are withheld, the
+lane disables itself, and the Check is `neutral`, never a failed job.
 
 Legacy path: the `lane-harness: claude` and `lane-harness: cursor` inputs still
-drive those headless coding CLIs, and are used only when no
-`VERIT_LANE_PROVIDER` is set.
+drive those headless coding CLIs, and are used only when no lane provider is
+set.
 
 Fork pull requests receive no secrets and a read-only token. verit degrades to
 a dry run and prints the Check instead of posting it. That is deliberate, and it
@@ -277,7 +276,7 @@ subject.
 | `VERIT_NEO4J_USER` | `neo4j` | Neo4j username when the URI is set |
 | `VERIT_NEO4J_PASSWORD` | none | Neo4j auth when the URI is set |
 | `VERIT_WORKSPACE_DIR` | `.data/workspace` | Workspace session blobs |
-| `VERIT_PI_BIN` | unset | Path to a Pi binary. If unset, the deterministic stub |
+| `VERIT_PI_BIN` | unset | Path to a Pi binary for the legacy Pi harness. If unset, that harness produces no Understanding |
 | `VERIT_DASHBOARD_URL` | unset | Dashboard base URL. With `VERIT_INGEST_TOKEN` the run is uploaded and the Check links its proof page |
 | `VERIT_INGEST_TOKEN` | unset | Per-repo ingest token from `pnpm --filter @verit/dashboard register-repo owner/name` |
 | `PROOF_PAGE_URL` | unset | Only to override the computed proof page link |

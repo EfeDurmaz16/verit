@@ -21,16 +21,28 @@ inputs:
     description: "Hard timeout for the verification command. The process group is killed."
     required: false
     default: "600000"
-  lane-harness:
-    description: "Headless coding CLI that writes the Understanding: claude or cursor. Empty uses the deterministic stub."
+  lane-provider:
+    description: "Model API behind the analysis lane: anthropic or openai-compat. Empty disables the lane and the Check is neutral."
     required: false
     default: ""
   lane-model:
-    description: "Model passed to the selected lane harness."
+    description: "Model the lane pins, e.g. claude-opus-5. Required when lane-provider is set. Never guessed."
+    required: false
+    default: ""
+  lane-api-key:
+    description: "API key for lane-provider. Falls back to an ANTHROPIC_API_KEY or OPENAI_API_KEY env on the step."
+    required: false
+    default: ""
+  lane-base-url:
+    description: "Base URL for lane-provider: openai-compat. Covers OpenAI, Grok, DeepSeek, GLM, local vLLM."
+    required: false
+    default: ""
+  lane-harness:
+    description: "Legacy: headless coding CLI (claude or cursor) instead of the built-in lane. Used only when lane-provider is empty."
     required: false
     default: ""
   anthropic-api-key:
-    description: "Auth for lane-harness: claude. Leave empty and the lane falls back to the stub."
+    description: "Legacy: auth for lane-harness: claude. Empty disables that harness."
     required: false
     default: ""
   dashboard-url:
@@ -83,12 +95,30 @@ runs:
         VERIT_PROVE_CMD: ${{ inputs.prove-command }}
         VERIT_PROVE_TIMEOUT_MS: ${{ inputs.prove-timeout-ms }}
         VERIT_SQLITE_PATH: ${{ github.action_path }}/.data/verit.db
-        # The lane stays on the stub unless both the harness and its key are set,
-        # so a fork PR with no secrets degrades instead of hanging on a CLI that
-        # cannot authenticate.
+        # Lane inputs pass through IN_* names so a VERIT_LANE_* env set on the
+        # caller's step is not clobbered by this env block. The run step below
+        # resolves each one: a non-empty input wins, else the caller's env.
+        IN_LANE_PROVIDER: ${{ inputs.lane-provider }}
+        IN_LANE_MODEL: ${{ inputs.lane-model }}
+        IN_LANE_API_KEY: ${{ inputs.lane-api-key }}
+        IN_LANE_BASE_URL: ${{ inputs.lane-base-url }}
+        # Legacy CLI harness path. Active only when both the harness and its key
+        # are set, so a fork PR with no secrets degrades instead of hanging on a
+        # CLI that cannot authenticate.
         VERIT_LANE_HARNESS: ${{ inputs.anthropic-api-key != '' && inputs.lane-harness || '' }}
-        VERIT_LANE_MODEL: ${{ inputs.lane-model }}
         ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
         VERIT_DASHBOARD_URL: ${{ inputs.dashboard-url }}
         VERIT_INGEST_TOKEN: ${{ inputs.ingest-token }}
-      run: pnpm exec tsx packages/cli/src/main.ts dogfood "$PR_SPEC"
+      run: |
+        export VERIT_LANE_PROVIDER="${IN_LANE_PROVIDER:-${VERIT_LANE_PROVIDER:-}}"
+        export VERIT_LANE_MODEL="${IN_LANE_MODEL:-${VERIT_LANE_MODEL:-}}"
+        export VERIT_LANE_API_KEY="${IN_LANE_API_KEY:-${VERIT_LANE_API_KEY:-}}"
+        export VERIT_LANE_BASE_URL="${IN_LANE_BASE_URL:-${VERIT_LANE_BASE_URL:-}}"
+        # A provider with no reachable key cannot authenticate. A fork PR gets
+        # no secrets, so disable the lane and let the Check go neutral instead
+        # of burning the job timeout.
+        if [ -n "$VERIT_LANE_PROVIDER" ] && [ -z "$VERIT_LANE_API_KEY" ] && [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$OPENAI_API_KEY" ]; then
+          echo "lane: provider set but no API key is available, lane disabled, the Check will be neutral"
+          export VERIT_LANE_PROVIDER=""
+        fi
+        pnpm exec tsx packages/cli/src/main.ts dogfood "$PR_SPEC"
