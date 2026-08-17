@@ -763,6 +763,239 @@ describe("pairResidualLines", () => {
   });
 });
 
+/* ---------------------- in-place edits (in-hunk pairing) ------------------- */
+
+/** The Greptile in-place shape: a 10-line block replaced inside ONE hunk, one
+    line gains a 3-token wrap. This is the field-test shape the move-gated
+    focus lines never fired on. */
+const inplaceBlock = [
+  "def refund(order, amount):",
+  "    check_state(order)",
+  "    if amount is None:",
+  '        raise ValueError("amount required")',
+  "    ledger = load_ledger(order.region)",
+  "    entry = ledger.prepare(order.id, amount)",
+  "    retry(entry.post, limit)",
+  "    log_refund(order.id, amount)",
+  "    notify(order.user)",
+  "    return entry",
+];
+const inplaceEdited = inplaceBlock.map((l) =>
+  l === "    retry(entry.post, limit)" ? "    retry(entry.post, clamp(limit))" : l,
+);
+const inplacePatch = modifiedFile("src/refunds.py", [
+  editHunk(40, inplaceBlock, 40, inplaceEdited),
+]);
+
+/** The mechanical-rename shape: the same one-token edit in many small hunks
+    across many files. The whole point of aggregation: one summary line. */
+const renameSpread: readonly (readonly [file: string, hunks: number])[] = [
+  ["src/app/boot.ts", 3],
+  ["src/app/cli.ts", 2],
+  ["src/core/engine.ts", 2],
+  ["src/core/registry.ts", 1],
+  ["src/io/loader.ts", 2],
+  ["src/io/writer.ts", 1],
+  ["src/site/head.ts", 1],
+];
+const mechanicalRenamePatch = renameSpread
+  .map(([file, hunks]) =>
+    modifiedFile(
+      file,
+      Array.from({ length: hunks }, (_, i) =>
+        editHunk(
+          10 + i * 20,
+          [`export const use${i} = () => cyclops.start(${i});`],
+          10 + i * 20,
+          [`export const use${i} = () => verit.start(${i});`],
+        ),
+      ),
+    ),
+  )
+  .join("\n");
+
+/** A git rename whose hunk carries one small in-place edit. */
+const renamedEditPatch = [
+  "diff --git a/src/old.ts b/src/moved.ts",
+  "similarity index 97%",
+  "rename from src/old.ts",
+  "rename to src/moved.ts",
+  "--- a/src/old.ts",
+  "+++ b/src/moved.ts",
+  editHunk(4, ["const retries = 3;"], 4, ["const retries = 5;"]),
+].join("\n");
+
+describe("in-place edits: the Greptile shape", () => {
+  it("pairs the replaced line and carries exactly the changed tokens", () => {
+    expect(inplaceBlock).toHaveLength(10);
+    const net = netOf(inplacePatch);
+    expect(net.inlineEdits).toHaveLength(1);
+    const e = net.inlineEdits[0];
+    expect(e?.file).toBe("src/refunds.py");
+    expect(e?.line).toBe(46);
+    expect(e?.removedLine).toBe("    retry(entry.post, limit)");
+    expect(e?.addedLine).toBe("    retry(entry.post, clamp(limit))");
+    expect(e?.edit.removedTokens).toEqual([]);
+    expect(e?.edit.addedTokens).toEqual(["clamp", "(", ")"]);
+  });
+
+  it("renders exactly one located focus line in diffSection", () => {
+    const section = diffSection(inplacePatch);
+    const located = section.split("\n").filter((l) => l.startsWith("real change at "));
+    expect(located).toEqual([
+      "real change at src/refunds.py:46: `retry(entry.post, limit)` -> `retry(entry.post, clamp(limit))`",
+    ]);
+    expect(located[0]?.length).toBeLessThanOrEqual(125);
+    expect(section).toContain("REAL CHANGES");
+  });
+
+  it("still lists the edit when the replacement also cleared the move threshold", () => {
+    // 9 of 10 lines identical: the block is a move_with_edit to itself, and
+    // the aggregation must still count the occurrence
+    const moves = detectMoves(parseDiff(inplacePatch));
+    expect(moves.pairs[0]?.kind).toBe("move_with_edit");
+    expect(netOf(inplacePatch).inlineEdits).toHaveLength(1);
+  });
+
+  it("changes no stat: the gross reconstruction invariant holds", () => {
+    const s = netOf(inplacePatch).stats;
+    expect(s.movedAdded + s.residualAdded + s.newLines).toBe(s.grossAdded);
+    expect(s.movedRemoved + s.residualRemoved + s.deletedLines).toBe(s.grossRemoved);
+    expect(s.grossAdded).toBe(10);
+    expect(s.grossRemoved).toBe(10);
+  });
+});
+
+describe("in-place edits: mechanical rename aggregation", () => {
+  it("collapses 12 identical token edits to one summary line", () => {
+    const net = netOf(mechanicalRenamePatch);
+    expect(net.inlineEdits).toHaveLength(12);
+    expect(new Set(net.inlineEdits.map((e) => e.file)).size).toBe(7);
+    const section = diffSection(mechanicalRenamePatch);
+    const summaries = section.split("\n").filter((l) => l.startsWith("real change, repeated "));
+    expect(summaries).toEqual([
+      "real change, repeated 12x across 7 files: `cyclops` -> `verit` (e.g. src/app/boot.ts:10, src/app/boot.ts:30, src/app/boot.ts:50)",
+    ]);
+    // the killer property: the edit is named once, not twelve times
+    expect(section.split("`cyclops` -> `verit`")).toHaveLength(2);
+    expect(section).not.toContain("real change at ");
+  });
+
+  it("keeps the edits in the net content: aggregation directs, it does not hide", () => {
+    const net = netOf(mechanicalRenamePatch);
+    expect(net.stats.movePct).toBe(0);
+    expect(net.stats.netLines).toBe(12);
+    expect(net.stats.deletedLines).toBe(12);
+    expect(net.regions.filter((r) => r.kind === "new")).toHaveLength(12);
+    expect(net.regions.filter((r) => r.kind === "deletion")).toHaveLength(12);
+  });
+
+  it("renders byte-identical output for the same input", () => {
+    expect(diffSection(mechanicalRenamePatch)).toBe(diffSection(mechanicalRenamePatch));
+  });
+});
+
+describe("in-place edits: renamed file with a small edit", () => {
+  it("locates the edit under the new path", () => {
+    const net = netOf(renamedEditPatch);
+    expect(net.inlineEdits).toHaveLength(1);
+    expect(net.inlineEdits[0]?.file).toBe("src/moved.ts");
+    expect(net.inlineEdits[0]?.line).toBe(4);
+    expect(net.inlineEdits[0]?.edit.removedTokens).toEqual(["3"]);
+    expect(net.inlineEdits[0]?.edit.addedTokens).toEqual(["5"]);
+    expect(net.renameCandidates).toEqual([
+      { from: "src/old.ts", to: "src/moved.ts", editedLines: 1 },
+    ]);
+  });
+
+  it("renders the located focus line in diffSection", () => {
+    expect(diffSection(renamedEditPatch)).toContain(
+      "real change at src/moved.ts:4: `const retries = 3;` -> `const retries = 5;`",
+    );
+  });
+});
+
+describe("in-place edits: hunk cell cap", () => {
+  it("a single pair over the cap silences the hunk", () => {
+    // 501 x 501 = 251,001 cells, over the 250k cap
+    const dels = Array.from({ length: 501 }, (_, i) => `row(${i}, "left");`);
+    const adds = Array.from({ length: 501 }, (_, i) => `row(${i}, "right");`);
+    const patch = modifiedFile("src/gen.ts", [editHunk(1, dels, 1, adds)]);
+    expect(netOf(patch).inlineEdits).toEqual([]);
+    expect(diffSection(patch)).not.toContain("REAL CHANGES");
+  });
+
+  it("adjacent pairs summing over the cap silence the whole hunk", () => {
+    // 400x400 + 350x300 = 265,000 cells: each pair alone is under the cap,
+    // the hunk as a whole is over, so the whole hunk stays silent
+    const hunk = [
+      "@@ -1,751 +1,701 @@",
+      ...Array.from({ length: 400 }, (_, i) => `-alpha(${i}, "left");`),
+      ...Array.from({ length: 400 }, (_, i) => `+alpha(${i}, "right");`),
+      " keep();",
+      ...Array.from({ length: 350 }, (_, i) => `-beta(${i}, "left");`),
+      ...Array.from({ length: 300 }, (_, i) => `+beta(${i}, "right");`),
+    ].join("\n");
+    expect(netOf(modifiedFile("src/gen2.ts", [hunk])).inlineEdits).toEqual([]);
+  });
+
+  it("a hunk exactly at the cap still pairs", () => {
+    const dels = Array.from({ length: 500 }, (_, i) => `row(${i}, "left");`);
+    const adds = Array.from({ length: 500 }, (_, i) => `row(${i}, "right");`);
+    const patch = modifiedFile("src/gen3.ts", [editHunk(1, dels, 1, adds)]);
+    const net = netOf(patch);
+    expect(net.inlineEdits).toHaveLength(500);
+    expect(net.inlineEdits[0]?.line).toBe(1);
+    expect(net.inlineEdits[0]?.edit.removedTokens).toEqual(["left"]);
+    expect(net.inlineEdits[0]?.edit.addedTokens).toEqual(["right"]);
+    expect(diffSection(patch)).toContain(
+      "real change, repeated 500x across 1 file: `left` -> `right`",
+    );
+  });
+});
+
+describe("in-place edits: no focus without a real edit", () => {
+  it("pure additions and pure deletions produce nothing", () => {
+    expect(netOf(addedFile("src/new.ts", ["a();", "b();"])).inlineEdits).toEqual([]);
+    expect(netOf(deletedFile("src/gone.ts", ["a();", "b();"])).inlineEdits).toEqual([]);
+    expect(diffSection(addedFile("src/new.ts", ["a();", "b();"]))).not.toContain("REAL CHANGES");
+  });
+
+  it("a del-run and add-run separated by context are not a replacement", () => {
+    const patch = modifiedFile("src/sep.ts", [
+      ["@@ -1,2 +1,2 @@", "-alpha(1);", " keep();", "+alpha(2);"].join("\n"),
+    ]);
+    expect(netOf(patch).inlineEdits).toEqual([]);
+  });
+
+  it("a whitespace-only replacement produces the empty edit and is dropped", () => {
+    const patch = modifiedFile("src/ws.ts", [editHunk(3, ["\tif (x) {"], 3, ["    if (x)  {"])]);
+    expect(netOf(patch).inlineEdits).toEqual([]);
+    expect(diffSection(patch)).not.toContain("REAL CHANGES");
+  });
+
+  it("an unrelated rewrite stays below the pairing threshold", () => {
+    const patch = modifiedFile("src/import.ts", [
+      editHunk(10, ["const legacy = parseCsv(row);"], 10, ["let modern = decodeJson(payload).field;"]),
+    ]);
+    expect(netOf(patch).inlineEdits).toEqual([]);
+  });
+});
+
+describe("in-place edits: prompt flood ceiling", () => {
+  it("caps the block at 40 lines and reports the tail count", () => {
+    const patch = Array.from({ length: 45 }, (_, i) =>
+      modifiedFile(`src/m${String(i).padStart(2, "0")}.ts`, [
+        editHunk(1, [`limit${i} = ${i};`], 1, [`limit${i} = ${i + 100};`]),
+      ]),
+    ).join("\n");
+    const section = diffSection(patch);
+    const focus = section.split("\n").filter((l) => l.startsWith("real change"));
+    expect(focus).toHaveLength(40);
+    expect(section).toContain("and 5 more in-place edits not shown.");
+  });
+});
+
 /* ------------------------------- review plan ------------------------------- */
 
 describe("planReview", () => {
@@ -890,6 +1123,9 @@ const FIXTURES: Record<string, string> = {
   multiEditMove: multiEditPatch,
   longFocusTrim: longLinePatch,
   astralFocusTrim: astralPatch,
+  inplaceEdit: inplacePatch,
+  mechanicalRename: mechanicalRenamePatch,
+  renamedFileEdit: renamedEditPatch,
 };
 
 describe("every untrimmed focus side is a verbatim substring of the patch", () => {
@@ -898,6 +1134,21 @@ describe("every untrimmed focus side is a verbatim substring of the patch", () =
       for (const region of netOf(patch).regions) {
         for (const side of focusSides(region.content)) {
           if (side.includes("...")) continue; // trimmed sides are covered above
+          expect(patch).toContain(side);
+        }
+      }
+    });
+  }
+});
+
+describe("every untrimmed located focus side in diffSection is verbatim", () => {
+  for (const [name, patch] of Object.entries(FIXTURES)) {
+    it(`holds for ${name}`, () => {
+      for (const line of diffSection(patch).split("\n")) {
+        const m = /^real change at .+?:\d+: `(.*)` -> `(.*)`$/.exec(line);
+        if (!m) continue;
+        for (const side of [m[1] ?? "", m[2] ?? ""]) {
+          if (side.includes("...")) continue; // trimmed sides carry the marker
           expect(patch).toContain(side);
         }
       }
