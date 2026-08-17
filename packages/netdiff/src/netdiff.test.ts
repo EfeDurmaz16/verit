@@ -4,6 +4,7 @@ import {
   computeNetDiff,
   describeMoves,
   detectMoves,
+  diffSection,
   netDiffChars,
   parseDiff,
   planReview,
@@ -178,6 +179,7 @@ describe("detectMoves: pure move", () => {
     expect(pair?.from.file).toBe("src/pay.ts");
     expect(pair?.to.file).toBe("src/quote.ts");
     expect(pair?.toResidual).toEqual([]);
+    expect(pair?.residualPairs).toEqual([]);
     expect(moves.newBlocks).toEqual([]);
     expect(moves.deletedBlocks).toEqual([]);
   });
@@ -247,6 +249,149 @@ describe("detectMoves: move with edit", () => {
     expect(region?.movedFrom?.file).toBe("src/charge.ts");
     expect(region?.lines).toHaveLength(1);
     expect(net.stats.netLines).toBe(1);
+  });
+});
+
+/* --------------------- token focus inside moved blocks --------------------- */
+
+/** The Greptile shape: a 12-line guard block moved, one line gains a 3-word check. */
+const guardBlock = [
+  "def validate_amount(x, limits):",
+  "    if x is None:",
+  '        raise ValueError("amount required")',
+  "    if not isinstance(x, int):",
+  '        raise TypeError("amount must be int")',
+  "    lo, hi = limits",
+  "    if x < lo:",
+  '        raise ValueError("below minimum")',
+  "    if x > hi:",
+  '        raise ValueError("above maximum")',
+  '    log_check("amount", x)',
+  "    return x",
+];
+const guardEdited = guardBlock.map((l) =>
+  l === "    if not isinstance(x, int):" ? "    if not isinstance(x, int) or x < 0:" : l,
+);
+const greptilePatch = [
+  modifiedFile("src/checks.py", [editHunk(12, guardBlock, 12, [])]),
+  modifiedFile("src/validators.py", [editHunk(88, [], 88, guardEdited)]),
+].join("\n");
+
+describe("move_with_edit: token focus, the Greptile shape", () => {
+  it("carries exactly the changed tokens on the pair", () => {
+    expect(guardBlock).toHaveLength(12);
+    const moves = detectMoves(parseDiff(greptilePatch));
+    expect(moves.pairs).toHaveLength(1);
+    const pair = moves.pairs[0];
+    expect(pair?.kind).toBe("move_with_edit");
+    expect(pair?.residualPairs).toHaveLength(1);
+    const rp = pair?.residualPairs[0];
+    expect(rp?.removedLine).toBe("    if not isinstance(x, int):");
+    expect(rp?.addedLine).toBe("    if not isinstance(x, int) or x < 0:");
+    expect(rp?.edit.removedTokens).toEqual([]);
+    expect(rp?.edit.addedTokens).toEqual(["or", "x", "<", "0"]);
+  });
+
+  it("renders one focus line naming the real change, under the length cap", () => {
+    const net = netOf(greptilePatch);
+    expect(net.regions).toHaveLength(1);
+    const region = net.regions[0];
+    expect(region?.kind).toBe("residual");
+    expect(region?.residualPairs).toHaveLength(1);
+    const focus = (region?.content ?? "")
+      .split("\n")
+      .filter((l) => l.startsWith("real change: "));
+    expect(focus).toEqual([
+      "real change: `isinstance(x, int):` -> `isinstance(x, int) or x < 0:`",
+    ]);
+    expect(focus[0]?.length).toBeLessThanOrEqual(125);
+  });
+
+  it("surfaces the focus line and its instruction in the shared diffSection", () => {
+    const section = diffSection(greptilePatch);
+    expect(section).toContain(
+      "real change: `isinstance(x, int):` -> `isinstance(x, int) or x < 0:`",
+    );
+    expect(section).toContain("the review target");
+  });
+
+  it("keeps the gross reconstruction invariant", () => {
+    const s = netOf(greptilePatch).stats;
+    expect(s.movedAdded + s.residualAdded + s.newLines).toBe(s.grossAdded);
+    expect(s.movedRemoved + s.residualRemoved + s.deletedLines).toBe(s.grossRemoved);
+    expect(s.residualAdded).toBe(1);
+    expect(s.residualRemoved).toBe(1);
+  });
+});
+
+/** One 20-line block moved with two edited lines. */
+const relayBlock = fn("relay", 20);
+const relayEdited = relayBlock.map((l) =>
+  l.includes("relay_v3")
+    ? l.replace("x * 5", "x * 50")
+    : l.includes("relay_v8")
+      ? l.replace("x * 10", "x * 100")
+      : l,
+);
+const multiEditPatch = [
+  modifiedFile("src/relay.ts", [editHunk(4, relayBlock, 4, [])]),
+  modifiedFile("src/net/relay.ts", [editHunk(30, [], 30, relayEdited)]),
+].join("\n");
+
+describe("move_with_edit: several edited lines in one block", () => {
+  it("pairs each edited line with its own counterpart", () => {
+    const moves = detectMoves(parseDiff(multiEditPatch));
+    expect(moves.pairs).toHaveLength(1);
+    const pair = moves.pairs[0];
+    expect(pair?.kind).toBe("move_with_edit");
+    expect(pair?.residualPairs).toHaveLength(2);
+    expect(pair?.residualPairs.map((p) => p.edit.removedTokens)).toEqual([["5"], ["10"]]);
+    expect(pair?.residualPairs.map((p) => p.edit.addedTokens)).toEqual([["50"], ["100"]]);
+  });
+
+  it("renders one focus line per pair, each on its own line", () => {
+    const region = netOf(multiEditPatch).regions[0];
+    const focus = (region?.content ?? "")
+      .split("\n")
+      .filter((l) => l.startsWith("real change: "));
+    expect(focus).toHaveLength(2);
+    expect(focus[0]).toContain("x * 5");
+    expect(focus[0]).toContain("x * 50");
+    expect(focus[1]).toContain("x * 10");
+    expect(focus[1]).toContain("x * 100");
+    for (const l of focus) expect(l.length).toBeLessThanOrEqual(125);
+  });
+});
+
+describe("token focus never appears without a real edit", () => {
+  it("a pure move renders no focus line anywhere", () => {
+    const body = fn("quote", 12);
+    const patch = [
+      modifiedFile("src/pay.ts", [editHunk(10, body, 10, [])]),
+      modifiedFile("src/quote.ts", [editHunk(90, [], 90, body.map((l) => `  ${l}`))]),
+    ].join("\n");
+    const net = netOf(patch);
+    expect(net.regions).toEqual([]);
+    for (const p of detectMoves(parseDiff(patch)).pairs) {
+      expect(p.residualPairs).toEqual([]);
+    }
+  });
+
+  it("an unmatched residual line stays a plain add with no focus line", () => {
+    // the landed block gains one brand-new line unrelated to any removed line
+    const landed = [...relayBlock.slice(0, 19), "  auditTrail.record(relayId, now());", ...relayBlock.slice(19)];
+    const patch = [
+      modifiedFile("src/relay.ts", [editHunk(4, relayBlock, 4, [])]),
+      modifiedFile("src/net/relay.ts", [editHunk(30, [], 30, landed)]),
+    ].join("\n");
+    const moves = detectMoves(parseDiff(patch));
+    const pair = moves.pairs[0];
+    expect(pair?.kind).toBe("move_with_edit");
+    expect(pair?.toResidual).toEqual(["  auditTrail.record(relayId, now());"]);
+    expect(pair?.residualPairs).toEqual([]);
+    const region = netOf(patch).regions[0];
+    expect(region?.content).not.toContain("real change:");
+    expect(region?.content).toContain("+  auditTrail.record(relayId, now());");
   });
 });
 
@@ -611,6 +756,8 @@ const FIXTURES: Record<string, string> = {
     ]),
     modifiedFile("src/landing.ts", [editHunk(7, [], 7, fn("mover", 10))]),
   ].join("\n"),
+  greptileGuard: greptilePatch,
+  multiEditMove: multiEditPatch,
 };
 
 describe("net plus moves reconstructs the gross counts", () => {

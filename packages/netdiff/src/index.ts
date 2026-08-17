@@ -94,6 +94,10 @@ export interface MovePair {
   readonly toResidual: readonly string[];
   /** raw lines of `from` that did not survive into `to` */
   readonly fromResidual: readonly string[];
+  /** residual lines matched across the two sides, each with its token-level
+      edit; empty for pure moves. Residual lines not in any pair are plain
+      additions or deletions. */
+  readonly residualPairs: readonly ResidualPair[];
 }
 
 export interface MoveReport {
@@ -118,6 +122,8 @@ export interface NetRegion {
     readonly startLine: number;
     readonly similarity: number;
   };
+  /** set on residual regions: the token-level pairs behind the focus lines */
+  readonly residualPairs?: readonly ResidualPair[];
   /** deterministic rendered text, the unit the char budget applies to */
   readonly content: string;
 }
@@ -726,6 +732,7 @@ export const detectMoves = (deltas: readonly FileDelta[]): MoveReport => {
       similarity: 1,
       toResidual: [],
       fromResidual: [],
+      residualPairs: [],
     });
   }
 
@@ -792,6 +799,7 @@ export const detectMoves = (deltas: readonly FileDelta[]): MoveReport => {
       similarity: pure ? 1 : bestSim,
       toResidual,
       fromResidual,
+      residualPairs: pure ? [] : pairResidualLines(fromResidual, toResidual).pairs,
     });
   }
 
@@ -805,12 +813,28 @@ export const detectMoves = (deltas: readonly FileDelta[]): MoveReport => {
 
 /* -------------------------------- net diff -------------------------------- */
 
+/** Per-side cap for a focus line: two sides plus markup stay near 120 chars. */
+const FOCUS_SIDE_CHARS = 49;
+
+const trimFocusSide = (s: string): string =>
+  s.length <= FOCUS_SIDE_CHARS ? s : `${s.slice(0, 23)}...${s.slice(-23)}`;
+
+/** The compact focus lines of a residual region, one per token pair. */
+const focusLines = (pairs: readonly ResidualPair[]): string[] =>
+  pairs
+    .filter((p) => p.edit.removedTokens.length > 0 || p.edit.addedTokens.length > 0)
+    .map(
+      (p) =>
+        `real change: \`${trimFocusSide(p.edit.beforeContext)}\` -> \`${trimFocusSide(p.edit.afterContext)}\``,
+    );
+
 const renderRegion = (
   kind: RegionKind,
   file: string,
   startLine: number,
   lines: readonly string[],
   movedFrom?: NetRegion["movedFrom"],
+  residualPairs?: readonly ResidualPair[],
 ): string => {
   const label =
     kind === "new"
@@ -819,9 +843,11 @@ const renderRegion = (
         ? "deleted"
         : `edit inside code moved from ${movedFrom?.file ?? "?"}:${movedFrom?.startLine ?? 0}, similarity ${(movedFrom?.similarity ?? 0).toFixed(2)}`;
   const marker = kind === "deletion" ? "-" : "+";
-  return [`=== ${file}:${startLine} (${label})`, ...lines.map((l) => `${marker}${l}`)].join(
-    "\n",
-  );
+  return [
+    `=== ${file}:${startLine} (${label})`,
+    ...lines.map((l) => `${marker}${l}`),
+    ...focusLines(residualPairs ?? []),
+  ].join("\n");
 };
 
 const regionOrder = (a: NetRegion, b: NetRegion): number =>
@@ -883,7 +909,15 @@ export const computeNetDiff = (
       startLine: p.to.startLine,
       lines: p.toResidual,
       movedFrom,
-      content: renderRegion("residual", p.to.file, p.to.startLine, p.toResidual, movedFrom),
+      residualPairs: p.residualPairs,
+      content: renderRegion(
+        "residual",
+        p.to.file,
+        p.to.startLine,
+        p.toResidual,
+        movedFrom,
+        p.residualPairs,
+      ),
     });
   }
   let deletedLines = 0;
@@ -1151,6 +1185,7 @@ ${describeMoves(net)}
 
 NET DIFF, moves pre-factored${coverage < 100 ? ` (top regions by risk, ${coverage}% of the net content)` : ""}:
 Each region below is content to actually review: new code, a residual edit inside a moved block, or a deletion. Moved code is already accounted for above and is not repeated here.
+Inside a moved block, each "real change:" line names the exact tokens that changed, before -> after. Those tokens are the review target for that block. The rest of the block moved unchanged.
 ${body || "(no net content: every changed line is moved code)"}${
     missing.length > 0
       ? `
