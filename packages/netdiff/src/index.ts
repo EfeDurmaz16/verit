@@ -52,6 +52,22 @@ export interface Block {
   readonly lines: readonly string[];
 }
 
+/**
+ * The token-level difference between one before line and one after line.
+ * `removedTokens` and `addedTokens` are the exact tokens that changed, from an
+ * LCS alignment. `beforeContext` and `afterContext` are raw slices of the two
+ * lines covering the changed span plus a few tokens of context on each side,
+ * with the original spacing kept, ready to render as `before` -> `after`.
+ * Identical token streams (including whitespace-only differences) produce the
+ * empty edit: both arrays empty, both contexts empty.
+ */
+export interface TokenEdit {
+  readonly removedTokens: readonly string[];
+  readonly addedTokens: readonly string[];
+  readonly beforeContext: string;
+  readonly afterContext: string;
+}
+
 export interface MovePair {
   readonly kind: "pure_move" | "move_with_edit";
   readonly from: Block;
@@ -457,6 +473,137 @@ const lineOverlap = (a: Block, b: Block): number => {
   const denom = Math.max(aLen, bLen);
   return denom === 0 ? 0 : matched / denom;
 };
+
+/* ------------------------- token-level residuals -------------------------- */
+
+/** One token with its position in the raw line, so context keeps real spacing. */
+interface LineToken {
+  readonly text: string;
+  readonly start: number;
+  readonly end: number;
+}
+
+/** Identifier runs (unicode letters, digits, underscore) or single punctuation
+    chars. Whitespace only separates, so an indent or spacing change yields the
+    same token stream. Single-char punctuation keeps `):` from gluing into one
+    token, which would smear an edit across its neighbors. */
+const LINE_TOKEN_RE = /[\p{L}\p{N}_]+|[^\s\p{L}\p{N}_]/gu;
+
+const tokenizeLine = (line: string): LineToken[] => {
+  const out: LineToken[] = [];
+  for (const m of line.matchAll(LINE_TOKEN_RE)) {
+    const start = m.index ?? 0;
+    out.push({ text: m[0], start, end: start + m[0].length });
+  }
+  return out;
+};
+
+const EMPTY_TOKEN_EDIT: TokenEdit = {
+  removedTokens: [],
+  addedTokens: [],
+  beforeContext: "",
+  afterContext: "",
+};
+
+/** Context tokens kept on each side of the changed span. */
+const FOCUS_CONTEXT_TOKENS = 6;
+
+/** Above this window-size product, skip the LCS and report the whole window. */
+const LCS_CELL_CAP = 250_000;
+
+/** Tokens of `win` that an LCS alignment against `other` cannot match. */
+const unmatchedByLcs = (win: readonly string[], other: readonly string[]): string[] => {
+  const n = win.length;
+  const m = other.length;
+  if (n === 0) return [];
+  if (m === 0) return [...win];
+  // ponytail: quadratic LCS, capped; lines are short, a minified monster falls back
+  if (n * m > LCS_CELL_CAP) return [...win];
+  // dp[i][j] = LCS length of win[i:], other[j:], flattened
+  const width = m + 1;
+  const dp = new Int32Array((n + 1) * width);
+  const at = (i: number, j: number): number => dp[i * width + j] ?? 0;
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i * width + j] =
+        win[i] === other[j] ? at(i + 1, j + 1) + 1 : Math.max(at(i + 1, j), at(i, j + 1));
+    }
+  }
+  const out: string[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    const w = win[i];
+    if (w !== undefined && w === other[j]) {
+      i++;
+      j++;
+    } else if (at(i + 1, j) >= at(i, j + 1)) {
+      if (w !== undefined) out.push(w);
+      i++;
+    } else {
+      j++;
+    }
+  }
+  for (; i < n; i++) {
+    const w = win[i];
+    if (w !== undefined) out.push(w);
+  }
+  return out;
+};
+
+/** Raw slice of `line` spanning tokens [lo, hi), "" when the range is empty. */
+const sliceTokens = (line: string, tokens: readonly LineToken[], lo: number, hi: number): string => {
+  const first = tokens[lo];
+  const last = tokens[hi - 1];
+  return hi <= lo || first === undefined || last === undefined
+    ? ""
+    : line.slice(first.start, last.end);
+};
+
+/**
+ * Token-level diff of one line pair. Tokenizes on whitespace and
+ * identifier/punctuation boundaries, trims the common token prefix and suffix,
+ * then runs an LCS inside the remaining window so `removedTokens` and
+ * `addedTokens` are exactly the tokens that changed, even across several spans.
+ * `beforeContext` and `afterContext` are raw slices of the two lines covering
+ * that window plus up to 6 context tokens per side. Quadratic in the window
+ * size, which is fine for lines. Pure and deterministic.
+ */
+export const tokenDiff = (before: string, after: string): TokenEdit => {
+  const a = tokenizeLine(before);
+  const b = tokenizeLine(after);
+  let p = 0;
+  while (p < a.length && p < b.length && a[p]?.text === b[p]?.text) p++;
+  if (p === a.length && p === b.length) return EMPTY_TOKEN_EDIT;
+  let s = 0;
+  while (
+    s < a.length - p &&
+    s < b.length - p &&
+    a[a.length - 1 - s]?.text === b[b.length - 1 - s]?.text
+  ) {
+    s++;
+  }
+  const winA = a.slice(p, a.length - s).map((t) => t.text);
+  const winB = b.slice(p, b.length - s).map((t) => t.text);
+  return {
+    removedTokens: unmatchedByLcs(winA, winB),
+    addedTokens: unmatchedByLcs(winB, winA),
+    beforeContext: sliceTokens(
+      before,
+      a,
+      Math.max(0, p - FOCUS_CONTEXT_TOKENS),
+      Math.min(a.length, a.length - s + FOCUS_CONTEXT_TOKENS),
+    ),
+    afterContext: sliceTokens(
+      after,
+      b,
+      Math.max(0, p - FOCUS_CONTEXT_TOKENS),
+      Math.min(b.length, b.length - s + FOCUS_CONTEXT_TOKENS),
+    ),
+  };
+};
+
+/* ----------------------------- near-move pass ------------------------------ */
 
 /** Near-move threshold: below this, an added block is new content. */
 export const MOVE_SIMILARITY_THRESHOLD = 0.85;

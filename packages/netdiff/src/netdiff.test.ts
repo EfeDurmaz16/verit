@@ -7,7 +7,9 @@ import {
   netDiffChars,
   parseDiff,
   planReview,
+  tokenDiff,
   type NetDiff,
+  type TokenEdit,
 } from "./index";
 
 /* ------------------------------ fixture tools ------------------------------ */
@@ -328,6 +330,88 @@ describe("detectMoves: pathological repeated block", () => {
     // 12 added lines matched, 12 of 18 removed matched
     expect(net.stats.movedAdded).toBe(12);
     expect(net.stats.movedRemoved).toBe(12);
+  });
+});
+
+/* ----------------------------- token-level diff ---------------------------- */
+
+const EMPTY_EDIT: TokenEdit = {
+  removedTokens: [],
+  addedTokens: [],
+  beforeContext: "",
+  afterContext: "",
+};
+
+describe("tokenDiff", () => {
+  it("returns the empty edit for identical strings", () => {
+    const line = '    raise ValueError("amount required")';
+    expect(tokenDiff(line, line)).toEqual(EMPTY_EDIT);
+    expect(tokenDiff("", "")).toEqual(EMPTY_EDIT);
+  });
+
+  it("treats tab and space differences as no edit at all", () => {
+    expect(tokenDiff("\tif (x) {", "    if (x)  {")).toEqual(EMPTY_EDIT);
+    expect(tokenDiff("a = b + c", "a=b+c")).toEqual(EMPTY_EDIT);
+  });
+
+  it("isolates a pure insertion to exactly the inserted tokens", () => {
+    const edit = tokenDiff(
+      "    if not isinstance(x, int):",
+      "    if not isinstance(x, int) or x < 0:",
+    );
+    expect(edit.removedTokens).toEqual([]);
+    expect(edit.addedTokens).toEqual(["or", "x", "<", "0"]);
+    expect(edit.beforeContext).toBe("isinstance(x, int):");
+    expect(edit.afterContext).toBe("isinstance(x, int) or x < 0:");
+  });
+
+  it("isolates a one-token replacement", () => {
+    const edit = tokenDiff(
+      '  const v = x * 5 + weight("charge", 3);',
+      '  const v = x * 50 + weight("charge", 3);',
+    );
+    expect(edit.removedTokens).toEqual(["5"]);
+    expect(edit.addedTokens).toEqual(["50"]);
+    expect(edit.beforeContext).toContain("x * 5 +");
+    expect(edit.afterContext).toContain("x * 50 +");
+  });
+
+  it("reports exact tokens across multiple changed spans in one line", () => {
+    const edit = tokenDiff("foo(a, b, c)", "foo(x, b, y)");
+    expect(edit.removedTokens).toEqual(["a", "c"]);
+    expect(edit.addedTokens).toEqual(["x", "y"]);
+    expect(edit.beforeContext).toBe("foo(a, b, c)");
+    expect(edit.afterContext).toBe("foo(x, b, y)");
+  });
+
+  it("handles unicode identifiers as whole tokens", () => {
+    const edit = tokenDiff(
+      "toplamÜcret = hesapla(döviz)",
+      "toplamÜcret = hesapla(kur)",
+    );
+    expect(edit.removedTokens).toEqual(["döviz"]);
+    expect(edit.addedTokens).toEqual(["kur"]);
+    expect(edit.afterContext).toContain("hesapla(kur)");
+  });
+
+  it("keeps original spacing in the contexts", () => {
+    const edit = tokenDiff("call(a,  b)", "call(a,  c)");
+    expect(edit.beforeContext).toBe("call(a,  b)");
+    expect(edit.afterContext).toBe("call(a,  c)");
+  });
+
+  it("diffs against an empty line", () => {
+    const edit = tokenDiff("", "return x");
+    expect(edit.removedTokens).toEqual([]);
+    expect(edit.addedTokens).toEqual(["return", "x"]);
+    expect(edit.beforeContext).toBe("");
+    expect(edit.afterContext).toBe("return x");
+  });
+
+  it("is deterministic", () => {
+    const a = "if (state === OPEN && !frozen) enqueue(job);";
+    const b = "if (state === OPEN && !frozen && quota(user)) enqueue(job);";
+    expect(JSON.stringify(tokenDiff(a, b))).toBe(JSON.stringify(tokenDiff(a, b)));
   });
 });
 
