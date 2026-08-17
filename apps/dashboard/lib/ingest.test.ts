@@ -55,9 +55,9 @@ describe("ingest token auth", () => {
   });
 
   it("reads the token out of an Authorization header, or nothing", () => {
-    expect(bearerToken("Bearer cyc_abc")).toBe("cyc_abc");
-    expect(bearerToken("bearer cyc_abc")).toBe("cyc_abc");
-    expect(bearerToken("Basic cyc_abc")).toBeNull();
+    expect(bearerToken("Bearer vrt_abc")).toBe("vrt_abc");
+    expect(bearerToken("bearer vrt_abc")).toBe("vrt_abc");
+    expect(bearerToken("Basic vrt_abc")).toBeNull();
     expect(bearerToken(null)).toBeNull();
   });
 });

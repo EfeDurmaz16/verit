@@ -19,14 +19,14 @@ describe("upload gating", () => {
   it("stays off unless both variables are set", () => {
     expect(dashboardTarget({})).toBeNull();
     expect(dashboardTarget({ VERIT_DASHBOARD_URL: "http://x" })).toBeNull();
-    expect(dashboardTarget({ VERIT_INGEST_TOKEN: "cyc_x" })).toBeNull();
-    expect(dashboardTarget({ VERIT_DASHBOARD_URL: " ", VERIT_INGEST_TOKEN: "cyc_x" })).toBeNull();
+    expect(dashboardTarget({ VERIT_INGEST_TOKEN: "vrt_x" })).toBeNull();
+    expect(dashboardTarget({ VERIT_DASHBOARD_URL: " ", VERIT_INGEST_TOKEN: "vrt_x" })).toBeNull();
   });
 
   it("turns on when both are set", () => {
     expect(
-      dashboardTarget({ VERIT_DASHBOARD_URL: "http://x", VERIT_INGEST_TOKEN: "cyc_x" }),
-    ).toEqual({ baseUrl: "http://x", token: "cyc_x" });
+      dashboardTarget({ VERIT_DASHBOARD_URL: "http://x", VERIT_INGEST_TOKEN: "vrt_x" }),
+    ).toEqual({ baseUrl: "http://x", token: "vrt_x" });
   });
 });
 

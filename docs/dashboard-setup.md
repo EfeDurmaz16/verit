@@ -41,7 +41,7 @@ GITHUB_TOKEN="$(gh auth token)" \
 VERIT_PROVE_CWD="$PWD" \
 VERIT_CHECK_DRY_RUN=1 \
 VERIT_DASHBOARD_URL="http://localhost:3001" \
-VERIT_INGEST_TOKEN="cyc_..." \
+VERIT_INGEST_TOKEN="vrt_..." \
 pnpm cli dogfood "EfeDurmaz16/verit#1"
 ```
 

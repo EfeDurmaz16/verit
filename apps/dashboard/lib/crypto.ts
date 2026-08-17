@@ -48,7 +48,7 @@ export const open = (sealed: string, key: Buffer = sessionKey()): string | null 
 };
 
 /** A repo ingest token. Shown once at registration, never stored in the clear. */
-export const newIngestToken = (): string => `cyc_${randomBytes(32).toString("base64url")}`;
+export const newIngestToken = (): string => `vrt_${randomBytes(32).toString("base64url")}`;
 
 export const hashToken = (token: string): string =>
   createHash("sha256").update(token, "utf8").digest("hex");
