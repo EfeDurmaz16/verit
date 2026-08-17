@@ -1280,6 +1280,68 @@ export const netDiffChars = (patch: string): number => {
   return isNettable(analysis) ? analysis.net.stats.netChars : patch.length;
 };
 
+/** Ceiling on rendered "real change" lines in diffSection.
+    ponytail: flat 40-line cap; make it budget-aware if real diffs hit it */
+const INLINE_FOCUS_MAX_LINES = 40;
+
+/**
+ * The whole-diff "real change" lines for the in-place edits. Edits with
+ * identical (removedTokens, addedTokens) are one group: a group of one keeps
+ * the per-edit format with its location and verbatim contexts; a repeated
+ * group collapses to one summary line with the count, the file spread, the
+ * changed tokens, and up to three example locations. Groups render biggest
+ * first, so a mechanical rename is the first thing the lane reads. Capped at
+ * 40 lines with an honest tail count, so a pathological diff cannot flood
+ * the prompt. Pure and deterministic.
+ */
+const inlineFocusLines = (edits: readonly InlineEdit[]): string[] => {
+  if (edits.length === 0) return [];
+  const groups = new Map<string, InlineEdit[]>();
+  for (const e of edits) {
+    // stringify keys keep ["ab"],["c"] apart from ["a"],["bc"]: no join collision
+    const key = JSON.stringify([e.edit.removedTokens, e.edit.addedTokens]);
+    const g = groups.get(key);
+    if (g) g.push(e);
+    else groups.set(key, [e]);
+  }
+  // biggest group first; ties by the first occurrence, which is already the
+  // smallest (file, line) because `edits` arrives sorted
+  const ordered = [...groups.values()].sort((a, b) => {
+    if (a.length !== b.length) return b.length - a.length;
+    const x = a[0];
+    const y = b[0];
+    if (!x || !y) return 0;
+    return x.file < y.file ? -1 : x.file > y.file ? 1 : x.line - y.line;
+  });
+  const lines: string[] = [];
+  let shown = 0;
+  for (const g of ordered) {
+    if (lines.length >= INLINE_FOCUS_MAX_LINES) break;
+    const first = g[0];
+    if (!first) continue;
+    if (g.length === 1) {
+      lines.push(
+        `real change at ${first.file}:${first.line}: \`${trimFocusSide(first.edit.beforeContext)}\` -> \`${trimFocusSide(first.edit.afterContext)}\``,
+      );
+    } else {
+      const files = new Set(g.map((e) => e.file)).size;
+      const examples = g
+        .slice(0, 3)
+        .map((e) => `${e.file}:${e.line}`)
+        .join(", ");
+      lines.push(
+        `real change, repeated ${g.length}x across ${files} ${files === 1 ? "file" : "files"}: \`${trimFocusSide(first.edit.removedTokens.join(" "))}\` -> \`${trimFocusSide(first.edit.addedTokens.join(" "))}\` (${g.length <= 3 ? "at" : "e.g."} ${examples})`,
+      );
+    }
+    shown += g.length;
+  }
+  if (shown < edits.length) {
+    const left = edits.length - shown;
+    lines.push(`and ${left} more in-place ${left === 1 ? "edit" : "edits"} not shown.`);
+  }
+  return lines;
+};
+
 /**
  * The diff as any lane sees it: net first. The deterministic pre-pass above
  * factors moved code out before the budget applies, so the whole prompt
@@ -1303,8 +1365,17 @@ ${diff.slice(0, DIFF_BUDGET_CHARS)}`;
     .slice(0, 20)
     .map((r) => `- ${r.file}:${r.startLine} (${r.kind}, ${r.lines.length} lines)`);
   const body = plan.regions.map((r) => r.content).join("\n");
+  const inline = inlineFocusLines(net.inlineEdits);
+  const inlineBlock =
+    inline.length === 0
+      ? ""
+      : `
+
+REAL CHANGES (in-place edits, exact tokens, deterministic):
+Each "real change" line marks the exact tokens that changed where removed lines were replaced in place. The full lines stay in the regions below; these lines only direct attention. A "repeated" line is one mechanical change applied many times: verify the pattern once, spot-check its examples, and do not re-verify every occurrence.
+${inline.join("\n")}`;
   return `MOVE ANALYSIS (deterministic pre-pass, no model involved):
-${describeMoves(net)}
+${describeMoves(net)}${inlineBlock}
 
 NET DIFF, moves pre-factored${coverage < 100 ? ` (top regions by risk, ${coverage}% of the net content)` : ""}:
 Each region below is content to actually review: new code, a residual edit inside a moved block, or a deletion. Moved code is already accounted for above and is not repeated here.
