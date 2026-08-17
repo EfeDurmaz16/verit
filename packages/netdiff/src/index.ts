@@ -628,6 +628,10 @@ export const tokenDiff = (before: string, after: string): TokenEdit => {
 /** Minimum token Jaccard for a removed and an added residual line to pair. */
 export const RESIDUAL_PAIR_THRESHOLD = 0.5;
 
+/** Above this removed x added product, skip pairing: the block is a generated
+    monster and quadratic scoring would dominate the whole analysis. */
+const RESIDUAL_PAIR_CELL_CAP = 250_000;
+
 const lineTokenSet = (line: string): Set<string> =>
   new Set(tokenizeLine(line).map((t) => t.text));
 
@@ -643,6 +647,11 @@ export const pairResidualLines = (
   removed: readonly string[],
   added: readonly string[],
 ): ResidualPairing => {
+  // ponytail: quadratic pairing, capped like the LCS; above the cap the block
+  // degrades to plain deletions and additions, exactly the pre-focus behavior
+  if (removed.length * added.length > RESIDUAL_PAIR_CELL_CAP) {
+    return { pairs: [], unmatchedRemoved: [...removed], unmatchedAdded: [...added] };
+  }
   const removedSets = removed.map(lineTokenSet);
   const addedSets = added.map(lineTokenSet);
   const candidates: { ri: number; ai: number; score: number }[] = [];
@@ -816,8 +825,18 @@ export const detectMoves = (deltas: readonly FileDelta[]): MoveReport => {
 /** Per-side cap for a focus line: two sides plus markup stay near 120 chars. */
 const FOCUS_SIDE_CHARS = 49;
 
-const trimFocusSide = (s: string): string =>
-  s.length <= FOCUS_SIDE_CHARS ? s : `${s.slice(0, 23)}...${s.slice(-23)}`;
+const trimFocusSide = (s: string): string => {
+  if (s.length <= FOCUS_SIDE_CHARS) return s;
+  // snap both cuts to code point boundaries: a cut through a surrogate pair
+  // would put a lone surrogate into the JSON prompt payload
+  let cut = 23;
+  const head = s.charCodeAt(cut - 1);
+  if (head >= 0xd800 && head <= 0xdbff) cut--;
+  let from = s.length - 23;
+  const tail = s.charCodeAt(from);
+  if (tail >= 0xdc00 && tail <= 0xdfff) from++;
+  return `${s.slice(0, cut)}...${s.slice(from)}`;
+};
 
 /** The compact focus lines of a residual region, one per token pair. */
 const focusLines = (pairs: readonly ResidualPair[]): string[] =>

@@ -338,6 +338,100 @@ const multiEditPatch = [
   modifiedFile("src/net/relay.ts", [editHunk(30, [], 30, relayEdited)]),
 ].join("\n");
 
+/** One block whose edited line is long enough to force the focus trim. */
+const longLineBlock = [
+  "function invoiceSummary(order) {",
+  "  const basePrice = order.base;",
+  "  const discountRate = rateFor(order.tier);",
+  "  const taxTable = loadTaxTable(order.region);",
+  "  const currencyCode = order.currency;",
+  "  const roundingMode = order.rounding;",
+  "  const total = computeInvoiceTotal(basePrice, discountRate, taxTable, currencyCode, roundingMode);",
+  "  audit(order.id, total);",
+  "  return { order, total };",
+  "}",
+];
+const longLineEdited = longLineBlock.map((l) =>
+  l.includes("computeInvoiceTotal") ? l.replace(" taxTable,", " vatTable,") : l,
+);
+const longLinePatch = [
+  modifiedFile("src/billing/invoice.ts", [editHunk(6, longLineBlock, 6, [])]),
+  modifiedFile("src/billing/summary.ts", [editHunk(60, [], 60, longLineEdited)]),
+].join("\n");
+
+/** A moved block whose edited line is astral-heavy: the focus trim must never
+    cut through a surrogate pair. Prefix chosen so a UTF-16 cut at 23 would. */
+const rockets = "\u{1F680}".repeat(20);
+const astralBlock = [
+  "export const banner = () => {",
+  "  const width = 20;",
+  "  const pad = margin(width);",
+  `  alph = "${rockets}" + one;`,
+  "  render(width, pad);",
+  "  flush(width);",
+  "  return width;",
+  "};",
+];
+const astralEdited = astralBlock.map((l) =>
+  l.includes("alph") ? l.replace("alph", "omeg").replace("+ one", "+ two") : l,
+);
+const astralPatch = [
+  modifiedFile("src/banner.ts", [editHunk(3, astralBlock, 3, [])]),
+  modifiedFile("src/ui/banner.ts", [editHunk(41, [], 41, astralEdited)]),
+].join("\n");
+
+/** true when every UTF-16 surrogate in `s` is part of a full pair */
+const wellFormed = (s: string): boolean => {
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c >= 0xd800 && c <= 0xdbff) {
+      const n = s.charCodeAt(i + 1);
+      if (!(n >= 0xdc00 && n <= 0xdfff)) return false;
+      i++;
+    } else if (c >= 0xdc00 && c <= 0xdfff) {
+      return false;
+    }
+  }
+  return true;
+};
+
+/** the `A` -> `B` sides of every focus line in a rendered region */
+const focusSides = (content: string): string[] =>
+  content
+    .split("\n")
+    .flatMap((l) => {
+      const m = /^real change: `(.*)` -> `(.*)`$/.exec(l);
+      return m ? [m[1] ?? "", m[2] ?? ""] : [];
+    });
+
+describe("focus lines quote the diff verbatim", () => {
+  it("trims a long context in the middle and keeps both halves verbatim", () => {
+    const region = netOf(longLinePatch).regions[0];
+    expect(region?.kind).toBe("residual");
+    const sides = focusSides(region?.content ?? "");
+    expect(sides).toHaveLength(2);
+    for (const side of sides) {
+      expect(side).toContain("...");
+      expect(side.length).toBeLessThanOrEqual(49);
+      const [head, tail] = [side.slice(0, side.indexOf("...")), side.slice(side.indexOf("...") + 3)];
+      expect(longLinePatch).toContain(head);
+      expect(longLinePatch).toContain(tail);
+    }
+  });
+
+  it("never cuts through a surrogate pair when trimming astral content", () => {
+    const region = netOf(astralPatch).regions[0];
+    expect(region?.kind).toBe("residual");
+    const sides = focusSides(region?.content ?? "");
+    expect(sides).toHaveLength(2);
+    for (const side of sides) {
+      expect(side).toContain("...");
+      expect(wellFormed(side)).toBe(true);
+    }
+    expect(wellFormed(diffSection(astralPatch))).toBe(true);
+  });
+});
+
 describe("move_with_edit: several edited lines in one block", () => {
   it("pairs each edited line with its own counterpart", () => {
     const moves = detectMoves(parseDiff(multiEditPatch));
@@ -546,6 +640,28 @@ describe("tokenDiff", () => {
     expect(edit.afterContext).toBe("call(a,  c)");
   });
 
+  it("splits operators glued to identifiers into single-char tokens", () => {
+    const edit = tokenDiff("limit = x>=0 ? x : -x;", "limit = x>0 ? x : +x;");
+    expect(edit.removedTokens).toEqual(["=", "-"]);
+    expect(edit.addedTokens).toEqual(["+"]);
+  });
+
+  it("isolates a word changed inside a string literal, inner spacing verbatim", () => {
+    const edit = tokenDiff('  log("net   pay due", total);', '  log("net   fee due", total);');
+    expect(edit.removedTokens).toEqual(["pay"]);
+    expect(edit.addedTokens).toEqual(["fee"]);
+    expect(edit.beforeContext).toContain('"net   pay due"');
+    expect(edit.afterContext).toContain('"net   fee due"');
+  });
+
+  it("keeps a trailing carriage return out of the tokens and contexts", () => {
+    const edit = tokenDiff("foo(a);\r", "foo(b);\r");
+    expect(edit.removedTokens).toEqual(["a"]);
+    expect(edit.addedTokens).toEqual(["b"]);
+    expect(edit.beforeContext).toBe("foo(a);");
+    expect(edit.afterContext).toBe("foo(b);");
+  });
+
   it("diffs against an empty line", () => {
     const edit = tokenDiff("", "return x");
     expect(edit.removedTokens).toEqual([]);
@@ -612,6 +728,20 @@ describe("pairResidualLines", () => {
     expect(pairing.pairs[0]?.edit.addedTokens).toEqual(["4"]);
     expect(pairing.unmatchedRemoved).toEqual([]);
     expect(pairing.unmatchedAdded).toEqual([]);
+  });
+
+  it("skips pairing on a monster block and degrades to plain lines", () => {
+    // 501 x 501 crosses the 250k cell cap; 500 x 500 sits exactly at it
+    const removed = Array.from({ length: 501 }, (_, i) => `row(${i}, "left");`);
+    const added = Array.from({ length: 501 }, (_, i) => `row(${i}, "right");`);
+    const over = pairResidualLines(removed, added);
+    expect(over.pairs).toEqual([]);
+    expect(over.unmatchedRemoved).toHaveLength(501);
+    expect(over.unmatchedAdded).toHaveLength(501);
+    const at = pairResidualLines(removed.slice(0, 500), added.slice(0, 500));
+    expect(at.pairs).toHaveLength(500);
+    expect(at.pairs[0]?.removedLine).toBe('row(0, "left");');
+    expect(at.pairs[0]?.addedLine).toBe('row(0, "right");');
   });
 
   it("handles empty sides and is deterministic", () => {
@@ -758,7 +888,22 @@ const FIXTURES: Record<string, string> = {
   ].join("\n"),
   greptileGuard: greptilePatch,
   multiEditMove: multiEditPatch,
+  longFocusTrim: longLinePatch,
+  astralFocusTrim: astralPatch,
 };
+
+describe("every untrimmed focus side is a verbatim substring of the patch", () => {
+  for (const [name, patch] of Object.entries(FIXTURES)) {
+    it(`holds for ${name}`, () => {
+      for (const region of netOf(patch).regions) {
+        for (const side of focusSides(region.content)) {
+          if (side.includes("...")) continue; // trimmed sides are covered above
+          expect(patch).toContain(side);
+        }
+      }
+    });
+  }
+});
 
 describe("net plus moves reconstructs the gross counts", () => {
   for (const [name, patch] of Object.entries(FIXTURES)) {
