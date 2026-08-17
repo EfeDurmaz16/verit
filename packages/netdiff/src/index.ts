@@ -66,6 +66,11 @@ export interface TokenEdit {
   readonly addedTokens: readonly string[];
   readonly beforeContext: string;
   readonly afterContext: string;
+  /** char range [start, end) of the changed span inside `beforeContext`;
+      start equals end at the insertion point when nothing was removed */
+  readonly beforeSpan: readonly [number, number];
+  /** char range [start, end) of the changed span inside `afterContext` */
+  readonly afterSpan: readonly [number, number];
 }
 
 /** One removed residual line matched to one added residual line, with the
@@ -550,6 +555,8 @@ const EMPTY_TOKEN_EDIT: TokenEdit = {
   addedTokens: [],
   beforeContext: "",
   afterContext: "",
+  beforeSpan: [0, 0],
+  afterSpan: [0, 0],
 };
 
 /** Context tokens kept on each side of the changed span. */
@@ -607,6 +614,22 @@ const sliceTokens = (line: string, tokens: readonly LineToken[], lo: number, hi:
     : line.slice(first.start, last.end);
 };
 
+/** Char range of window tokens [winLo, winHi) inside the context slice that
+    starts at token `contextLo`. An empty window marks the insertion point. */
+const spanWithin = (
+  line: string,
+  tokens: readonly LineToken[],
+  winLo: number,
+  winHi: number,
+  contextLo: number,
+): readonly [number, number] => {
+  const base = tokens[contextLo]?.start ?? 0;
+  const lo = Math.max(0, (tokens[winLo]?.start ?? line.length) - base);
+  const last = tokens[winHi - 1];
+  const hi = winHi > winLo && last !== undefined ? Math.max(lo, last.end - base) : lo;
+  return [lo, hi];
+};
+
 /**
  * Token-level diff of one line pair. Tokenizes on whitespace and
  * identifier/punctuation boundaries, trims the common token prefix and suffix,
@@ -632,21 +655,24 @@ export const tokenDiff = (before: string, after: string): TokenEdit => {
   }
   const winA = a.slice(p, a.length - s).map((t) => t.text);
   const winB = b.slice(p, b.length - s).map((t) => t.text);
+  const contextLo = Math.max(0, p - FOCUS_CONTEXT_TOKENS);
   return {
     removedTokens: unmatchedByLcs(winA, winB),
     addedTokens: unmatchedByLcs(winB, winA),
     beforeContext: sliceTokens(
       before,
       a,
-      Math.max(0, p - FOCUS_CONTEXT_TOKENS),
+      contextLo,
       Math.min(a.length, a.length - s + FOCUS_CONTEXT_TOKENS),
     ),
     afterContext: sliceTokens(
       after,
       b,
-      Math.max(0, p - FOCUS_CONTEXT_TOKENS),
+      contextLo,
       Math.min(b.length, b.length - s + FOCUS_CONTEXT_TOKENS),
     ),
+    beforeSpan: spanWithin(before, a, p, a.length - s, contextLo),
+    afterSpan: spanWithin(after, b, p, b.length - s, contextLo),
   };
 };
 
@@ -923,20 +949,52 @@ export const detectMoves = (deltas: readonly FileDelta[]): MoveReport => {
 
 /* -------------------------------- net diff -------------------------------- */
 
-/** Per-side cap for a focus line: two sides plus markup stay near 120 chars. */
+/** Per-side cap for a focus line: two sides plus markers stay near 130 chars. */
 const FOCUS_SIDE_CHARS = 49;
 
-const trimFocusSide = (s: string): string => {
+/** Snap a slice start forward off a low surrogate: a cut through a surrogate
+    pair would put a lone surrogate into the JSON prompt payload. */
+const snapStart = (s: string, i: number): number => {
+  const c = s.charCodeAt(i);
+  return c >= 0xdc00 && c <= 0xdfff ? i + 1 : i;
+};
+
+/** Snap a slice end back off a high surrogate, same reason. */
+const snapEnd = (s: string, i: number): number => {
+  const c = s.charCodeAt(i - 1);
+  return c >= 0xd800 && c <= 0xdbff ? i - 1 : i;
+};
+
+/**
+ * Cap one side of a focus line while keeping the changed span visible.
+ * Without a span the whole string is the change (grouped token lists) and the
+ * elision keeps its head and tail. With a span, the kept window covers the
+ * span plus as much surrounding context as fits, and each dropped edge
+ * carries a `...` marker; a span that overflows the cap on its own keeps its
+ * head and tail instead. Every kept piece is a verbatim slice of the input.
+ */
+const trimFocusSide = (s: string, span?: readonly [number, number]): string => {
   if (s.length <= FOCUS_SIDE_CHARS) return s;
-  // snap both cuts to code point boundaries: a cut through a surrogate pair
-  // would put a lone surrogate into the JSON prompt payload
-  let cut = 23;
-  const head = s.charCodeAt(cut - 1);
-  if (head >= 0xd800 && head <= 0xdbff) cut--;
-  let from = s.length - 23;
-  const tail = s.charCodeAt(from);
-  if (tail >= 0xdc00 && tail <= 0xdfff) from++;
-  return `${s.slice(0, cut)}...${s.slice(from)}`;
+  const lo = Math.min(span?.[0] ?? 0, s.length);
+  const hi = Math.min(Math.max(span?.[1] ?? s.length, lo), s.length);
+  if (hi - lo >= FOCUS_SIDE_CHARS) {
+    const head = snapEnd(s, lo + 23);
+    const tail = snapStart(s, hi - 23);
+    return `${lo > 0 ? "..." : ""}${s.slice(lo, head)}...${s.slice(tail, hi)}${hi < s.length ? "..." : ""}`;
+  }
+  const pad = FOCUS_SIDE_CHARS - (hi - lo);
+  let start = lo - (pad >> 1);
+  let end = hi + (pad - (pad >> 1));
+  if (start < 0) {
+    end = Math.min(s.length, end - start);
+    start = 0;
+  } else if (end > s.length) {
+    start = Math.max(0, start - (end - s.length));
+    end = s.length;
+  }
+  start = snapStart(s, start);
+  end = snapEnd(s, end);
+  return `${start > 0 ? "..." : ""}${s.slice(start, end)}${end < s.length ? "..." : ""}`;
 };
 
 /** The compact focus lines of a residual region, one per token pair. */
@@ -945,7 +1003,7 @@ const focusLines = (pairs: readonly ResidualPair[]): string[] =>
     .filter((p) => p.edit.removedTokens.length > 0 || p.edit.addedTokens.length > 0)
     .map(
       (p) =>
-        `real change: \`${trimFocusSide(p.edit.beforeContext)}\` -> \`${trimFocusSide(p.edit.afterContext)}\``,
+        `real change: \`${trimFocusSide(p.edit.beforeContext, p.edit.beforeSpan)}\` -> \`${trimFocusSide(p.edit.afterContext, p.edit.afterSpan)}\``,
     );
 
 const renderRegion = (
@@ -1321,7 +1379,7 @@ const inlineFocusLines = (edits: readonly InlineEdit[]): string[] => {
     if (!first) continue;
     if (g.length === 1) {
       lines.push(
-        `real change at ${first.file}:${first.line}: \`${trimFocusSide(first.edit.beforeContext)}\` -> \`${trimFocusSide(first.edit.afterContext)}\``,
+        `real change at ${first.file}:${first.line}: \`${trimFocusSide(first.edit.beforeContext, first.edit.beforeSpan)}\` -> \`${trimFocusSide(first.edit.afterContext, first.edit.afterSpan)}\``,
       );
     } else {
       const files = new Set(g.map((e) => e.file)).size;

@@ -405,18 +405,21 @@ const focusSides = (content: string): string[] =>
     });
 
 describe("focus lines quote the diff verbatim", () => {
-  it("trims a long context in the middle and keeps both halves verbatim", () => {
+  it("trims a long context around the changed span, every kept piece verbatim", () => {
     const region = netOf(longLinePatch).regions[0];
     expect(region?.kind).toBe("residual");
     const sides = focusSides(region?.content ?? "");
     expect(sides).toHaveLength(2);
     for (const side of sides) {
       expect(side).toContain("...");
-      expect(side.length).toBeLessThanOrEqual(49);
-      const [head, tail] = [side.slice(0, side.indexOf("...")), side.slice(side.indexOf("...") + 3)];
-      expect(longLinePatch).toContain(head);
-      expect(longLinePatch).toContain(tail);
+      expect(side.length).toBeLessThanOrEqual(55);
+      for (const piece of side.split("...")) {
+        if (piece !== "") expect(longLinePatch).toContain(piece);
+      }
     }
+    // the trim must never elide the changed tokens themselves
+    expect(sides[0]).toContain("taxTable");
+    expect(sides[1]).toContain("vatTable");
   });
 
   it("never cuts through a surrogate pair when trimming astral content", () => {
@@ -580,6 +583,8 @@ const EMPTY_EDIT: TokenEdit = {
   addedTokens: [],
   beforeContext: "",
   afterContext: "",
+  beforeSpan: [0, 0],
+  afterSpan: [0, 0],
 };
 
 describe("tokenDiff", () => {
@@ -622,6 +627,19 @@ describe("tokenDiff", () => {
     expect(edit.addedTokens).toEqual(["x", "y"]);
     expect(edit.beforeContext).toBe("foo(a, b, c)");
     expect(edit.afterContext).toBe("foo(x, b, y)");
+  });
+
+  it("reports the changed span's char range inside each context", () => {
+    const edit = tokenDiff("foo(a, b, c)", "foo(x, b, y)");
+    expect(edit.beforeContext.slice(...edit.beforeSpan)).toBe("a, b, c");
+    expect(edit.afterContext.slice(...edit.afterSpan)).toBe("x, b, y");
+    const ins = tokenDiff(
+      "    if not isinstance(x, int):",
+      "    if not isinstance(x, int) or x < 0:",
+    );
+    // a pure insertion collapses the before span to the insertion point
+    expect(ins.beforeSpan[0]).toBe(ins.beforeSpan[1]);
+    expect(ins.afterContext.slice(...ins.afterSpan)).toBe("or x < 0");
   });
 
   it("handles unicode identifiers as whole tokens", () => {
@@ -895,6 +913,44 @@ describe("in-place edits: mechanical rename aggregation", () => {
   });
 });
 
+/** The vscode-move shape: a long import line whose one changed path segment
+    sits mid-line, where a span-blind head/tail trim would elide exactly the
+    changed tokens and render two identical-looking sides. */
+const importBlock = [
+  "import { strict } from 'node:assert';",
+  "import { SessionPluginBundler } from './copilot/sessionPluginBundler.js';",
+  "import { discover } from './sessionCustomizationDiscovery.js';",
+];
+const importEdited = importBlock.map((l) => l.replace("/copilot/", "/shared/"));
+const importEditPatch = modifiedFile("src/agentHost/copilotAgent.ts", [
+  editHunk(12, importBlock, 12, importEdited),
+]);
+
+describe("in-place edits: mid-line span survives the trim", () => {
+  it("keeps the changed tokens visible when the context overflows the cap", () => {
+    const net = netOf(importEditPatch);
+    expect(net.inlineEdits).toHaveLength(1);
+    expect(net.inlineEdits[0]?.edit.removedTokens).toEqual(["copilot"]);
+    expect(net.inlineEdits[0]?.edit.addedTokens).toEqual(["shared"]);
+    const located = diffSection(importEditPatch)
+      .split("\n")
+      .filter((l) => l.startsWith("real change at "));
+    expect(located).toHaveLength(1);
+    const m = /`(.*)` -> `(.*)`$/.exec(located[0] ?? "");
+    const before = m?.[1] ?? "";
+    const after = m?.[2] ?? "";
+    expect(before).toContain("copilot");
+    expect(after).toContain("shared");
+    expect(before).not.toBe(after);
+    for (const side of [before, after]) {
+      expect(side.length).toBeLessThanOrEqual(55);
+      for (const piece of side.split("...")) {
+        if (piece !== "") expect(importEditPatch).toContain(piece);
+      }
+    }
+  });
+});
+
 describe("in-place edits: renamed file with a small edit", () => {
   it("locates the edit under the new path", () => {
     const net = netOf(renamedEditPatch);
@@ -1126,6 +1182,7 @@ const FIXTURES: Record<string, string> = {
   inplaceEdit: inplacePatch,
   mechanicalRename: mechanicalRenamePatch,
   renamedFileEdit: renamedEditPatch,
+  midlineImportEdit: importEditPatch,
 };
 
 describe("every untrimmed focus side is a verbatim substring of the patch", () => {
@@ -1150,6 +1207,25 @@ describe("every untrimmed located focus side in diffSection is verbatim", () => 
         for (const side of [m[1] ?? "", m[2] ?? ""]) {
           if (side.includes("...")) continue; // trimmed sides carry the marker
           expect(patch).toContain(side);
+        }
+      }
+    });
+  }
+});
+
+describe("every trimmed focus side is made of verbatim pieces", () => {
+  for (const [name, patch] of Object.entries(FIXTURES)) {
+    it(`holds for ${name}`, () => {
+      const sides: string[] = [];
+      for (const region of netOf(patch).regions) sides.push(...focusSides(region.content));
+      for (const line of diffSection(patch).split("\n")) {
+        const m = /^real change at .+?:\d+: `(.*)` -> `(.*)`$/.exec(line);
+        if (m) sides.push(m[1] ?? "", m[2] ?? "");
+      }
+      for (const side of sides) {
+        if (!side.includes("...")) continue;
+        for (const piece of side.split("...")) {
+          if (piece !== "") expect(patch).toContain(piece);
         }
       }
     });
