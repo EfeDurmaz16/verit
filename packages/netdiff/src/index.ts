@@ -453,7 +453,7 @@ const shingles = (b: Block): Set<string> => {
   if (tokens.length < 3) return new Set(tokens);
   const set = new Set<string>();
   for (let i = 0; i + 2 < tokens.length; i++) {
-    set.add(`${tokens[i]} ${tokens[i + 1]} ${tokens[i + 2]}`);
+    set.add(`${tokens[i]}\u0000${tokens[i + 1]}\u0000${tokens[i + 2]}`);
   }
   return set;
 };
@@ -962,7 +962,7 @@ export const computeNetDiff = (
   const renameCandidates: RenameCandidate[] = [];
   const seenRename = new Set<string>();
   const pushRename = (c: RenameCandidate) => {
-    const key = `${c.from} ${c.to}`;
+    const key = `${c.from}\u0000${c.to}`;
     if (seenRename.has(key)) return;
     seenRename.add(key);
     renameCandidates.push(c);
@@ -987,7 +987,7 @@ export const computeNetDiff = (
   const byFilePair = new Map<string, { matched: number; edited: number; from: string; to: string }>();
   for (const p of moves.pairs) {
     if (!deletedFiles.has(p.from.file) || !addedFiles.has(p.to.file)) continue;
-    const key = `${p.from.file} ${p.to.file}`;
+    const key = `${p.from.file}\u0000${p.to.file}`;
     const entry =
       byFilePair.get(key) ?? { matched: 0, edited: 0, from: p.from.file, to: p.to.file };
     entry.matched += p.from.lines.length - p.fromResidual.length;
