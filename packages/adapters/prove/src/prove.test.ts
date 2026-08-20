@@ -201,6 +201,43 @@ describe("prove dirty-tree guard", () => {
     expect(proofVerdict(out)).toBe("neutral");
   });
 
+  it("refuses when a tracked file is doctored under skip-worktree, porcelain blinded", async () => {
+    const dir = await seedRepo();
+    const baseline = await gitState(dir);
+    expect(baseline).not.toBeNull();
+    // The evasion an escaped lane reaches for: mark the file skip-worktree so
+    // `git status` stops reporting it, then doctor it on disk. porcelain stays
+    // empty and HEAD holds still, so a guard that trusts porcelain alone sees a
+    // clean tree and runs the doctored content. The guard must catch the hidden
+    // index bit instead.
+    git(["update-index", "--skip-worktree", "package.json"], dir);
+    await writeFile(join(dir, "package.json"), JSON.stringify({ scripts: { test: "true" }, doctored: true }));
+    // porcelain really is blind here: no path is reported despite the edit.
+    expect(git(["status", "--porcelain"], dir).stdout).toBe("");
+    process.env.VERIT_PROVE_CMD = "node -e process.exit(0)";
+    const out = await Effect.runPromise(
+      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit", baseline }),
+    );
+    expect(out.refused).toBeTruthy();
+    expect(out.refused).toContain("working tree changed");
+    expect(proofVerdict(out)).toBe("neutral");
+    expect(out.log).toBe("");
+  });
+
+  it("also refuses under assume-unchanged, the other porcelain-blinding bit", async () => {
+    const dir = await seedRepo();
+    const baseline = await gitState(dir);
+    git(["update-index", "--assume-unchanged", "package.json"], dir);
+    await writeFile(join(dir, "package.json"), JSON.stringify({ scripts: { test: "true" }, doctored: true }));
+    expect(git(["status", "--porcelain"], dir).stdout).toBe("");
+    process.env.VERIT_PROVE_CMD = "node -e process.exit(0)";
+    const out = await Effect.runPromise(
+      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit", baseline }),
+    );
+    expect(out.refused).toBeTruthy();
+    expect(proofVerdict(out)).toBe("neutral");
+  });
+
   it("runs and records head sha and the clean flag when the tree held still", async () => {
     const dir = await seedRepo();
     const baseline = await gitState(dir);

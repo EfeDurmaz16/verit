@@ -178,7 +178,9 @@ export interface ProveCommand {
  */
 export interface GitState {
   readonly headSha: string;
-  /** sha256 of `git status --porcelain`: any working-tree change moves it. */
+  /** sha256 of `git status --porcelain` folded with `git ls-files -v`: any
+      working-tree change moves it, including a file doctored on disk while
+      hidden from status by a skip-worktree or assume-unchanged index bit. */
   readonly porcelainHash: string;
   /** True when the porcelain output was empty: no uncommitted changes. */
   readonly clean: boolean;

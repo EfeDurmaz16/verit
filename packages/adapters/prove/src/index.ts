@@ -139,9 +139,24 @@ export const gitState = async (cwd: string): Promise<GitState | null> => {
       timeout: 30_000,
       maxBuffer: GIT_STATUS_BUFFER,
     });
+    // git status omits a tracked file once it is marked skip-worktree or
+    // assume-unchanged, so an escaped lane can doctor a file on disk and leave
+    // porcelain empty with HEAD unmoved. ls-files -v prints the index bit of
+    // every path (S skip-worktree, lowercase assume-unchanged, H otherwise);
+    // folding it into the hash means setting either bit moves the snapshot, and
+    // the bit cannot be cleared without re-exposing the edit in porcelain. That
+    // closes the "hide the doctoring so the hash still matches" evasion.
+    const flags = await exec("git", ["-C", cwd, "ls-files", "-v"], {
+      timeout: 30_000,
+      maxBuffer: GIT_STATUS_BUFFER,
+    });
     return {
       headSha: head.stdout.trim(),
-      porcelainHash: createHash("sha256").update(status.stdout).digest("hex"),
+      porcelainHash: createHash("sha256")
+        .update(status.stdout)
+        .update("\0")
+        .update(flags.stdout)
+        .digest("hex"),
       clean: status.stdout.trim() === "",
     };
   } catch {
