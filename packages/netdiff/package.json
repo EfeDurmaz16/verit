@@ -7,7 +7,9 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json",
+    "bench": "tsx scripts/field-eval.ts",
+    "bench:md": "tsx scripts/field-eval.ts --md"
   },
   "dependencies": {
     "@verit/domain": "workspace:*"

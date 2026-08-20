@@ -1,0 +1,40 @@
+diff --git a/docs/config/build-options.md b/docs/config/build-options.md
+index 034d85c63df3a0..19ec97db743b8b 100644
+--- a/docs/config/build-options.md
++++ b/docs/config/build-options.md
+@@ -123,6 +123,8 @@ If you specify `build.lib`, `build.cssCodeSplit` will be `false` as default.
+ 
+ This option allows users to set a different browser target for CSS minification from the one used for JavaScript transpilation.
+ 
++When `build.cssMinify` is `'lightningcss'` (the default), this option takes precedence over [`css.lightningcss.targets`](./shared-options.md#css-lightningcss) for the minification step.
++
+ It should only be used when you are targeting a non-mainstream browser.
+ One example is Android WeChat WebView, which supports most modern JavaScript features but not the [`#RGBA` hexadecimal color notation in CSS](https://developer.mozilla.org/en-US/docs/Web/CSS/color_value#rgb_colors).
+ In this case, you need to set `build.cssTarget` to `chrome61` to prevent vite from transforming `rgba()` colors into `#RGBA` hexadecimal notations.
+diff --git a/docs/guide/features.md b/docs/guide/features.md
+index fc0d21610096e2..8029d71cd7d8ed 100644
+--- a/docs/guide/features.md
++++ b/docs/guide/features.md
+@@ -281,7 +281,7 @@ Vite is pre-configured to support CSS `@import` inlining via `postcss-import`. V
+ 
+ If the project contains valid PostCSS config (any format supported by [postcss-load-config](https://github.com/postcss/postcss-load-config), e.g. `postcss.config.js`), it will be automatically applied to all imported CSS.
+ 
+-Note that CSS minification will run after PostCSS and will use [`build.cssTarget`](/config/build-options.md#build-csstarget) option.
++Note that CSS minification will run after PostCSS and will use the [`build.cssTarget`](/config/build-options.md#build-csstarget) option.
+ 
+ ### CSS Modules
+ 
+diff --git a/packages/vite/src/node/build.ts b/packages/vite/src/node/build.ts
+index b61689a1cd05f6..add7ec5af0372b 100644
+--- a/packages/vite/src/node/build.ts
++++ b/packages/vite/src/node/build.ts
+@@ -157,6 +157,9 @@ export interface BuildEnvironmentOptions {
+    * a niche browser that comes with most modern JavaScript features
+    * but has poor CSS support, e.g. Android WeChat WebView, which
+    * doesn't support the #RGBA syntax.
++   * When `build.cssMinify` is `lightningcss` (the default), this
++   * option takes precedence over `css.lightningcss.targets` for the
++   * minification step.
+    * @default target
+    */
+   cssTarget?: EsbuildTarget | false

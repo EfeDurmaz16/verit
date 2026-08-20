@@ -1,0 +1,42 @@
+diff --git a/src/vs/platform/agentHost/node/copilot/copilotAgent.ts b/src/vs/platform/agentHost/node/copilot/copilotAgent.ts
+index a17d394ef628b..2b8a784226076 100644
+--- a/src/vs/platform/agentHost/node/copilot/copilotAgent.ts
++++ b/src/vs/platform/agentHost/node/copilot/copilotAgent.ts
+@@ -45,7 +45,7 @@ import { parsedPluginsEqual, toCustomizationAgentRefs, toSdkCustomAgents, toSdkH
+ import { CopilotSessionWrapper } from './copilotSessionWrapper.js';
+ import { ShellManager, createShellTools } from './copilotShellTools.js';
+ import { SessionCustomizationDiscovery } from './sessionCustomizationDiscovery.js';
+-import { SessionPluginBundler } from './sessionPluginBundler.js';
++import { SessionPluginBundler } from '../shared/sessionPluginBundler.js';
+ import { CopilotSlashCommandCompletionProvider } from './copilotSlashCommandCompletionProvider.js';
+ 
+ interface ICreatedWorktree {
+diff --git a/src/vs/platform/agentHost/node/copilot/sessionPluginBundler.ts b/src/vs/platform/agentHost/node/shared/sessionPluginBundler.ts
+similarity index 97%
+rename from src/vs/platform/agentHost/node/copilot/sessionPluginBundler.ts
+rename to src/vs/platform/agentHost/node/shared/sessionPluginBundler.ts
+index 6e4849c2612d4..c32a1497cd28f 100644
+--- a/src/vs/platform/agentHost/node/copilot/sessionPluginBundler.ts
++++ b/src/vs/platform/agentHost/node/shared/sessionPluginBundler.ts
+@@ -12,7 +12,7 @@ import { IFileService } from '../../../files/common/files.js';
+ import { IAgentPluginManager } from '../../common/agentPluginManager.js';
+ import type { CustomizationRef } from '../../common/state/sessionState.js';
+ import type { URI as ProtocolURI } from '../../common/state/protocol/state.js';
+-import { DiscoveredType, type IDiscoveredFile } from './sessionCustomizationDiscovery.js';
++import { DiscoveredType, type IDiscoveredFile } from '../copilot/sessionCustomizationDiscovery.js';
+ 
+ const DISPLAY_NAME = 'VS Code Synced Data';
+ const HOST_DISCOVERY_DIR = 'host-discovery';
+diff --git a/src/vs/platform/agentHost/test/node/sessionCustomizationDiscovery.test.ts b/src/vs/platform/agentHost/test/node/sessionCustomizationDiscovery.test.ts
+index bc467971923cc..bf4be87e326df 100644
+--- a/src/vs/platform/agentHost/test/node/sessionCustomizationDiscovery.test.ts
++++ b/src/vs/platform/agentHost/test/node/sessionCustomizationDiscovery.test.ts
+@@ -16,7 +16,7 @@ import { TestInstantiationService } from '../../../instantiation/test/common/ins
+ import { ILogService, NullLogService } from '../../../log/common/log.js';
+ import { IAgentPluginManager } from '../../common/agentPluginManager.js';
+ import { DiscoveredType, SessionCustomizationDiscovery } from '../../node/copilot/sessionCustomizationDiscovery.js';
+-import { SessionPluginBundler } from '../../node/copilot/sessionPluginBundler.js';
++import { SessionPluginBundler } from '../../node/shared/sessionPluginBundler.js';
+ 
+ suite('SessionCustomizationDiscovery + SessionPluginBundler', () => {
+ 

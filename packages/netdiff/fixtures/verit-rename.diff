@@ -1,0 +1,3956 @@
+commit aa8a24ca8d8bf6184e38ba4c3d6a43b7b77a823c
+Author: EfeDurmaz16 <efebarandurmaz05@gmail.com>
+Date:   Sun Aug 16 23:25:50 2026 +0300
+
+    refactor: rename the product from cyclops to verit
+    
+    Package scope @cyclops/* becomes @verit/*, every CYCLOPS_* env var becomes
+    VERIT_*, and the posted Check Run is now "verit / behavior-proof". The
+    sqlite default moves to .data/verit.db. Pre-launch, so no compatibility
+    shims for the old names.
+
+diff --git a/.claude/launch.json b/.claude/launch.json
+index e1a124b..5483022 100644
+--- a/.claude/launch.json
++++ b/.claude/launch.json
+@@ -4,7 +4,7 @@
+     {
+       "name": "workspace",
+       "runtimeExecutable": "pnpm",
+-      "runtimeArgs": ["--filter", "@cyclops/workspace", "dev"],
++      "runtimeArgs": ["--filter", "@verit/workspace", "dev"],
+       "port": 3000
+     }
+   ]
+diff --git a/.github/ISSUE_TEMPLATE/bug_report.yml b/.github/ISSUE_TEMPLATE/bug_report.yml
+index 6e18b0c..2dde030 100644
+--- a/.github/ISSUE_TEMPLATE/bug_report.yml
++++ b/.github/ISSUE_TEMPLATE/bug_report.yml
+@@ -26,6 +26,6 @@ body:
+     id: env
+     attributes:
+       label: Environment
+-      description: Output of `node -v` and `pnpm -v`, plus any CYCLOPS_ variables you set. Redact tokens.
++      description: Output of `node -v` and `pnpm -v`, plus any VERIT_ variables you set. Redact tokens.
+     validations:
+       required: false
+diff --git a/.github/ISSUE_TEMPLATE/config.yml b/.github/ISSUE_TEMPLATE/config.yml
+index ce33365..587cccb 100644
+--- a/.github/ISSUE_TEMPLATE/config.yml
++++ b/.github/ISSUE_TEMPLATE/config.yml
+@@ -1,5 +1,5 @@
+ blank_issues_enabled: true
+ contact_links:
+   - name: Report a security vulnerability
+-    url: https://github.com/EfeDurmaz16/cyclops/blob/main/SECURITY.md
++    url: https://github.com/EfeDurmaz16/verit/blob/main/SECURITY.md
+     about: Do not open a public issue. Email efe@sardis.sh instead.
+diff --git a/.github/ISSUE_TEMPLATE/feature_request.yml b/.github/ISSUE_TEMPLATE/feature_request.yml
+index 960a1cd..335a650 100644
+--- a/.github/ISSUE_TEMPLATE/feature_request.yml
++++ b/.github/ISSUE_TEMPLATE/feature_request.yml
+@@ -1,5 +1,5 @@
+ name: Feature request
+-description: Propose a change to what cyclops does.
++description: Propose a change to what verit does.
+ labels: ["enhancement"]
+ body:
+   - type: textarea
+@@ -19,6 +19,6 @@ body:
+     id: evidence
+     attributes:
+       label: How a reviewer would verify it
+-      description: cyclops is about evidence. What would prove this feature worked on a real pull request.
++      description: verit is about evidence. What would prove this feature worked on a real pull request.
+     validations:
+       required: false
+diff --git a/CONTEXT.md b/CONTEXT.md
+index 19d9b7d..685318e 100644
+--- a/CONTEXT.md
++++ b/CONTEXT.md
+@@ -1,4 +1,4 @@
+-# Cyclops domain language
++# Verit domain language
+ 
+ | Term | Meaning |
+ |---|---|
+@@ -12,4 +12,4 @@
+ | author risks | Hints only. Never allowlist for reviewers |
+ | prove | Run the reviewed repo's own verification command; refuses any other checkout |
+ | ProofRef status | Verdict of an executed ref: `pass`/`fail`; absent means nothing was run |
+-| behavior-proof Check | `cyclops / behavior-proof` Check Run; neutral when no proof ran |
++| behavior-proof Check | `verit / behavior-proof` Check Run; neutral when no proof ran |
+diff --git a/README.md b/README.md
+index 82c871f..ff711cb 100644
+--- a/README.md
++++ b/README.md
+@@ -1,13 +1,13 @@
+-# cyclops
++# verit
+ 
+ **The verification layer above your AI reviewers.**
+ 
+-AI reviewers give you opinions. cyclops gives you evidence.
++AI reviewers give you opinions. verit gives you evidence.
+ 
+ A reviewer bot reads your diff and tells you what it thinks might break. That is
+-useful, and it is still an opinion. cyclops runs your repository's own tests
++useful, and it is still an opinion. verit runs your repository's own tests
+ against the pull request, records the real exit code, and posts the result as a
+-`cyclops / behavior-proof` GitHub Check. If the tests did not run, the Check is
++`verit / behavior-proof` GitHub Check. If the tests did not run, the Check is
+ `neutral`. It never turns green on a guess.
+ 
+ Alongside the proof it publishes an **Understanding**: what the change does, why,
+@@ -21,7 +21,7 @@ Open source, AGPL-3.0. Self-host it for free.
+ ## What lands on the pull request
+ 
+ ```
+-cyclops / behavior-proof            Proof passed: pnpm test
++verit / behavior-proof            Proof passed: pnpm test
+ 
+   What changed:  Adds the pay gate commands to the CLI.
+   Why:           Gate checks were only reachable through the HTTP API.
+@@ -50,8 +50,8 @@ Three states, and only three:
+ Add one workflow. That is the whole install.
+ 
+ ```yaml
+-# .github/workflows/cyclops.yml
+-name: cyclops
++# .github/workflows/verit.yml
++name: verit
+ on: pull_request
+ permissions:
+   contents: read
+@@ -62,14 +62,14 @@ jobs:
+     runs-on: ubuntu-latest
+     steps:
+       - uses: actions/checkout@v4
+-      - uses: EfeDurmaz16/cyclops@main
++      - uses: EfeDurmaz16/verit@main
+ ```
+ 
+-cyclops detects the verification command from your repository. Override it when
++verit detects the verification command from your repository. Override it when
+ the guess is wrong:
+ 
+ ```yaml
+-      - uses: EfeDurmaz16/cyclops@main
++      - uses: EfeDurmaz16/verit@main
+         with:
+           prove-command: cargo test --all
+ ```
+@@ -78,13 +78,13 @@ The Understanding is written by a headless coding CLI. With no key configured
+ you get a deterministic stub, which is honest but thin. To get the real thing:
+ 
+ ```yaml
+-      - uses: EfeDurmaz16/cyclops@main
++      - uses: EfeDurmaz16/verit@main
+         with:
+           lane-harness: claude
+           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+ ```
+ 
+-Fork pull requests receive no secrets and a read-only token. cyclops degrades to
++Fork pull requests receive no secrets and a read-only token. verit degrades to
+ a dry run and prints the Check instead of posting it. That is deliberate, and it
+ is never a failed job.
+ 
+@@ -98,8 +98,8 @@ The workspace is the live surface: paste a pull request URL and watch the
+ review assemble, instead of waiting for a Check to appear.
+ 
+ ```bash
+-git clone https://github.com/EfeDurmaz16/cyclops
+-cd cyclops
++git clone https://github.com/EfeDurmaz16/verit
++cd verit
+ pnpm install
+ pnpm workspace          # http://localhost:3000
+ ```
+@@ -119,7 +119,7 @@ reviewing. It refuses every other checkout, so reviewing a stranger's pull
+ request never executes their code on your machine:
+ 
+ ```bash
+-CYCLOPS_PROVE_CWD=/path/to/that/repo pnpm cli review --pr=owner/repo#123
++VERIT_PROVE_CWD=/path/to/that/repo pnpm cli review --pr=owner/repo#123
+ ```
+ 
+ The hosted dashboard, with GitHub login and run history over Postgres, is
+@@ -131,7 +131,7 @@ optional and documented in [`docs/dashboard-setup.md`](docs/dashboard-setup.md).
+ 
+ Checked August 2026. Corrections by pull request are welcome, with a link.
+ 
+-| | cyclops | CodeRabbit | Greptile | PR-Agent |
++| | verit | CodeRabbit | Greptile | PR-Agent |
+ |---|---|---|---|---|
+ | Source | Open, AGPL-3.0 | Closed | Closed | Open, MIT |
+ | Self-host | Free | Paid enterprise contract | Paid enterprise contract | Free |
+@@ -147,18 +147,18 @@ runs the changed code to confirm a suspected bug is real before reporting it.
+ 
+ The two differences that matter are what gets run, and who can run it.
+ 
+-**What gets run.** TREX has an agent write and drive scenarios. cyclops runs the
++**What gets run.** TREX has an agent write and drive scenarios. verit runs the
+ command your repository already defines, unchanged, and reports its exit code.
+ Nothing is inferred and nothing is generated. If your suite is good, the proof is
+-good. If your suite is weak, cyclops tells you it passed a weak suite rather than
++good. If your suite is weak, verit tells you it passed a weak suite rather than
+ claiming more than it checked.
+ 
+ **Who can run it.** TREX is proprietary and in beta, and Greptile self-hosting
+-needs an annual enterprise contract. cyclops is AGPL-3.0. Clone it and run it
++needs an annual enterprise contract. verit is AGPL-3.0. Clone it and run it
+ today for nothing.
+ 
+ Everything else in that table analyzes the diff and writes about it. That is a
+-different job, and a useful one. cyclops sits above it: keep your reviewer, and
++different job, and a useful one. verit sits above it: keep your reviewer, and
+ put a verdict underneath its opinion.
+ 
+ ---
+@@ -177,7 +177,7 @@ put a verdict underneath its opinion.
+        │                                  full diff, threads and CI logs
+        │
+        │  Understanding JSON              validated against the Effect Schema
+-       │  (what / why / how,              in @cyclops/domain. A run that fails
++       │  (what / why / how,              in @verit/domain. A run that fails
+        │   risks, proof_refs)             validation is shown as unverified
+        ▼
+   prove ─────────────► ProvePort          runs the repo's OWN command as argv,
+@@ -185,7 +185,7 @@ put a verdict underneath its opinion.
+        │  exit code, duration,            repo. Fails closed on any mismatch
+        │  log tail                        Timeout kills the process group
+        ▼
+-  post ──────────────► CheckPort          cyclops / behavior-proof Check Run
++  post ──────────────► CheckPort          verit / behavior-proof Check Run
+        │                                  conclusion = exit code, nothing else
+        ▼
+   render ────────────► proof page         json-render Spec, one component
+@@ -200,7 +200,7 @@ one adapter.
+ 
+ Two stores by design. Neo4j holds the ontology and the pull request graph.
+ SQLite holds runs, proof blobs and full text chunks. Neither is required to try
+-cyclops: both have a memory or local fallback.
++verit: both have a memory or local fallback.
+ 
+ Architecture notes live in [`docs/architecture/`](docs/architecture/). The exact
+ meaning of every domain word is in [`CONTEXT.md`](CONTEXT.md).
+@@ -221,22 +221,22 @@ org-wide dashboards and no infrastructure to run, is coming.
+ | Variable | Default | Purpose |
+ |---|---|---|
+ | `GITHUB_TOKEN` | unset | Optional for public PRs. Needs `checks:write` to post the Check |
+-| `CYCLOPS_PROVE_CWD` | `GITHUB_WORKSPACE` | Checkout prove runs in. Must be the reviewed repo |
+-| `CYCLOPS_PROVE_CMD` | detected | Override the command, e.g. `cargo test --all`. Argv, never a shell string |
+-| `CYCLOPS_PROVE_TIMEOUT_MS` | `600000` | Hard timeout. The process group is killed |
+-| `CYCLOPS_CHECK_DRY_RUN` | unset | `1` prints the Check body instead of posting it |
+-| `CYCLOPS_LANE_HARNESS` | `codex` | Coding CLI behind the analysis lane: `codex`, `claude` or `cursor`. An unknown value is an error, never a silent fallback |
+-| `CYCLOPS_LANE_MODEL` | unset | Model for the analysis lane |
+-| `CYCLOPS_LANE_TIMEOUT_MS` | `900000` | Hard timeout for the one-shot lane call |
+-| `ANTHROPIC_API_KEY` | unset | Auth for `CYCLOPS_LANE_HARNESS=claude` in CI. Locally the CLI's own login is used |
+-| `CURSOR_API_KEY` | unset | Auth for `CYCLOPS_LANE_HARNESS=cursor` in CI. Locally `cursor-agent login` is used |
+-| `CYCLOPS_SQLITE_PATH` | `.data/cyclops.db` | DocumentStore path. Set `""` for in-memory |
+-| `CYCLOPS_NEO4J_URI` | unset | `bolt://…`. Memory graph if unset |
+-| `CYCLOPS_NEO4J_PASSWORD` | none | Neo4j auth when the URI is set |
+-| `CYCLOPS_WORKSPACE_DIR` | `.data/workspace` | Workspace session blobs |
+-| `CYCLOPS_PI_BIN` | unset | Path to a Pi binary. If unset, the deterministic stub |
+-| `CYCLOPS_DASHBOARD_URL` | unset | Dashboard base URL. With `CYCLOPS_INGEST_TOKEN` the run is uploaded and the Check links its proof page |
+-| `CYCLOPS_INGEST_TOKEN` | unset | Per-repo ingest token from `pnpm --filter @cyclops/dashboard register-repo owner/name` |
++| `VERIT_PROVE_CWD` | `GITHUB_WORKSPACE` | Checkout prove runs in. Must be the reviewed repo |
++| `VERIT_PROVE_CMD` | detected | Override the command, e.g. `cargo test --all`. Argv, never a shell string |
++| `VERIT_PROVE_TIMEOUT_MS` | `600000` | Hard timeout. The process group is killed |
++| `VERIT_CHECK_DRY_RUN` | unset | `1` prints the Check body instead of posting it |
++| `VERIT_LANE_HARNESS` | `codex` | Coding CLI behind the analysis lane: `codex`, `claude` or `cursor`. An unknown value is an error, never a silent fallback |
++| `VERIT_LANE_MODEL` | unset | Model for the analysis lane |
++| `VERIT_LANE_TIMEOUT_MS` | `900000` | Hard timeout for the one-shot lane call |
++| `ANTHROPIC_API_KEY` | unset | Auth for `VERIT_LANE_HARNESS=claude` in CI. Locally the CLI's own login is used |
++| `CURSOR_API_KEY` | unset | Auth for `VERIT_LANE_HARNESS=cursor` in CI. Locally `cursor-agent login` is used |
++| `VERIT_SQLITE_PATH` | `.data/verit.db` | DocumentStore path. Set `""` for in-memory |
++| `VERIT_NEO4J_URI` | unset | `bolt://…`. Memory graph if unset |
++| `VERIT_NEO4J_PASSWORD` | none | Neo4j auth when the URI is set |
++| `VERIT_WORKSPACE_DIR` | `.data/workspace` | Workspace session blobs |
++| `VERIT_PI_BIN` | unset | Path to a Pi binary. If unset, the deterministic stub |
++| `VERIT_DASHBOARD_URL` | unset | Dashboard base URL. With `VERIT_INGEST_TOKEN` the run is uploaded and the Check links its proof page |
++| `VERIT_INGEST_TOKEN` | unset | Per-repo ingest token from `pnpm --filter @verit/dashboard register-repo owner/name` |
+ | `PROOF_PAGE_URL` | unset | Only to override the computed proof page link |
+ 
+ ## CLI
+@@ -257,15 +257,15 @@ Proof artifacts land in `.data/proofs/`, which is gitignored.
+ 
+ | Package | Role |
+ |---|---|
+-| `@cyclops/domain` | Pure schemas and entities |
+-| `@cyclops/ports` | Interfaces |
+-| `@cyclops/application` | Use cases |
+-| `@cyclops/adapters-*` | SQLite, Neo4j, tree-sitter, GitHub, Pi, prove, S3, memory |
+-| `@cyclops/cli` | `ingest`, `ingest-pr`, `understand`, `review`, `dogfood` |
+-| `@cyclops/workspace` | Live review workspace (Next.js, SSE, json-render) |
+-| `@cyclops/dashboard` | Hosted run history and proof pages (Next.js, Postgres) |
+-| `@cyclops/proof-ui` | The one component registry both surfaces render |
+-| `@cyclops/action` | GitHub Action entry point |
++| `@verit/domain` | Pure schemas and entities |
++| `@verit/ports` | Interfaces |
++| `@verit/application` | Use cases |
++| `@verit/adapters-*` | SQLite, Neo4j, tree-sitter, GitHub, Pi, prove, S3, memory |
++| `@verit/cli` | `ingest`, `ingest-pr`, `understand`, `review`, `dogfood` |
++| `@verit/workspace` | Live review workspace (Next.js, SSE, json-render) |
++| `@verit/dashboard` | Hosted run history and proof pages (Next.js, Postgres) |
++| `@verit/proof-ui` | The one component registry both surfaces render |
++| `@verit/action` | GitHub Action entry point |
+ 
+ ## Status
+ 
+@@ -273,7 +273,7 @@ Early. The pieces below are real and running in this repository's own CI on
+ every pull request:
+ 
+ - `prove` running a repository's own command and reporting the true exit code
+-- the `cyclops / behavior-proof` Check Run, including the `neutral` case
++- the `verit / behavior-proof` Check Run, including the `neutral` case
+ - the Understanding schema, its validation, and the proof page render
+ - the GitHub Action, the CLI and the live workspace
+ 
+diff --git a/SECURITY.md b/SECURITY.md
+index 506268e..a402990 100644
+--- a/SECURITY.md
++++ b/SECURITY.md
+@@ -12,14 +12,14 @@ given in the release notes unless you ask otherwise.
+ 
+ ## What is in scope
+ 
+-cyclops runs code, so the sharp edges are worth naming.
++verit runs code, so the sharp edges are worth naming.
+ 
+ - **`prove` executing the wrong code.** `prove` runs a repository's own
+   verification command. It is meant to run only in a checkout of the repository
+   under review and refuses anything else. A way to make it execute in a
+   different checkout, or to run a command the target repository did not define,
+   is a vulnerability.
+-- **A green Check nobody earned.** The `cyclops / behavior-proof` conclusion is
++- **A green Check nobody earned.** The `verit / behavior-proof` conclusion is
+   the exit code of the command that ran, and `neutral` when nothing ran. Any
+   path that produces a passing Check without a passing run is a vulnerability,
+   not a cosmetic bug.
+@@ -35,17 +35,17 @@ cyclops runs code, so the sharp edges are worth naming.
+ 
+ ## What is not in scope
+ 
+-- Running cyclops against a repository you control and having it execute that
++- Running verit against a repository you control and having it execute that
+   repository's test command. That is the product.
+-- `CYCLOPS_DEV_USER`, which skips GitHub login. It is local only, has no
++- `VERIT_DEV_USER`, which skips GitHub login. It is local only, has no
+   default, and is documented as never being set in a deployment.
+ - Findings in a self-hosted deployment that come from missing configuration,
+   for example a dashboard published with no session secret set.
+ 
+ ## Self-hosting notes
+ 
+-- Set `CYCLOPS_SESSION_SECRET` to at least 32 random bytes. Rotating it signs
++- Set `VERIT_SESSION_SECRET` to at least 32 random bytes. Rotating it signs
+   everyone out, which is the intended lever.
+-- Never set `CYCLOPS_DEV_USER` anywhere that is reachable from the internet.
++- Never set `VERIT_DEV_USER` anywhere that is reachable from the internet.
+ - On a fork pull request GitHub withholds secrets and issues a read-only token.
+-  cyclops degrades to a dry run rather than failing. That is deliberate.
++  verit degrades to a dry run rather than failing. That is deliberate.
+diff --git a/STYLE.md b/STYLE.md
+index 4acd94f..ac3709e 100644
+--- a/STYLE.md
++++ b/STYLE.md
+@@ -1,6 +1,6 @@
+ # Output style
+ 
+-Every string cyclops shows a human follows these rules: prompts, Check Run bodies, UI copy, docs.
++Every string verit shows a human follows these rules: prompts, Check Run bodies, UI copy, docs.
+ 
+ 1. Never use the em dash character. Use a period, a comma, or a colon.
+ 2. Short sentences. One idea each.
+diff --git a/action.yml b/action.yml
+index 0da0f5a..1836709 100644
+--- a/action.yml
++++ b/action.yml
+@@ -1,4 +1,4 @@
+-name: "cyclops behavior proof"
++name: "verit behavior proof"
+ description: "Run the pull request's own tests and post the pass/fail result as a GitHub Check, with a structured Understanding."
+ branding:
+   icon: "check-circle"
+@@ -34,7 +34,7 @@ inputs:
+     required: false
+     default: ""
+   dashboard-url:
+-    description: "Base URL of a cyclops dashboard. Set with ingest-token to upload the run and link its proof page."
++    description: "Base URL of a verit dashboard. Set with ingest-token to upload the run and link its proof page."
+     required: false
+     default: ""
+   ingest-token:
+@@ -45,7 +45,7 @@ inputs:
+ runs:
+   using: composite
+   steps:
+-    # cyclops runs from its own checkout, which is github.action_path. The repo
++    # verit runs from its own checkout, which is github.action_path. The repo
+     # under review stays in GITHUB_WORKSPACE, which is where prove executes.
+     - uses: pnpm/action-setup@v4
+       with:
+@@ -53,7 +53,7 @@ runs:
+     - uses: actions/setup-node@v4
+       with:
+         node-version: "22"
+-    - name: Install cyclops
++    - name: Install verit
+       shell: bash
+       working-directory: ${{ github.action_path }}
+       run: pnpm install --frozen-lockfile
+@@ -69,16 +69,16 @@ runs:
+         GITHUB_TOKEN: ${{ inputs.github-token }}
+         # prove runs in the caller's checkout, and the ProveRunner refuses any
+         # checkout that is not the repo under review.
+-        CYCLOPS_PROVE_CWD: ${{ github.workspace }}
+-        CYCLOPS_PROVE_CMD: ${{ inputs.prove-command }}
+-        CYCLOPS_PROVE_TIMEOUT_MS: ${{ inputs.prove-timeout-ms }}
+-        CYCLOPS_SQLITE_PATH: ${{ github.action_path }}/.data/cyclops.db
++        VERIT_PROVE_CWD: ${{ github.workspace }}
++        VERIT_PROVE_CMD: ${{ inputs.prove-command }}
++        VERIT_PROVE_TIMEOUT_MS: ${{ inputs.prove-timeout-ms }}
++        VERIT_SQLITE_PATH: ${{ github.action_path }}/.data/verit.db
+         # The lane stays on the stub unless both the harness and its key are set,
+         # so a fork PR with no secrets degrades instead of hanging on a CLI that
+         # cannot authenticate.
+-        CYCLOPS_LANE_HARNESS: ${{ inputs.anthropic-api-key != '' && inputs.lane-harness || '' }}
+-        CYCLOPS_LANE_MODEL: ${{ inputs.lane-model }}
++        VERIT_LANE_HARNESS: ${{ inputs.anthropic-api-key != '' && inputs.lane-harness || '' }}
++        VERIT_LANE_MODEL: ${{ inputs.lane-model }}
+         ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+-        CYCLOPS_DASHBOARD_URL: ${{ inputs.dashboard-url }}
+-        CYCLOPS_INGEST_TOKEN: ${{ inputs.ingest-token }}
++        VERIT_DASHBOARD_URL: ${{ inputs.dashboard-url }}
++        VERIT_INGEST_TOKEN: ${{ inputs.ingest-token }}
+       run: pnpm exec tsx packages/cli/src/main.ts dogfood "$PR_SPEC"
+diff --git a/apps/dashboard/app/api/auth/callback/route.ts b/apps/dashboard/app/api/auth/callback/route.ts
+index 14e16f4..99a77d8 100644
+--- a/apps/dashboard/app/api/auth/callback/route.ts
++++ b/apps/dashboard/app/api/auth/callback/route.ts
+@@ -57,7 +57,7 @@ export async function GET(req: Request): Promise<NextResponse> {
+     headers: {
+       Authorization: `Bearer ${ghToken}`,
+       Accept: "application/vnd.github+json",
+-      "User-Agent": "cyclops-dashboard",
++      "User-Agent": "verit-dashboard",
+     },
+     cache: "no-store",
+   });
+diff --git a/apps/dashboard/app/api/ingest/route.ts b/apps/dashboard/app/api/ingest/route.ts
+index 7e6b11d..f09ca55 100644
+--- a/apps/dashboard/app/api/ingest/route.ts
++++ b/apps/dashboard/app/api/ingest/route.ts
+@@ -18,10 +18,10 @@ const deny = () =>
+  *
+  * Order matters. Authentication runs first, against the repo named in the
+  * header, so an unauthenticated caller never learns anything from a validation
+- * error. Only then is the body decoded against the @cyclops/domain schema.
++ * error. Only then is the body decoded against the @verit/domain schema.
+  */
+ export async function POST(req: Request): Promise<NextResponse> {
+-  const slug = req.headers.get("x-cyclops-repo");
++  const slug = req.headers.get("x-verit-repo");
+   const token = bearerToken(req.headers.get("authorization"));
+   if (!slug) return deny();
+ 
+diff --git a/apps/dashboard/app/layout.tsx b/apps/dashboard/app/layout.tsx
+index 1fb9836..6b211ed 100644
+--- a/apps/dashboard/app/layout.tsx
++++ b/apps/dashboard/app/layout.tsx
+@@ -8,7 +8,7 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
+ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+ 
+ export const metadata: Metadata = {
+-  title: "Cyclops",
++  title: "Verit",
+   description: "Behavior proof for pull requests: run history and proof pages",
+ };
+ 
+@@ -20,7 +20,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
+         <header className="border-b border-line bg-surface">
+           <div className="mx-auto flex max-w-[1080px] flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 sm:px-6">
+             <Link href="/" className="text-[13px] font-medium">
+-              cyclops
++              verit
+             </Link>
+             <span className="text-[12px] text-ink-3">behavior proof</span>
+             {session ? (
+diff --git a/apps/dashboard/app/page.tsx b/apps/dashboard/app/page.tsx
+index ff41dfa..f22ee76 100644
+--- a/apps/dashboard/app/page.tsx
++++ b/apps/dashboard/app/page.tsx
+@@ -27,7 +27,7 @@ export default async function Home({
+       <div className="mx-auto max-w-[420px] pt-16 text-center">
+         <h1 className="text-[15px] font-medium">Sign in to see your runs</h1>
+         <p className="mt-1.5 text-[13px] text-ink-2">
+-          Cyclops shows the repos you can already read on GitHub, and nothing else.
++          Verit shows the repos you can already read on GitHub, and nothing else.
+         </p>
+         {login && (
+           <p className="mt-3 rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger">
+@@ -59,7 +59,7 @@ export default async function Home({
+       {owners.length === 0 ? (
+         <Empty
+           title="No connected repos yet"
+-          hint="Register a repo with pnpm --filter @cyclops/dashboard register-repo owner/name, then run the Action there."
++          hint="Register a repo with pnpm --filter @verit/dashboard register-repo owner/name, then run the Action there."
+         />
+       ) : (
+         <ul className="divide-y divide-line rounded-lg border border-line bg-surface">
+diff --git a/apps/dashboard/app/r/[owner]/[repo]/page.tsx b/apps/dashboard/app/r/[owner]/[repo]/page.tsx
+index 4eeb068..72191bb 100644
+--- a/apps/dashboard/app/r/[owner]/[repo]/page.tsx
++++ b/apps/dashboard/app/r/[owner]/[repo]/page.tsx
+@@ -28,7 +28,7 @@ export default async function RepoPage({
+       {runs.length === 0 ? (
+         <Empty
+           title="No runs yet"
+-          hint="Runs appear here once the Action uploads one. Set CYCLOPS_DASHBOARD_URL and CYCLOPS_INGEST_TOKEN in the workflow."
++          hint="Runs appear here once the Action uploads one. Set VERIT_DASHBOARD_URL and VERIT_INGEST_TOKEN in the workflow."
+         />
+       ) : (
+         <div className="overflow-x-auto rounded-lg border border-line bg-surface">
+diff --git a/apps/dashboard/components/proof-page.tsx b/apps/dashboard/components/proof-page.tsx
+index 9a9c07a..ca61985 100644
+--- a/apps/dashboard/components/proof-page.tsx
++++ b/apps/dashboard/components/proof-page.tsx
+@@ -1,6 +1,6 @@
+ "use client";
+ 
+-import { registry } from "@cyclops/proof-ui";
++import { registry } from "@verit/proof-ui";
+ import { JSONUIProvider, Renderer } from "@json-render/react";
+ import type { Spec } from "@json-render/core";
+ 
+diff --git a/apps/dashboard/lib/access.ts b/apps/dashboard/lib/access.ts
+index 7da8015..ac787d3 100644
+--- a/apps/dashboard/lib/access.ts
++++ b/apps/dashboard/lib/access.ts
+@@ -8,7 +8,7 @@ export interface AccessRow {
+ export const DEFAULT_TTL_SECONDS = 600;
+ 
+ export const ttlSeconds = (): number =>
+-  Number(process.env.CYCLOPS_ACCESS_TTL_SECONDS) || DEFAULT_TTL_SECONDS;
++  Number(process.env.VERIT_ACCESS_TTL_SECONDS) || DEFAULT_TTL_SECONDS;
+ 
+ /**
+  * A cached answer is trusted only inside its TTL. A clock that has moved
+@@ -80,7 +80,7 @@ export const verifyOnGithub = async (token: string, repoId: string): Promise<boo
+     headers: {
+       Authorization: `Bearer ${token}`,
+       Accept: "application/vnd.github+json",
+-      "User-Agent": "cyclops-dashboard",
++      "User-Agent": "verit-dashboard",
+     },
+     cache: "no-store",
+   });
+diff --git a/apps/dashboard/lib/crypto.ts b/apps/dashboard/lib/crypto.ts
+index 7426232..e5ff50e 100644
+--- a/apps/dashboard/lib/crypto.ts
++++ b/apps/dashboard/lib/crypto.ts
+@@ -8,19 +8,19 @@ import {
+ } from "node:crypto";
+ 
+ /**
+- * One secret, one primitive. CYCLOPS_SESSION_SECRET derives an AES-256-GCM key,
++ * One secret, one primitive. VERIT_SESSION_SECRET derives an AES-256-GCM key,
+  * and the session cookie is sealed with it rather than merely signed: GCM
+  * authenticates the cookie the way a signature would, and also keeps the user's
+  * GitHub token out of anything a browser extension or a log can read.
+  */
+-const keyFor = (secret: string): Buffer => scryptSync(secret, "cyclops.session.v1", 32);
++const keyFor = (secret: string): Buffer => scryptSync(secret, "verit.session.v1", 32);
+ 
+ let cachedKey: { secret: string; key: Buffer } | null = null;
+ 
+ const sessionKey = (): Buffer => {
+-  const secret = process.env.CYCLOPS_SESSION_SECRET;
++  const secret = process.env.VERIT_SESSION_SECRET;
+   if (!secret || secret.length < 32) {
+-    throw new Error("CYCLOPS_SESSION_SECRET must be set to at least 32 characters");
++    throw new Error("VERIT_SESSION_SECRET must be set to at least 32 characters");
+   }
+   if (cachedKey?.secret !== secret) cachedKey = { secret, key: keyFor(secret) };
+   return cachedKey.key;
+diff --git a/apps/dashboard/lib/db.ts b/apps/dashboard/lib/db.ts
+index f2aa791..af72023 100644
+--- a/apps/dashboard/lib/db.ts
++++ b/apps/dashboard/lib/db.ts
+@@ -13,7 +13,7 @@ export const db = (): Pool => {
+   if (!pool) {
+     pool = new Pool({
+       connectionString,
+-      max: Number(process.env.CYCLOPS_DB_POOL_MAX) || 5,
++      max: Number(process.env.VERIT_DB_POOL_MAX) || 5,
+       ssl: /\bsslmode=require\b/.test(connectionString) ? { rejectUnauthorized: true } : undefined,
+     });
+   }
+diff --git a/apps/dashboard/lib/guard.ts b/apps/dashboard/lib/guard.ts
+index 257da75..d939611 100644
+--- a/apps/dashboard/lib/guard.ts
++++ b/apps/dashboard/lib/guard.ts
+@@ -5,7 +5,7 @@ import { currentSession, type Session } from "./session";
+ 
+ /**
+  * A dev session has no GitHub token, so there is nothing to check against.
+- * It only exists when CYCLOPS_DEV_USER names a login, which is never a
++ * It only exists when VERIT_DEV_USER names a login, which is never a
+  * default, and it is the one path that skips the access check.
+  */
+ export const allowed = async (session: Session, repoId: string): Promise<boolean> =>
+diff --git a/apps/dashboard/lib/ingest.ts b/apps/dashboard/lib/ingest.ts
+index 8524bbf..9a48206 100644
+--- a/apps/dashboard/lib/ingest.ts
++++ b/apps/dashboard/lib/ingest.ts
+@@ -1,10 +1,10 @@
+-import { decodeRunUpload, type RunUpload } from "@cyclops/domain";
++import { decodeRunUpload, type RunUpload } from "@verit/domain";
+ import { Either } from "effect";
+ import { constantTimeEqualHex, hashToken } from "./crypto";
+ import type { RepoRow } from "./runs";
+ 
+ /** A digest of the right shape that matches nothing, for the unknown-repo path. */
+-const DECOY_HASH = hashToken("cyclops.ingest.decoy");
++const DECOY_HASH = hashToken("verit.ingest.decoy");
+ 
+ export const bearerToken = (header: string | null): string | null => {
+   if (!header) return null;
+@@ -30,7 +30,7 @@ export type ParseResult =
+   | { readonly ok: false; readonly error: string };
+ 
+ /**
+- * Validates the body against the @cyclops/domain schema. Everything past this
++ * Validates the body against the @verit/domain schema. Everything past this
+  * point is a decoded RunUpload, never raw JSON, so no page renders a field
+  * that was never checked.
+  */
+diff --git a/apps/dashboard/lib/objects.ts b/apps/dashboard/lib/objects.ts
+index 8272d3d..36cc2d4 100644
+--- a/apps/dashboard/lib/objects.ts
++++ b/apps/dashboard/lib/objects.ts
+@@ -1,6 +1,6 @@
+-import { makeFsObjectStore } from "@cyclops/adapter-local-blob";
+-import { makeS3ObjectStore, s3ConfigFromEnv } from "@cyclops/adapter-s3-blob";
+-import type { ObjectStorePort } from "@cyclops/ports";
++import { makeFsObjectStore } from "@verit/adapter-local-blob";
++import { makeS3ObjectStore, s3ConfigFromEnv } from "@verit/adapter-s3-blob";
++import type { ObjectStorePort } from "@verit/ports";
+ 
+ /**
+  * S3 when the deployment is configured for it, the filesystem otherwise.
+@@ -14,7 +14,7 @@ export const objectStore = (): ObjectStorePort => {
+   const s3 = s3ConfigFromEnv(process.env);
+   return s3
+     ? makeS3ObjectStore(s3)
+-    : makeFsObjectStore(process.env.CYCLOPS_BLOB_DIR ?? ".data/dashboard-objects");
++    : makeFsObjectStore(process.env.VERIT_BLOB_DIR ?? ".data/dashboard-objects");
+ };
+ 
+ /** Run ids carry colons. Object keys do not, so they are flattened once, here. */
+diff --git a/apps/dashboard/lib/runs.ts b/apps/dashboard/lib/runs.ts
+index 119acc0..15bde9f 100644
+--- a/apps/dashboard/lib/runs.ts
++++ b/apps/dashboard/lib/runs.ts
+@@ -1,4 +1,4 @@
+-import { proofVerdict, type RunUpload, type Understanding } from "@cyclops/domain";
++import { proofVerdict, type RunUpload, type Understanding } from "@verit/domain";
+ import { query } from "./db";
+ 
+ export interface RepoRow {
+diff --git a/apps/dashboard/lib/session.test.ts b/apps/dashboard/lib/session.test.ts
+index bf6e345..1d0c5ff 100644
+--- a/apps/dashboard/lib/session.test.ts
++++ b/apps/dashboard/lib/session.test.ts
+@@ -5,7 +5,7 @@ const now = 1_800_000_000;
+ const session: Session = { login: "efe", userId: 7, ghToken: "gho_x", exp: now + 60 };
+ 
+ beforeEach(() => {
+-  process.env.CYCLOPS_SESSION_SECRET = "x".repeat(48);
++  process.env.VERIT_SESSION_SECRET = "x".repeat(48);
+ });
+ 
+ describe("session cookie", () => {
+@@ -15,7 +15,7 @@ describe("session cookie", () => {
+ 
+   it("rejects a cookie sealed with a different secret", () => {
+     const sealed = sealSession(session);
+-    process.env.CYCLOPS_SESSION_SECRET = "y".repeat(48);
++    process.env.VERIT_SESSION_SECRET = "y".repeat(48);
+     expect(parseSession(sealed, now)).toBeNull();
+   });
+ 
+diff --git a/apps/dashboard/lib/session.ts b/apps/dashboard/lib/session.ts
+index 330ad82..c5753f9 100644
+--- a/apps/dashboard/lib/session.ts
++++ b/apps/dashboard/lib/session.ts
+@@ -1,8 +1,8 @@
+ import { cookies } from "next/headers";
+ import { open, seal } from "./crypto";
+ 
+-export const SESSION_COOKIE = "cyclops_session";
+-export const STATE_COOKIE = "cyclops_oauth_state";
++export const SESSION_COOKIE = "verit_session";
++export const STATE_COOKIE = "verit_oauth_state";
+ export const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+ 
+ export interface Session {
+@@ -12,7 +12,7 @@ export interface Session {
+   readonly ghToken: string | null;
+   /** Unix seconds. */
+   readonly exp: number;
+-  /** True for a CYCLOPS_DEV_USER session, which never sees GitHub. */
++  /** True for a VERIT_DEV_USER session, which never sees GitHub. */
+   readonly dev?: boolean;
+ }
+ 
+@@ -54,13 +54,13 @@ export const cookieOptions = (maxAge: number) =>
+   }) as const;
+ 
+ /**
+- * The local shortcut. It exists only when CYCLOPS_DEV_USER names a login, and
++ * The local shortcut. It exists only when VERIT_DEV_USER names a login, and
+  * there is no default: with the variable unset the dashboard always asks GitHub
+  * who you are. A dev session carries no GitHub token, so it is also the reason
+  * the dev path grants repo access without an access check.
+  */
+ export const devSession = (): Session | null => {
+-  const login = process.env.CYCLOPS_DEV_USER;
++  const login = process.env.VERIT_DEV_USER;
+   if (!login) return null;
+   return {
+     login,
+diff --git a/apps/dashboard/next.config.ts b/apps/dashboard/next.config.ts
+index 30b3153..745c5cc 100644
+--- a/apps/dashboard/next.config.ts
++++ b/apps/dashboard/next.config.ts
+@@ -1,13 +1,13 @@
+ import type { NextConfig } from "next";
+ 
+-/* The cyclops packages ship TypeScript source (exports point at ./src), so
++/* The verit packages ship TypeScript source (exports point at ./src), so
+    Next has to compile them itself. */
+ const nextConfig: NextConfig = {
+   transpilePackages: [
+-    "@cyclops/domain",
+-    "@cyclops/ports",
+-    "@cyclops/adapter-local-blob",
+-    "@cyclops/proof-ui",
++    "@verit/domain",
++    "@verit/ports",
++    "@verit/adapter-local-blob",
++    "@verit/proof-ui",
+   ],
+ };
+ 
+diff --git a/apps/dashboard/package.json b/apps/dashboard/package.json
+index 4b45564..083594c 100644
+--- a/apps/dashboard/package.json
++++ b/apps/dashboard/package.json
+@@ -1,5 +1,5 @@
+ {
+-  "name": "@cyclops/dashboard",
++  "name": "@verit/dashboard",
+   "license": "AGPL-3.0-only",
+   "version": "0.0.1",
+   "private": true,
+@@ -14,11 +14,11 @@
+     "typecheck": "tsc -p tsconfig.json --noEmit"
+   },
+   "dependencies": {
+-    "@cyclops/domain": "workspace:*",
+-    "@cyclops/adapter-local-blob": "workspace:*",
+-    "@cyclops/adapter-s3-blob": "workspace:*",
+-    "@cyclops/ports": "workspace:*",
+-    "@cyclops/proof-ui": "workspace:*",
++    "@verit/domain": "workspace:*",
++    "@verit/adapter-local-blob": "workspace:*",
++    "@verit/adapter-s3-blob": "workspace:*",
++    "@verit/ports": "workspace:*",
++    "@verit/proof-ui": "workspace:*",
+     "@json-render/core": "^0.19.0",
+     "@json-render/react": "^0.19.0",
+     "clsx": "^2.1.1",
+diff --git a/apps/dashboard/scripts/register-repo.ts b/apps/dashboard/scripts/register-repo.ts
+index bd8773b..09975ea 100644
+--- a/apps/dashboard/scripts/register-repo.ts
++++ b/apps/dashboard/scripts/register-repo.ts
+@@ -5,7 +5,7 @@ import { db, query } from "../lib/db";
+  * Connects one repo and prints its ingest token once. Only the hash is stored,
+  * so a lost token is reissued by running this again, never recovered.
+  *
+- *   pnpm --filter @cyclops/dashboard register-repo owner/name
++ *   pnpm --filter @verit/dashboard register-repo owner/name
+  */
+ const main = async (): Promise<void> => {
+   const slug = process.argv[2];
+@@ -21,7 +21,7 @@ const main = async (): Promise<void> => {
+     [slug, owner, name, hashToken(token)],
+   );
+   console.log(`repo ${slug} connected`);
+-  console.log(`CYCLOPS_INGEST_TOKEN=${token}`);
++  console.log(`VERIT_INGEST_TOKEN=${token}`);
+   console.log("Store it as a repository secret now. It is not shown again.");
+   await db().end();
+ };
+diff --git a/apps/workspace/README.md b/apps/workspace/README.md
+index b25c235..39fe8a3 100644
+--- a/apps/workspace/README.md
++++ b/apps/workspace/README.md
+@@ -1,6 +1,6 @@
+-# @cyclops/workspace
++# @verit/workspace
+ 
+-The live review workspace: the face of cyclops. Open a PR URL and a structural
++The live review workspace: the face of verit. Open a PR URL and a structural
+ shell appears instantly (files, CI, timeline, straight from the GitHub API).
+ One analysis lane (Codex CLI, headless) then reads the full diff, the review
+ threads and the failing CI logs, and **builds the interface itself**: it streams
+@@ -8,7 +8,7 @@ threads and the failing CI logs, and **builds the interface itself**: it streams
+ patch per line) into the Understanding surfaces.
+ 
+ The lane's real output contract is `understanding.json`. It is validated against
+-the cyclops `Understanding` schema (Effect Schema, `@cyclops/domain`) before
++the verit `Understanding` schema (Effect Schema, `@verit/domain`) before
+ anything canonical is rendered or stored. A run that fails validation is shown
+ as unverified rather than dressed up as a review.
+ 
+@@ -58,9 +58,9 @@ workspace still renders; live analysis needs both.
+ 
+ | Variable | Default | Purpose |
+ |---|---|---|
+-| `CYCLOPS_SQLITE_PATH` | `.data/cyclops.db` | Sessions, runs, Understandings |
+-| `CYCLOPS_WORKSPACE_DIR` | `.data/workspace` | Per-session blob directories |
+-| `CYCLOPS_LANE_MODEL` | unset | Model passed to `codex exec -m` |
++| `VERIT_SQLITE_PATH` | `.data/verit.db` | Sessions, runs, Understandings |
++| `VERIT_WORKSPACE_DIR` | `.data/workspace` | Per-session blob directories |
++| `VERIT_LANE_MODEL` | unset | Model passed to `codex exec -m` |
+ 
+ ## Notes
+ 
+diff --git a/apps/workspace/app/layout.tsx b/apps/workspace/app/layout.tsx
+index 2b6cb85..c40d2d3 100644
+--- a/apps/workspace/app/layout.tsx
++++ b/apps/workspace/app/layout.tsx
+@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
+ });
+ 
+ export const metadata: Metadata = {
+-  title: "Cyclops workspace",
++  title: "Verit workspace",
+   description: "Behaviour-proof review workspace over GitHub pull requests",
+ };
+ 
+diff --git a/apps/workspace/app/page.tsx b/apps/workspace/app/page.tsx
+index d71bc48..c3a0f5e 100644
+--- a/apps/workspace/app/page.tsx
++++ b/apps/workspace/app/page.tsx
+@@ -4,7 +4,7 @@ import { CommandBar } from "@/components/command-bar";
+ import { ContextPanel } from "@/components/context-panel";
+ import { Header, Palette, Rail } from "@/components/shell";
+ import { useWorkspace, WorkspaceProvider } from "@/lib/store";
+-import { ProofUiProvider, registry, type ProofUiHost } from "@cyclops/proof-ui";
++import { ProofUiProvider, registry, type ProofUiHost } from "@verit/proof-ui";
+ import { JSONUIProvider, Renderer } from "@json-render/react";
+ import { clsx } from "clsx";
+ import { useMemo, type ReactNode } from "react";
+diff --git a/apps/workspace/components/command-bar.tsx b/apps/workspace/components/command-bar.tsx
+index 1223309..aff5152 100644
+--- a/apps/workspace/components/command-bar.tsx
++++ b/apps/workspace/components/command-bar.tsx
+@@ -3,7 +3,7 @@
+ import { useWorkspace } from "@/lib/store";
+ import { clsx } from "clsx";
+ import { useEffect, useRef, useState } from "react";
+-import { Kbd } from "@cyclops/proof-ui";
++import { Kbd } from "@verit/proof-ui";
+ 
+ const SUGGESTIONS = [
+   "Focus on security-relevant changes",
+diff --git a/apps/workspace/components/context-panel.tsx b/apps/workspace/components/context-panel.tsx
+index 1de70b4..fe84aa6 100644
+--- a/apps/workspace/components/context-panel.tsx
++++ b/apps/workspace/components/context-panel.tsx
+@@ -3,7 +3,7 @@
+ import { useWorkspace } from "@/lib/store";
+ import { clsx } from "clsx";
+ import { useEffect, useRef, useState } from "react";
+-import { Confidence, Kbd, RiskDot, StatusIcon } from "@cyclops/proof-ui";
++import { Confidence, Kbd, RiskDot, StatusIcon } from "@verit/proof-ui";
+ 
+ interface Hunk {
+   header: string;
+diff --git a/apps/workspace/components/shell.tsx b/apps/workspace/components/shell.tsx
+index 4a22997..41f878e 100644
+--- a/apps/workspace/components/shell.tsx
++++ b/apps/workspace/components/shell.tsx
+@@ -4,7 +4,7 @@ import { useWorkspace } from "@/lib/store";
+ import { clsx } from "clsx";
+ import { Command } from "cmdk";
+ import { useEffect, useState } from "react";
+-import { Kbd } from "@cyclops/proof-ui";
++import { Kbd } from "@verit/proof-ui";
+ 
+ /* ---------------- header ---------------- */
+ 
+@@ -16,7 +16,7 @@ export function Header() {
+     <header className="flex h-11 shrink-0 items-center gap-3 border-b border-line bg-surface px-4">
+       <span className="flex items-center gap-1.5 text-[13px] font-semibold tracking-tight">
+         <span className="inline-block size-[9px] rounded-[2px] bg-accent" />
+-        Cyclops
++        Verit
+       </span>
+       <span className="h-4 w-px bg-line" />
+       {pr ? (
+diff --git a/apps/workspace/lib/harness.ts b/apps/workspace/lib/harness.ts
+index 2859adb..f5908f5 100644
+--- a/apps/workspace/lib/harness.ts
++++ b/apps/workspace/lib/harness.ts
+@@ -3,7 +3,7 @@
+    The analysis lane is one headless coding CLI behind a single contract: build
+    argv, stream JSONL on stdout, reduce each line to a session id or a line of
+    activity. Codex is the default. Claude Code and the Cursor CLI agent are drop
+-   in alternatives, picked with CYCLOPS_LANE_HARNESS.
++   in alternatives, picked with VERIT_LANE_HARNESS.
+ 
+    Everything here is pure. The spawning, streaming and SSE plumbing lives in
+    lane.ts, so arg building and event parsing stay testable without a process. */
+@@ -132,7 +132,7 @@ const codex: LaneAdapter = {
+      `--verbose` ("When using --print, --output-format=stream-json requires
+      --verbose"), so the pair is not optional.
+    - `--safe-mode` drops CLAUDE.md, skills, plugins, hooks and MCP servers.
+-     Session workdirs sit under the cyclops tree, so without it the lane would
++     Session workdirs sit under the verit tree, so without it the lane would
+      inherit this repo's and the operator's instructions while reading someone
+      else's PR. Auth and permissions still work normally.
+    - `--allowedTools` is the non-interactive grant. It is variadic, which is why
+@@ -223,11 +223,11 @@ const ADAPTERS: Record<LaneHarnessName, LaneAdapter> = { codex, claude, cursor }
+  * back: a typo would otherwise review every PR with the wrong tool and look
+  * completely normal while doing it.
+  */
+-export function laneAdapter(value = process.env.CYCLOPS_LANE_HARNESS): LaneAdapter {
++export function laneAdapter(value = process.env.VERIT_LANE_HARNESS): LaneAdapter {
+   if (!value) return ADAPTERS.codex;
+   const adapter = ADAPTERS[value as LaneHarnessName];
+   if (!adapter) {
+-    throw new Error(`CYCLOPS_LANE_HARNESS must be codex, claude or cursor, got "${value}"`);
++    throw new Error(`VERIT_LANE_HARNESS must be codex, claude or cursor, got "${value}"`);
+   }
+   return adapter;
+ }
+diff --git a/apps/workspace/lib/prompt.ts b/apps/workspace/lib/prompt.ts
+index df5eac8..f6bf287 100644
+--- a/apps/workspace/lib/prompt.ts
++++ b/apps/workspace/lib/prompt.ts
+@@ -1,4 +1,4 @@
+-import { OUTPUT_STYLE, UNDERSTANDING_JSON_SHAPE } from "@cyclops/domain";
++import { OUTPUT_STYLE, UNDERSTANDING_JSON_SHAPE } from "@verit/domain";
+ import { catalog } from "./catalog";
+ import { BLOCKS_FILE } from "./lane";
+ import type { PRMeta } from "./schema";
+@@ -50,7 +50,7 @@ ${UNDERSTANDING_JSON_SHAPE}
+ `;
+ 
+ export function understandPrompt(pr: PRMeta): string {
+-  return `You are the analysis lane behind cyclops, a behaviour-proof review workspace for ${pr.url} ("${pr.title}", ${pr.changedFiles} files, +${pr.additions}/-${pr.deletions}).
++  return `You are the analysis lane behind verit, a behaviour-proof review workspace for ${pr.url} ("${pr.title}", ${pr.changedFiles} files, +${pr.additions}/-${pr.deletions}).
+ 
+ Your job is to produce the Understanding of this pull request: what it changes, why, how, how a human can verify the behaviour, and where the risk is.
+ 
+diff --git a/apps/workspace/lib/prove.ts b/apps/workspace/lib/prove.ts
+index b9ab127..8225a5b 100644
+--- a/apps/workspace/lib/prove.ts
++++ b/apps/workspace/lib/prove.ts
+@@ -1,16 +1,16 @@
+ import path from "node:path";
+-import { runProve } from "@cyclops/application";
+-import { makeProveRunner } from "@cyclops/adapter-prove";
+-import type { Understanding } from "@cyclops/domain";
+-import type { ProveOutcome } from "@cyclops/ports";
++import { runProve } from "@verit/application";
++import { makeProveRunner } from "@verit/adapter-prove";
++import type { Understanding } from "@verit/domain";
++import type { ProveOutcome } from "@verit/ports";
+ import { Effect } from "effect";
+ import { docs } from "./stores";
+ 
+ /* The workspace reviews any PR, but it may only *run* code for the repo the
+-   operator pointed cyclops at: this checkout. Prove never fires on its own
++   operator pointed verit at: this checkout. Prove never fires on its own
+    here. The UI shows the exact command and the user clicks it. */
+ 
+-export const PROVE_CWD = path.resolve(process.env.CYCLOPS_PROVE_CWD ?? process.cwd());
++export const PROVE_CWD = path.resolve(process.env.VERIT_PROVE_CWD ?? process.cwd());
+ 
+ const runner = makeProveRunner();
+ 
+@@ -40,7 +40,7 @@ export async function proveOffer(repo: string): Promise<ProveOffer> {
+       allowed: false,
+       command: null,
+       cwd: PROVE_CWD,
+-      reason: `This workspace runs in ${local}; proving ${repo} would mean executing another repo's code here. Point CYCLOPS_PROVE_CWD at a ${repo} checkout to enable it.`,
++      reason: `This workspace runs in ${local}; proving ${repo} would mean executing another repo's code here. Point VERIT_PROVE_CWD at a ${repo} checkout to enable it.`,
+     };
+   }
+   const cmd = await Effect.runPromise(runner.detect(PROVE_CWD)).catch(() => null);
+@@ -49,7 +49,7 @@ export async function proveOffer(repo: string): Promise<ProveOffer> {
+       allowed: false,
+       command: null,
+       cwd: PROVE_CWD,
+-      reason: `No test or build command found in ${PROVE_CWD}. Set CYCLOPS_PROVE_CMD to name one.`,
++      reason: `No test or build command found in ${PROVE_CWD}. Set VERIT_PROVE_CMD to name one.`,
+     };
+   }
+   return {
+@@ -60,7 +60,7 @@ export async function proveOffer(repo: string): Promise<ProveOffer> {
+   };
+ }
+ 
+-const TIMEOUT_MS = Number(process.env.CYCLOPS_PROVE_TIMEOUT_MS) || undefined;
++const TIMEOUT_MS = Number(process.env.VERIT_PROVE_TIMEOUT_MS) || undefined;
+ 
+ /** Run prove for a finished ReviewRun and persist the evidence it produced. */
+ export async function proveReviewRun(input: {
+diff --git a/apps/workspace/lib/review-run.ts b/apps/workspace/lib/review-run.ts
+index 1adec05..741f714 100644
+--- a/apps/workspace/lib/review-run.ts
++++ b/apps/workspace/lib/review-run.ts
+@@ -1,7 +1,7 @@
+-import { buildReviewContext, runReviewUnderstand } from "@cyclops/application";
+-import { makeHeuristicClassifier, makeMemoryGraphStore, makeProofRender } from "@cyclops/adapter-memory";
+-import type { ReviewPresets, Understanding } from "@cyclops/domain";
+-import type { HarnessPort } from "@cyclops/ports";
++import { buildReviewContext, runReviewUnderstand } from "@verit/application";
++import { makeHeuristicClassifier, makeMemoryGraphStore, makeProofRender } from "@verit/adapter-memory";
++import type { ReviewPresets, Understanding } from "@verit/domain";
++import type { HarnessPort } from "@verit/ports";
+ import { Effect } from "effect";
+ import { fetchDiff } from "./prefetch";
+ import type { PRMeta } from "./schema";
+@@ -26,7 +26,7 @@ const laneHarness = (understanding: Understanding): HarnessPort => ({
+ });
+ 
+ /**
+- * Persist a finished workspace run through the cyclops pipeline: a ReviewRun
++ * Persist a finished workspace run through the verit pipeline: a ReviewRun
+  * row, the Understanding JSON, and the rendered proof spec. Returns the
+  * ReviewRun id so the session can point at it.
+  */
+diff --git a/apps/workspace/lib/sessions.ts b/apps/workspace/lib/sessions.ts
+index 6e7b7cd..b99ca1a 100644
+--- a/apps/workspace/lib/sessions.ts
++++ b/apps/workspace/lib/sessions.ts
+@@ -36,8 +36,8 @@ export interface LiveSession {
+   writes: Promise<void>;
+ }
+ 
+-const g = globalThis as unknown as { __cyclopsLive?: Map<string, LiveSession> };
+-const liveSessions = (g.__cyclopsLive ??= new Map<string, LiveSession>());
++const g = globalThis as unknown as { __veritLive?: Map<string, LiveSession> };
++const liveSessions = (g.__veritLive ??= new Map<string, LiveSession>());
+ 
+ /** Stable per PR head and prompt version, and safe as a directory name. */
+ export function sessionId(pr: PRMeta): string {
+@@ -67,7 +67,7 @@ export function stopSession(pr: PRMeta): boolean {
+   return true;
+ }
+ 
+-const MODEL = process.env.CYCLOPS_LANE_MODEL;
++const MODEL = process.env.VERIT_LANE_MODEL;
+ 
+ function broadcast(s: LiveSession, ev: StreamEvent) {
+   if (ev.kind === "session" && ev.threadId) s.threadId = ev.threadId;
+diff --git a/apps/workspace/lib/store.tsx b/apps/workspace/lib/store.tsx
+index a7ebb30..0e89f41 100644
+--- a/apps/workspace/lib/store.tsx
++++ b/apps/workspace/lib/store.tsx
+@@ -188,7 +188,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
+       setFocus("all");
+       setPrUrl(url);
+       try {
+-        localStorage.setItem("cyclops:pr", url);
++        localStorage.setItem("verit:pr", url);
+       } catch {}
+       session.current = {};
+       try {
+@@ -233,7 +233,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
+   useEffect(() => {
+     if (booted.current) return;
+     booted.current = true;
+-    const last = localStorage.getItem("cyclops:pr");
++    const last = localStorage.getItem("verit:pr");
+     if (last) analyze(last);
+   }, [analyze]);
+ 
+@@ -330,9 +330,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
+   }, [prUrl]);
+ 
+   useEffect(() => {
+-    if (status === "streaming" || status === "fetching") document.title = "⟳ Cyclops: Compiling";
+-    else if (status === "ready") document.title = "✓ Cyclops: Ready";
+-    else document.title = "Cyclops";
++    if (status === "streaming" || status === "fetching") document.title = "⟳ Verit: Compiling";
++    else if (status === "ready") document.title = "✓ Verit: Ready";
++    else document.title = "Verit";
+   }, [status]);
+ 
+   const select = useCallback((s: Selection | null) => setSelection(s), []);
+diff --git a/apps/workspace/lib/stores.ts b/apps/workspace/lib/stores.ts
+index 0e13b85..6aa0e7a 100644
+--- a/apps/workspace/lib/stores.ts
++++ b/apps/workspace/lib/stores.ts
+@@ -1,24 +1,24 @@
+ import path from "node:path";
+-import { makeSqliteStores } from "@cyclops/adapter-sqlite";
+-import type { DocumentStore, SessionStore } from "@cyclops/ports";
++import { makeSqliteStores } from "@verit/adapter-sqlite";
++import type { DocumentStore, SessionStore } from "@verit/ports";
+ 
+ /* Server-side singletons, opened lazily: importing a route module must not
+    touch the database (`next build` collects page data in parallel workers, and
+    they would race each other on the migration). The handle is cached on
+    globalThis so dev-server module reloads reuse one connection. */
+ 
+-const SQLITE_PATH = process.env.CYCLOPS_SQLITE_PATH || ".data/cyclops.db";
++const SQLITE_PATH = process.env.VERIT_SQLITE_PATH || ".data/verit.db";
+ 
+ /** Run blobs: prefetched PR data, the SpecStream log, the Understanding JSON. */
+ export const WORKSPACE_ROOT = path.resolve(
+-  process.env.CYCLOPS_WORKSPACE_DIR ?? ".data/workspace",
++  process.env.VERIT_WORKSPACE_DIR ?? ".data/workspace",
+ );
+ 
+ const g = globalThis as unknown as {
+-  __cyclopsStores?: ReturnType<typeof makeSqliteStores>;
++  __veritStores?: ReturnType<typeof makeSqliteStores>;
+ };
+ 
+-const open = () => (g.__cyclopsStores ??= makeSqliteStores(SQLITE_PATH));
++const open = () => (g.__veritStores ??= makeSqliteStores(SQLITE_PATH));
+ 
+ export const docs = (): DocumentStore => open().docs;
+ export const sessionStore = (): SessionStore => open().sessions;
+diff --git a/apps/workspace/lib/understanding.test.ts b/apps/workspace/lib/understanding.test.ts
+index a7080e4..dde93a9 100644
+--- a/apps/workspace/lib/understanding.test.ts
++++ b/apps/workspace/lib/understanding.test.ts
+@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
+ import { readUnderstanding, understandingPatches, UNDERSTANDING_FILE } from "./understanding";
+ 
+ const dirWith = (body: string): string => {
+-  const dir = mkdtempSync(join(tmpdir(), "cyclops-u-"));
++  const dir = mkdtempSync(join(tmpdir(), "verit-u-"));
+   writeFileSync(join(dir, UNDERSTANDING_FILE), body);
+   return dir;
+ };
+@@ -30,7 +30,7 @@ describe("understanding lane contract", () => {
+   });
+ 
+   it("rejects a missing file, bad JSON, and a schema violation", async () => {
+-    const missing = await readUnderstanding(mkdtempSync(join(tmpdir(), "cyclops-u-")));
++    const missing = await readUnderstanding(mkdtempSync(join(tmpdir(), "verit-u-")));
+     expect(missing.ok).toBe(false);
+ 
+     const torn = await readUnderstanding(dirWith("{ not json"));
+diff --git a/apps/workspace/lib/understanding.ts b/apps/workspace/lib/understanding.ts
+index 4839f25..d703d10 100644
+--- a/apps/workspace/lib/understanding.ts
++++ b/apps/workspace/lib/understanding.ts
+@@ -1,11 +1,11 @@
+ import { readFile } from "node:fs/promises";
+ import path from "node:path";
+-import { decodeUnderstanding, type Understanding } from "@cyclops/domain";
++import { decodeUnderstanding, type Understanding } from "@verit/domain";
+ import { Either } from "effect";
+ 
+ /* The analysis lane's machine-readable output contract. Everything the lane
+    streams into the workspace is a draft; this file is what gets validated
+-   against the cyclops Understanding schema and persisted. */
++   against the verit Understanding schema and persisted. */
+ 
+ export const UNDERSTANDING_FILE = "understanding.json";
+ 
+diff --git a/apps/workspace/next.config.ts b/apps/workspace/next.config.ts
+index 1b7adc1..77eff82 100644
+--- a/apps/workspace/next.config.ts
++++ b/apps/workspace/next.config.ts
+@@ -1,15 +1,15 @@
+ import type { NextConfig } from "next";
+ 
+-/* The cyclops packages ship TypeScript source (exports point at ./src/index.ts)
++/* The verit packages ship TypeScript source (exports point at ./src/index.ts)
+    and use NodeNext-style ".js" specifiers, so Next has to compile them itself. */
+ const nextConfig: NextConfig = {
+   transpilePackages: [
+-    "@cyclops/domain",
+-    "@cyclops/ports",
+-    "@cyclops/application",
+-    "@cyclops/adapter-memory",
+-    "@cyclops/adapter-sqlite",
+-    "@cyclops/proof-ui",
++    "@verit/domain",
++    "@verit/ports",
++    "@verit/application",
++    "@verit/adapter-memory",
++    "@verit/adapter-sqlite",
++    "@verit/proof-ui",
+   ],
+ };
+ 
+diff --git a/apps/workspace/package.json b/apps/workspace/package.json
+index fedb06b..f6f7459 100644
+--- a/apps/workspace/package.json
++++ b/apps/workspace/package.json
+@@ -1,5 +1,5 @@
+ {
+-  "name": "@cyclops/workspace",
++  "name": "@verit/workspace",
+   "license": "AGPL-3.0-only",
+   "version": "0.0.1",
+   "private": true,
+@@ -12,13 +12,13 @@
+     "typecheck": "tsc -p tsconfig.json --noEmit"
+   },
+   "dependencies": {
+-    "@cyclops/adapter-memory": "workspace:*",
+-    "@cyclops/adapter-prove": "workspace:*",
+-    "@cyclops/adapter-sqlite": "workspace:*",
+-    "@cyclops/application": "workspace:*",
+-    "@cyclops/domain": "workspace:*",
+-    "@cyclops/ports": "workspace:*",
+-    "@cyclops/proof-ui": "workspace:*",
++    "@verit/adapter-memory": "workspace:*",
++    "@verit/adapter-prove": "workspace:*",
++    "@verit/adapter-sqlite": "workspace:*",
++    "@verit/application": "workspace:*",
++    "@verit/domain": "workspace:*",
++    "@verit/ports": "workspace:*",
++    "@verit/proof-ui": "workspace:*",
+     "@json-render/core": "^0.19.0",
+     "@json-render/react": "^0.19.0",
+     "class-variance-authority": "^0.7.1",
+diff --git a/design/docs/README.md b/design/docs/README.md
+new file mode 100644
+index 0000000..62c3bf9
+--- /dev/null
++++ b/design/docs/README.md
+@@ -0,0 +1,47 @@
++# Cyclops Design System
++
++Production design system for the Cyclops proof/review platform.
++
++## Canonical sources
++
++| Layer | Location |
++|---|---|
++| Tokens (JSON) | [`../tokens.json`](../tokens.json) |
++| Tokens (CSS) | [`../tokens.css`](../tokens.css) |
++| Visual library | [Paper: Cyclops Design System](https://app.paper.design/file/01KYYHRE1J0YJA5AWE9JCBG6MM) |
++| Docs | this folder |
++
++## Paper pages
++
++| Page | Contents |
++|---|---|
++| Cover | Brand, principles |
++| 01 Foundations | Spacing, radius, elevation, breakpoints, icons, layout columns (variables merged here) |
++| 03 Typography | Full scale display→caption + mono |
++| 04 Colors | Semantic light swatches + status AA |
++| 05 Components | Atoms, molecules, organisms with variants/states |
++| 06 Patterns | Empty, skeleton, form stack, nav shell + cmdk |
++| 07 Templates | Proof report, review dashboard, PR dogfood (#415) |
++| 08 Documentation | Principles, a11y, tokens, do/don't, research, Figma note, packages/web |
++
++## Decisions
++
++- **Product:** Cyclops first (generic “B” kit later as a fork)
++- **Mood:** mineral, slate neutrals + oxidized-copper teal (`#0F766E`)
++- **Type:** IBM Plex Sans + IBM Plex Mono
++- **Theme:** light-first + `data-theme="dark"`
++- **Structural laws** (from efe-design, not visuals): 4px spacing, WCAG floors, flat elevation, semantic triple-encoding, rank by weight before size
++- **Nav active:** subtle fill + 2px teal spine
++- **Research:** Mobbin-class patterns (Linear, Stripe, Vercel, GitHub). Synthesized, not copied
++
++## Figma note
++
++Figma sync pending (MCP flake this session). Paper hosts the visual library; `tokens.json` is Figma-importable when Variables MCP is stable. Sync checklist: [`figma-sync.md`](./figma-sync.md).
++
++## Inventory
++
++Atoms, molecules, organisms, and Cyclops proof blocks: [`inventory.md`](./inventory.md).
++
++## packages/web
++
++Import `design/tokens.css` at the app root. Treat the Paper file as the visual contract until React DS packages land. Control heights: button 36 · input 40 · row 44.
+diff --git a/design/docs/accessibility.md b/design/docs/accessibility.md
+new file mode 100644
+index 0000000..bda5071
+--- /dev/null
++++ b/design/docs/accessibility.md
+@@ -0,0 +1,34 @@
++# Accessibility (WCAG 2.2 AA)
++
++## Floors
++
++| Role | Ratio |
++|---|---|
++| Informational text | ≥ 4.5:1 (3:1 if ≥ 24px / 18.5px bold) |
++| Functional non-text (borders, icons that convey state) | ≥ 3:1 |
++| Decorative seams | may be weaker if spacing also groups |
++
++Measured against intended surface (`canvas` or `surface-1`).
++
++## Keyboard
++
++- All controls focusable in logical order
++- Focus visible: `2px solid var(--color-focus)`, offset `2px`
++- Dialogs trap focus; Escape closes
++- Command palette: type to filter, arrows, Enter, Escape
++
++## Color
++
++- Never rely on color alone for status (danger / success / attention)
++- Greyscale still preserves hierarchy (weight + position)
++
++## Motion / targets
++
++- `prefers-reduced-motion`: durations → 0
++- Coarse pointer: min 44×44px hit area (visual control may be smaller with padding)
++
++## Screen readers
++
++- Buttons named by consequence (“Publish proof”, not “Submit”)
++- Form fields associate label + helper + error via `aria-describedby`
++- Tables: header scope; empty state announced
+diff --git a/design/docs/anti-slop.md b/design/docs/anti-slop.md
+new file mode 100644
+index 0000000..e98808c
+--- /dev/null
++++ b/design/docs/anti-slop.md
+@@ -0,0 +1,53 @@
++# Anti-AI-slop & handcraft principles (Cyclops)
++
++Synthesized from Emil Kowalski / interface-design craft rules, efe-design structural laws, and Mobbin refs ([Linear Preferences](https://mobbin.com/screens/c968b3b2-82a5-4044-8e4a-0bec5683dec5), [Linear Agent personalization](https://mobbin.com/screens/08a52eac-c188-4815-83c0-96d33232d93c), [Notion Team](https://mobbin.com/screens/6ad9e8d1-ebba-4221-9934-9e82ae321802)).
++
++## What “AI slop” looks like
++
++| Smell | Why it reads fake |
++|---|---|
++| Same purple/indigo SaaS kit everywhere | Shared training default |
++| Card grid with equal shadows | Template assembly, not hierarchy |
++| Accent on every chrome element | No restraint; nothing is special |
++| Tight 16px padding everywhere | No rhythm between groups |
++| Gradient blobs / glow / glass | Decoration without meaning |
++| Inter + bold titles + pill CTAs | Stock “modern SaaS” |
++| Empty state with illustration + 3 feature cards | Marketing page inside product |
++| Color-only status | Lazy; fails greyscale |
++
++**Test:** If another model given “dev tool dashboard” would ship the same screen, rewrite.
++
++## Handcraft moves (do these)
++
++1. **Subtract first.** If a border, shadow, card, or accent can leave without losing meaning, remove it.
++2. **Monochrome carries hierarchy.** Black / charcoal / mid-gray / faint for text and chrome. One accent only on *the* verb (primary button, live, active spine), or none on reading surfaces.
++3. **Whitespace is structure.** Within-group tight (8–12); between-group generous (32–56+). Page titles get air above and below.
++4. **Content column, not full bleed.** Settings/proof ~560–720px centered in the content pane; don’t stretch forms to the window edge.
++5. **Hairlines over boxes.** Prefer seam + spacing; box only for true discrete units (dialog, input).
++6. **Weight before size.** Most hierarchy is 400/500/600 + muted color, not jumping display sizes.
++7. **Concentric radius.** Outer = inner + padding. Mismatch screams generated.
++8. **Optical alignment.** Icons in buttons, chevrons, status dots: nudge until it *looks* centered.
++9. **Unseen details.** Tabular nums, font smoothing, focus rings, press scale `0.97`, `transition` on specific props only.
++10. **Motion sparingly.** No animation on high-frequency actions (cmdk open via keyboard). Ease-out when you must.
++11. **Signature from the product world.** Cyclops = proof reading calm + one-eye focus: quiet report column, not a neon “AI review” panel.
++12. **Triple-encode state.** Color + glyph + word. Red only for danger.
++
++## Cyclops v1.1 direction (user preference)
++
++- **More grayscale / monochrome**: teal demoted; primary buttons may be near-black fill; teal optional for links/live only
++- **More whitespace**: bump between-section spacing; reduce chrome density on proof templates
++- **Ferah**: reading surfaces feel like Linear settings / Notion blank page, not a packed admin kit
++
++## Product screens (v1.2 craft pass)
++
++Page **09 Screens** in Paper: https://app.paper.design/file/01KYYHRE1J0YJA5AWE9JCBG6MM/A-0
++
++| Screen | Intent |
++|---|---|
++| A · Proof report | Document reading: Linear issue-detail calm, Stripe props rail |
++| B · Runs list | List density: Vercel/Linear list, fill-only nav, no spine |
++| C · Empty workspace | Notion blank: type + underline CTA only |
++
++Refs: [Linear issue](https://mobbin.com/screens/f00cc4fb-4083-43fc-a0fb-703a6c4ef771), [Stripe customer](https://mobbin.com/screens/1a4aa88b-e0be-49b2-a87f-1264e0b5e786)
++
++Hard bans enforced: no active spine, no card soup, no pill tabs, ink not teal for chrome.
+diff --git a/design/docs/figma-sync.md b/design/docs/figma-sync.md
+new file mode 100644
+index 0000000..8101c01
+--- /dev/null
++++ b/design/docs/figma-sync.md
+@@ -0,0 +1,14 @@
++# Figma sync checklist
++
++Figma MCP (`plugin-figma-figma`) authenticated in-session but subsequent `whoami` / `create_new_file` / `use_figma` calls failed with “MCP server does not exist.” Visual DS shipped in Paper; tokens live in-repo.
++
++When Figma MCP is stable:
++
++1. `whoami` → `create_new_file` name **Cyclops Design System**
++2. Load `figma-use` + `figma-generate-library`
++3. Import primitives + semantic Light/Dark from [`../tokens.json`](../tokens.json)
++4. Bind scopes + `var(--…)` code syntax
++5. Rebuild components against Paper screenshots as visual QA
++6. Update `/tmp/dsb-state-cyclops-ds.json` with `fileKey`
++
++Paper file: https://app.paper.design/file/01KYYHRE1J0YJA5AWE9JCBG6MM
+diff --git a/design/docs/inventory.md b/design/docs/inventory.md
+new file mode 100644
+index 0000000..851028e
+--- /dev/null
++++ b/design/docs/inventory.md
+@@ -0,0 +1,19 @@
++# Component inventory (v1)
++
++## Atoms
++Button, IconButton, Link, Input, Textarea, Select, Checkbox, Radio, Switch, Badge, Tag, Avatar, Tooltip, Divider, Spinner, Skeleton, Kbd
++
++## Molecules
++FormField, SearchInput, Menu, Tabs, Breadcrumb, Pagination, Callout, Dialog, Sheet, Popover, CommandPalette
++
++## Organisms
++TopNav, SideNav, PageHeader, DataTable, Toolbar, FilterBar
++
++## Cyclops blocks
++UnderstandingBlock, ProofEvidenceList, RisksList (author hint vs reviewer), SuggestedPatch, MetaStrip, ArchGraph
++
++## Patterns
++Empty, Loading/Skeleton, Form stack, Table+filters, Command palette, Nav shell
++
++## Templates
++Proof report, Review run dashboard, PR dogfood shell
+diff --git a/design/docs/principles.md b/design/docs/principles.md
+new file mode 100644
+index 0000000..49ab352
+--- /dev/null
++++ b/design/docs/principles.md
+@@ -0,0 +1,22 @@
++# Principles
++
++1. **Neutral by default, teal by exception.** Saturation marks primary action, active nav, or live state only.
++2. **Rank by weight and color before size.** Page titles may grow; most hierarchy is 400/500/600 + muted text.
++3. **Group with air, then a hairline.** Boxes only when the element is a discrete interactive unit.
++4. **Elevation is earned.** Flat lists and tables; shadow only for popover, dialog, command palette.
++5. **Proof reading is calm; run lists are dense.** Reading column ~720px; data ~1120px.
++6. **Accessibility is a floor.** No informational text below 4.5:1; functional borders/icons 3:1; state never color-only.
++7. **Motion marks change.** Honor `prefers-reduced-motion`.
++
++## Do
++
++- Use semantic tokens (`--color-text-strong`), never raw slate hex in components
++- Pair status color with icon + word (e.g. attention triangle + “Needs review”)
++- Show 2px focus ring, 2px offset, on keyboard focus
++
++## Don’t
++
++- Pill every control
++- Purple SaaS chrome or cream+terracotta clichés
++- Shadow on in-grid cards or dark-mode tone substitutes
++- Invent proof evidence in empty states
+diff --git a/design/tokens.css b/design/tokens.css
+new file mode 100644
+index 0000000..90f7379
+--- /dev/null
++++ b/design/tokens.css
+@@ -0,0 +1,111 @@
++/**
++ * Cyclops Design System: CSS custom properties
++ * Source of truth: design/tokens.json
++ * Mood: mineral (slate + oxidized copper teal)
++ */
++:root {
++  /* Color: semantic light */
++  --color-canvas: #f8fafc;
++  --color-surface-1: #ffffff;
++  --color-surface-2: #f1f5f9;
++  --color-surface-3: #e2e8f0;
++  --color-text-strong: #0f172a;
++  --color-text-muted: #475569;
++  --color-text-faint: #64748b;
++  --color-border: #94a3b8;
++  --color-seam: #e2e8f0;
++  --color-primary: #0f766e;
++  --color-primary-hover: #115e59;
++  --color-primary-soft: #f0fdfa;
++  --color-primary-on: #ffffff;
++  --color-danger: #a5341e;
++  --color-danger-tint: #fcebe7;
++  --color-success: #2f6340;
++  --color-success-tint: #e6f4ea;
++  --color-attention: #7a5416;
++  --color-attention-tint: #f8f0de;
++  --color-focus: #0f766e;
++  --color-scrim: rgba(15, 23, 42, 0.4);
++
++  /* Type */
++  --font-sans: "IBM Plex Sans", system-ui, sans-serif;
++  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
++  --text-display: 28px;
++  --text-title: 22px;
++  --text-heading: 16px;
++  --text-body: 15px;
++  --text-label: 14px;
++  --text-meta: 13px;
++  --text-caption: 12px;
++  --font-weight-regular: 400;
++  --font-weight-medium: 500;
++  --font-weight-semibold: 600;
++  --leading-display: 34px;
++  --leading-title: 28px;
++  --leading-body: 24px;
++
++  /* Space / radius */
++  --spacing-1: 4px;
++  --spacing-2: 8px;
++  --spacing-3: 12px;
++  --spacing-4: 16px;
++  --spacing-5: 20px;
++  --spacing-6: 24px;
++  --spacing-8: 32px;
++  --spacing-10: 40px;
++  --spacing-12: 48px;
++  --radius-sm: 4px;
++  --radius-md: 6px;
++  --radius-lg: 8px;
++  --radius-xl: 12px;
++
++  /* Layout */
++  --sidebar-width: 240px;
++  --container-read: 720px;
++  --container-data: 1120px;
++  --control-height: 36px;
++  --input-height: 40px;
++  --row-height: 44px;
++
++  /* Elevation */
++  --shadow-popover: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.08);
++  --shadow-modal: 0 4px 16px rgba(15, 23, 42, 0.1), 0 24px 60px rgba(15, 23, 42, 0.14);
++
++  /* Motion */
++  --duration-micro: 160ms;
++  --duration-overlay: 240ms;
++  --ease-smooth: cubic-bezier(0.32, 0.72, 0, 1);
++}
++
++[data-theme="dark"] {
++  --color-canvas: #0f172a;
++  --color-surface-1: #1e293b;
++  --color-surface-2: #334155;
++  --color-surface-3: #475569;
++  --color-text-strong: #f8fafc;
++  --color-text-muted: #cbd5e1;
++  --color-text-faint: #94a3b8;
++  --color-border: rgba(248, 250, 252, 0.28);
++  --color-seam: rgba(248, 250, 252, 0.09);
++  --color-primary: #14b8a6;
++  --color-primary-hover: #2dd4bf;
++  --color-primary-soft: rgba(20, 184, 166, 0.14);
++  --color-primary-on: #0f172a;
++  --color-danger: #e8836b;
++  --color-danger-tint: rgba(232, 131, 107, 0.14);
++  --color-success: #6fbf86;
++  --color-success-tint: rgba(111, 191, 134, 0.14);
++  --color-attention: #d8a552;
++  --color-attention-tint: rgba(216, 165, 82, 0.14);
++  --color-focus: #2dd4bf;
++  --color-scrim: rgba(2, 6, 23, 0.6);
++  --shadow-popover: none;
++  --shadow-modal: none;
++}
++
++@media (prefers-reduced-motion: reduce) {
++  :root {
++    --duration-micro: 0ms;
++    --duration-overlay: 0ms;
++  }
++}
+diff --git a/design/tokens.json b/design/tokens.json
+new file mode 100644
+index 0000000..aa238ce
+--- /dev/null
++++ b/design/tokens.json
+@@ -0,0 +1,161 @@
++{
++  "$schema": "https://design-tokens.org/schema.json",
++  "meta": {
++    "name": "Cyclops Design System",
++    "version": "1.0.0",
++    "product": "Cyclops",
++    "mood": "mineral: limestone dust, weathered slate, oxidized copper",
++    "notes": "Visual language independent of efe-design. Structural laws only: 4px spacing, a11y floors, flat elevation, triple-encoded semantics. Figma MCP unavailable this session. Paper + this JSON are canonical until Figma sync."
++  },
++  "a11y": {
++    "floors": { "informational_text": "4.5:1", "large_text": "3:1", "functional_nontext": "3:1" },
++    "rules": [
++      "Structure and state read in greyscale",
++      "Focus ring 2px solid accent, 2px offset",
++      "prefers-reduced-motion disables non-essential motion",
++      "Touch targets >= 44px on coarse pointers"
++    ]
++  },
++  "color": {
++    "primitive": {
++      "white": "#FFFFFF",
++      "slate": {
++        "50": "#F8FAFC",
++        "100": "#F1F5F9",
++        "200": "#E2E8F0",
++        "300": "#CBD5E1",
++        "400": "#94A3B8",
++        "500": "#64748B",
++        "600": "#475569",
++        "700": "#334155",
++        "800": "#1E293B",
++        "900": "#0F172A",
++        "950": "#020617"
++      },
++      "teal": {
++        "50": "#F0FDFA",
++        "100": "#CCFBF1",
++        "200": "#99F6E4",
++        "500": "#14B8A6",
++        "600": "#0D9488",
++        "700": "#0F766E",
++        "800": "#115E59"
++      },
++      "danger": { "fg": "#A5341E", "tint": "#FCEBE7" },
++      "success": { "fg": "#2F6340", "tint": "#E6F4EA" },
++      "attention": { "fg": "#7A5416", "tint": "#F8F0DE" }
++    },
++    "semantic": {
++      "light": {
++        "canvas": "#F8FAFC",
++        "surface-1": "#FFFFFF",
++        "surface-2": "#F1F5F9",
++        "surface-3": "#E2E8F0",
++        "text-strong": "#0F172A",
++        "text-muted": "#475569",
++        "text-faint": "#64748B",
++        "border": "#94A3B8",
++        "seam": "#E2E8F0",
++        "accent": "#0F766E",
++        "accent-hover": "#115E59",
++        "accent-soft": "#F0FDFA",
++        "accent-on": "#FFFFFF",
++        "focus": "#0F766E",
++        "scrim": "rgba(15,23,42,0.40)",
++        "danger-fg": "#A5341E",
++        "danger-tint": "#FCEBE7",
++        "success-fg": "#2F6340",
++        "success-tint": "#E6F4EA",
++        "attention-fg": "#7A5416",
++        "attention-tint": "#F8F0DE"
++      },
++      "dark": {
++        "canvas": "#0F172A",
++        "surface-1": "#1E293B",
++        "surface-2": "#334155",
++        "surface-3": "#475569",
++        "text-strong": "#F8FAFC",
++        "text-muted": "#CBD5E1",
++        "text-faint": "#94A3B8",
++        "border": "rgba(248,250,252,0.28)",
++        "seam": "rgba(248,250,252,0.09)",
++        "accent": "#14B8A6",
++        "accent-hover": "#2DD4BF",
++        "accent-soft": "rgba(20,184,166,0.14)",
++        "accent-on": "#0F172A",
++        "focus": "#2DD4BF",
++        "scrim": "rgba(2,6,23,0.60)",
++        "danger-fg": "#E8836B",
++        "danger-tint": "rgba(232,131,107,0.14)",
++        "success-fg": "#6FBF86",
++        "success-tint": "rgba(111,191,134,0.14)",
++        "attention-fg": "#D8A552",
++        "attention-tint": "rgba(216,165,82,0.14)"
++      }
++    }
++  },
++  "type": {
++    "families": {
++      "sans": "IBM Plex Sans",
++      "mono": "IBM Plex Mono"
++    },
++    "scale": {
++      "display": { "size": "28px", "weight": 600, "line": "34px", "tracking": "-0.02em" },
++      "title": { "size": "22px", "weight": 600, "line": "28px", "tracking": "-0.015em" },
++      "heading": { "size": "16px", "weight": 600, "line": "22px", "tracking": "-0.01em" },
++      "body": { "size": "15px", "weight": 400, "line": "24px" },
++      "label": { "size": "14px", "weight": 500, "line": "20px" },
++      "meta": { "size": "13px", "weight": 400, "line": "18px" },
++      "caption": { "size": "12px", "weight": 500, "line": "16px", "tracking": "0.04em", "case": "uppercase" },
++      "code": { "size": "13px", "weight": 400, "line": "20px", "family": "mono" }
++    }
++  },
++  "spacing": {
++    "base": 4,
++    "scale": {
++      "0": "0px",
++      "1": "4px",
++      "2": "8px",
++      "3": "12px",
++      "4": "16px",
++      "5": "20px",
++      "6": "24px",
++      "8": "32px",
++      "10": "40px",
++      "12": "48px",
++      "16": "64px"
++    },
++    "grouping": "within 8px; between 24–40px"
++  },
++  "radius": { "sm": "4px", "md": "6px", "lg": "8px", "xl": "12px", "full": "999px" },
++  "elevation": {
++    "flat": "none",
++    "popover": "0 1px 2px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.08)",
++    "modal": "0 4px 16px rgba(15,23,42,0.10), 0 24px 60px rgba(15,23,42,0.14)"
++  },
++  "motion": {
++    "duration": { "micro": "160ms", "overlay": "240ms" },
++    "easing": { "smooth": "cubic-bezier(0.32, 0.72, 0, 1)" },
++    "reduced": "honor prefers-reduced-motion"
++  },
++  "layout": {
++    "sidebar": "240px",
++    "content-read": "720px",
++    "content-data": "1120px",
++    "breakpoints": { "sm": "768px", "md": "1024px", "lg": "1280px" }
++  },
++  "componentTokens": {
++    "button-height": "36px",
++    "input-height": "40px",
++    "row-height": "44px",
++    "icon": { "sm": "14px", "md": "16px", "lg": "20px" }
++  },
++  "research": {
++    "mobbin": [
++      "https://mobbin.com/screens/fd1b4d88-f021-49a3-98af-4cd3a87e1d29",
++      "https://mobbin.com/screens/fc7b35c9-f823-4f28-bb16-d981a05cb530",
++      "https://mobbin.com/screens/f3666f12-7fa0-4123-b070-f5641a9eeff7",
++      "https://mobbin.com/screens/f187fa83-44e8-4edb-bcb5-1c49f24cae9f"
++    ]
++  }
++}
+diff --git a/docker-compose.yml b/docker-compose.yml
+index 565c093..ece520b 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -5,7 +5,7 @@ services:
+       - "7474:7474"
+       - "7687:7687"
+     environment:
+-      NEO4J_AUTH: neo4j/cyclops-dev
++      NEO4J_AUTH: neo4j/verit-dev
+       NEO4J_PLUGINS: '["apoc"]'
+     volumes:
+       - neo4j_data:/data
+@@ -19,9 +19,9 @@ services:
+       # the clash is silent, you just connect to the wrong database.
+       - "5433:5432"
+     environment:
+-      POSTGRES_USER: cyclops
+-      POSTGRES_PASSWORD: cyclops-dev
+-      POSTGRES_DB: cyclops
++      POSTGRES_USER: verit
++      POSTGRES_PASSWORD: verit-dev
++      POSTGRES_DB: verit
+     volumes:
+       - postgres_data:/var/lib/postgresql/data
+ 
+@@ -35,14 +35,14 @@ services:
+       - "9000:9000"   # S3 API
+       - "9001:9001"   # console, http://localhost:9001
+     environment:
+-      MINIO_ROOT_USER: cyclops
+-      MINIO_ROOT_PASSWORD: cyclops-dev-secret
++      MINIO_ROOT_USER: verit
++      MINIO_ROOT_PASSWORD: verit-dev-secret
+       # MinIO checks the region in the signature. R2 wants "auto"; here the
+-      # adapter is pointed at us-east-1 through CYCLOPS_S3_REGION.
++      # adapter is pointed at us-east-1 through VERIT_S3_REGION.
+       MINIO_REGION_NAME: us-east-1
+     # A top-level directory under /data is a bucket, so the bucket exists on
+     # first boot without a second container just to run `mc mb`.
+-    entrypoint: sh -c 'mkdir -p /data/cyclops-proofs && exec minio server /data --console-address ":9001"'
++    entrypoint: sh -c 'mkdir -p /data/verit-proofs && exec minio server /data --console-address ":9001"'
+     volumes:
+       - minio_data:/data
+ 
+diff --git a/docs/architecture/README.md b/docs/architecture/README.md
+index 36ae4bc..653060d 100644
+--- a/docs/architecture/README.md
++++ b/docs/architecture/README.md
+@@ -1,6 +1,6 @@
+ # Architecture
+ 
+-cyclops is an Effect onion. Dependencies point one way only:
++verit is an Effect onion. Dependencies point one way only:
+ 
+ ```
+ domain  →  ports  →  application  →  adapters
+@@ -23,12 +23,12 @@ A dependency that points the other way is a bug, not a shortcut.
+ | `GraphStore` | Ontology, repos, PRs, PR edges, wiki pages | Neo4j | in-memory |
+ | `DocumentStore` | Runs, Understandings, proof blobs, FTS chunks | SQLite | in-memory |
+ 
+-Neither is required to run cyclops. Both fall back, which is why the quickstart
++Neither is required to run verit. Both fall back, which is why the quickstart
+ needs no Docker.
+ 
+ ## The prove boundary
+ 
+-`prove` is the only part of cyclops that executes someone else's code, so it is
++`prove` is the only part of verit that executes someone else's code, so it is
+ the part worth reading closely.
+ 
+ `packages/adapters/prove` spawns the reviewed repository's own verification
+@@ -45,7 +45,7 @@ would be a security bug.
+ 
+ ## The proof page
+ 
+-One json-render component registry, `@cyclops/proof-ui`, is rendered by both the
++One json-render component registry, `@verit/proof-ui`, is rendered by both the
+ live workspace and the hosted dashboard. The renderer refuses any component that
+ is not in the catalog, and every prop coming from a model is validated
+ defensively, because model output is untrusted input.
+diff --git a/docs/dashboard-setup.md b/docs/dashboard-setup.md
+index ce4ca8a..54dff5d 100644
+--- a/docs/dashboard-setup.md
++++ b/docs/dashboard-setup.md
+@@ -12,20 +12,20 @@ Nothing here needs a cloud account.
+ ```bash
+ docker compose up -d postgres          # host port 5433, see docker-compose.yml
+ cd apps/dashboard
+-export DATABASE_URL="postgres://cyclops:cyclops-dev@localhost:5433/cyclops"
+-export CYCLOPS_SESSION_SECRET="$(openssl rand -base64 48)"
++export DATABASE_URL="postgres://verit:verit-dev@localhost:5433/verit"
++export VERIT_SESSION_SECRET="$(openssl rand -base64 48)"
+ pnpm migrate                           # idempotent, safe to re-run
+-pnpm register-repo EfeDurmaz16/cyclops # prints the ingest token once
++pnpm register-repo EfeDurmaz16/verit # prints the ingest token once
+ pnpm dev                               # http://localhost:3001
+ ```
+ 
+-`register-repo` prints `CYCLOPS_INGEST_TOKEN=...` once. Only its sha256 digest is
++`register-repo` prints `VERIT_INGEST_TOKEN=...` once. Only its sha256 digest is
+ stored, so a lost token is reissued by running the command again, never recovered.
+ 
+-To skip the GitHub login while developing, set `CYCLOPS_DEV_USER` to a login:
++To skip the GitHub login while developing, set `VERIT_DEV_USER` to a login:
+ 
+ ```bash
+-CYCLOPS_DEV_USER=EfeDurmaz16 pnpm dev
++VERIT_DEV_USER=EfeDurmaz16 pnpm dev
+ ```
+ 
+ This is opt-in and has no default. With the variable unset the dashboard always
+@@ -36,17 +36,17 @@ deployed environment.
+ Then run the pipeline against it:
+ 
+ ```bash
+-PR_SPEC="EfeDurmaz16/cyclops#1" \
++PR_SPEC="EfeDurmaz16/verit#1" \
+ GITHUB_TOKEN="$(gh auth token)" \
+-CYCLOPS_PROVE_CWD="$PWD" \
+-CYCLOPS_CHECK_DRY_RUN=1 \
+-CYCLOPS_DASHBOARD_URL="http://localhost:3001" \
+-CYCLOPS_INGEST_TOKEN="cyc_..." \
+-pnpm cli dogfood "EfeDurmaz16/cyclops#1"
++VERIT_PROVE_CWD="$PWD" \
++VERIT_CHECK_DRY_RUN=1 \
++VERIT_DASHBOARD_URL="http://localhost:3001" \
++VERIT_INGEST_TOKEN="cyc_..." \
++pnpm cli dogfood "EfeDurmaz16/verit#1"
+ ```
+ 
+-The run appears at `/r/EfeDurmaz16/cyclops`, and its proof page at
+-`/r/EfeDurmaz16/cyclops/runs/{runId}`, which is the URL printed as
++The run appears at `/r/EfeDurmaz16/verit`, and its proof page at
++`/r/EfeDurmaz16/verit/runs/{runId}`, which is the URL printed as
+ `proofPageUrl` and linked from the Check body.
+ 
+ ## Environment variables
+@@ -54,19 +54,19 @@ The run appears at `/r/EfeDurmaz16/cyclops`, and its proof page at
+ | Variable | Where | What it does |
+ |---|---|---|
+ | `DATABASE_URL` | dashboard | Postgres connection string. Neon in production |
+-| `CYCLOPS_SESSION_SECRET` | dashboard | At least 32 chars. Seals the session cookie. Rotating it signs everyone out |
++| `VERIT_SESSION_SECRET` | dashboard | At least 32 chars. Seals the session cookie. Rotating it signs everyone out |
+ | `GITHUB_CLIENT_ID` | dashboard | OAuth app client id |
+ | `GITHUB_CLIENT_SECRET` | dashboard | OAuth app client secret |
+-| `CYCLOPS_ACCESS_TTL_SECONDS` | dashboard | How long a cached "may read" answer is trusted. Default 600 |
+-| `CYCLOPS_BLOB_DIR` | dashboard | Where the filesystem object store writes. Local only, ignored once S3 is configured |
+-| `CYCLOPS_S3_ENDPOINT` | dashboard | S3 endpoint origin, no bucket. R2: `https://<account-id>.r2.cloudflarestorage.com` |
+-| `CYCLOPS_S3_BUCKET` | dashboard | Bucket name, e.g. `cyclops-proofs` |
+-| `CYCLOPS_S3_ACCESS_KEY_ID` | dashboard | R2 API token access key id |
+-| `CYCLOPS_S3_SECRET_ACCESS_KEY` | dashboard | R2 API token secret access key |
+-| `CYCLOPS_S3_REGION` | dashboard | Optional. Defaults to `auto`, which is what R2 wants. MinIO wants a real region |
+-| `CYCLOPS_DEV_USER` | dashboard | Local only. Skips login as that GitHub login. Never set in a deployment |
+-| `CYCLOPS_DASHBOARD_URL` | Action | Base URL of the dashboard. Unset means no upload |
+-| `CYCLOPS_INGEST_TOKEN` | Action | Per-repo token from `register-repo`. Unset means no upload |
++| `VERIT_ACCESS_TTL_SECONDS` | dashboard | How long a cached "may read" answer is trusted. Default 600 |
++| `VERIT_BLOB_DIR` | dashboard | Where the filesystem object store writes. Local only, ignored once S3 is configured |
++| `VERIT_S3_ENDPOINT` | dashboard | S3 endpoint origin, no bucket. R2: `https://<account-id>.r2.cloudflarestorage.com` |
++| `VERIT_S3_BUCKET` | dashboard | Bucket name, e.g. `verit-proofs` |
++| `VERIT_S3_ACCESS_KEY_ID` | dashboard | R2 API token access key id |
++| `VERIT_S3_SECRET_ACCESS_KEY` | dashboard | R2 API token secret access key |
++| `VERIT_S3_REGION` | dashboard | Optional. Defaults to `auto`, which is what R2 wants. MinIO wants a real region |
++| `VERIT_DEV_USER` | dashboard | Local only. Skips login as that GitHub login. Never set in a deployment |
++| `VERIT_DASHBOARD_URL` | Action | Base URL of the dashboard. Unset means no upload |
++| `VERIT_INGEST_TOKEN` | Action | Per-repo token from `register-repo`. Unset means no upload |
+ | `PROOF_PAGE_URL` | Action | Only to override the computed proof page link |
+ 
+ ## Hosted checklist
+@@ -81,16 +81,16 @@ Do these once, in this order.
+    postgres 17.
+ 4. Apply the schema against it:
+    ```bash
+-   DATABASE_URL="postgres://...neon.tech/cyclops?sslmode=require" \
+-     pnpm --filter @cyclops/dashboard migrate
++   DATABASE_URL="postgres://...neon.tech/verit?sslmode=require" \
++     pnpm --filter @verit/dashboard migrate
+    ```
+ 5. Register each repo the same way, once per repo:
+    ```bash
+-   DATABASE_URL="..." pnpm --filter @cyclops/dashboard register-repo owner/name
++   DATABASE_URL="..." pnpm --filter @verit/dashboard register-repo owner/name
+    ```
+    Put the printed token in that repo's GitHub secrets as
+-   `CYCLOPS_INGEST_TOKEN`, and set the repository variable
+-   `CYCLOPS_DASHBOARD_URL` to the dashboard's URL.
++   `VERIT_INGEST_TOKEN`, and set the repository variable
++   `VERIT_DASHBOARD_URL` to the dashboard's URL.
+ 
+ ### 2. GitHub OAuth app
+ 
+@@ -118,7 +118,7 @@ local development needs no change. With only some of them set it refuses to
+ start the request rather than falling back, because on Vercel a filesystem
+ fallback loses every log while looking like it worked.
+ 
+-1. Cloudflare, R2, create a bucket, e.g. `cyclops-proofs`.
++1. Cloudflare, R2, create a bucket, e.g. `verit-proofs`.
+ 2. Create an R2 API token scoped to that bucket, read and write.
+ 3. Note the account id, access key id and secret access key. The S3 endpoint is
+    `https://<account-id>.r2.cloudflarestorage.com`, with no bucket in it: the
+@@ -127,12 +127,12 @@ fallback loses every log while looking like it worked.
+    `<account-id>.fedramp.`, and can only be reached through it.
+ 4. Set these in Vercel:
+    ```
+-   CYCLOPS_S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+-   CYCLOPS_S3_BUCKET=cyclops-proofs
+-   CYCLOPS_S3_ACCESS_KEY_ID=<access key id>
+-   CYCLOPS_S3_SECRET_ACCESS_KEY=<secret access key>
++   VERIT_S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
++   VERIT_S3_BUCKET=verit-proofs
++   VERIT_S3_ACCESS_KEY_ID=<access key id>
++   VERIT_S3_SECRET_ACCESS_KEY=<secret access key>
+    ```
+-   `CYCLOPS_S3_REGION` is optional and defaults to `auto`, which is the region
++   `VERIT_S3_REGION` is optional and defaults to `auto`, which is the region
+    R2 expects. Leave it unset for R2.
+ 
+ To exercise the same code path locally, run MinIO instead of R2:
+@@ -140,25 +140,25 @@ To exercise the same code path locally, run MinIO instead of R2:
+ ```bash
+ docker compose up -d minio    # S3 on :9000, console on :9001
+ cd apps/dashboard
+-CYCLOPS_S3_ENDPOINT=http://localhost:9000 \
+-CYCLOPS_S3_BUCKET=cyclops-proofs \
+-CYCLOPS_S3_ACCESS_KEY_ID=cyclops \
+-CYCLOPS_S3_SECRET_ACCESS_KEY=cyclops-dev-secret \
+-CYCLOPS_S3_REGION=us-east-1 \
++VERIT_S3_ENDPOINT=http://localhost:9000 \
++VERIT_S3_BUCKET=verit-proofs \
++VERIT_S3_ACCESS_KEY_ID=verit \
++VERIT_S3_SECRET_ACCESS_KEY=verit-dev-secret \
++VERIT_S3_REGION=us-east-1 \
+ pnpm dev
+ ```
+ 
+ MinIO checks the region in the signature, which is why it needs
+-`CYCLOPS_S3_REGION` and R2 does not. The adapter's own integration tests run
+-against the same container when `CYCLOPS_S3_TEST_ENDPOINT` is set, and are
++`VERIT_S3_REGION` and R2 does not. The adapter's own integration tests run
++against the same container when `VERIT_S3_TEST_ENDPOINT` is set, and are
+ skipped when it is not:
+ 
+ ```bash
+-CYCLOPS_S3_TEST_ENDPOINT=http://localhost:9000 \
+-CYCLOPS_S3_TEST_BUCKET=cyclops-proofs \
+-CYCLOPS_S3_TEST_ACCESS_KEY_ID=cyclops \
+-CYCLOPS_S3_TEST_SECRET_ACCESS_KEY=cyclops-dev-secret \
+-pnpm --filter @cyclops/adapter-s3-blob test
++VERIT_S3_TEST_ENDPOINT=http://localhost:9000 \
++VERIT_S3_TEST_BUCKET=verit-proofs \
++VERIT_S3_TEST_ACCESS_KEY_ID=verit \
++VERIT_S3_TEST_SECRET_ACCESS_KEY=verit-dev-secret \
++pnpm --filter @verit/adapter-s3-blob test
+ ```
+ 
+ ### 4. Vercel
+@@ -168,12 +168,12 @@ pnpm --filter @cyclops/adapter-s3-blob test
+    through pnpm workspaces.
+ 3. Environment variables, all environments unless noted:
+    - `DATABASE_URL`, the Neon pooled string
+-   - `CYCLOPS_SESSION_SECRET`, from `openssl rand -base64 48`
++   - `VERIT_SESSION_SECRET`, from `openssl rand -base64 48`
+    - `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`
+-   - `CYCLOPS_S3_ENDPOINT`, `CYCLOPS_S3_BUCKET`, `CYCLOPS_S3_ACCESS_KEY_ID`,
+-     `CYCLOPS_S3_SECRET_ACCESS_KEY`, from the R2 step
+-   - `CYCLOPS_ACCESS_TTL_SECONDS`, optional
+-   - Do NOT set `CYCLOPS_DEV_USER`
++   - `VERIT_S3_ENDPOINT`, `VERIT_S3_BUCKET`, `VERIT_S3_ACCESS_KEY_ID`,
++     `VERIT_S3_SECRET_ACCESS_KEY`, from the R2 step
++   - `VERIT_ACCESS_TTL_SECONDS`, optional
++   - Do NOT set `VERIT_DEV_USER`
+ 4. Deploy, then update the OAuth app's callback URL to the real domain if you
+    created it against a preview URL.
+ 5. Sign in once and confirm you land on your organization list.
+@@ -182,8 +182,8 @@ pnpm --filter @cyclops/adapter-s3-blob test
+ 
+ In each connected repo:
+ 
+-- Repository variable `CYCLOPS_DASHBOARD_URL` = the dashboard URL.
+-- Repository secret `CYCLOPS_INGEST_TOKEN` = the token from `register-repo`.
++- Repository variable `VERIT_DASHBOARD_URL` = the dashboard URL.
++- Repository secret `VERIT_INGEST_TOKEN` = the token from `register-repo`.
+ 
+ `.github/workflows/dogfood.yml` already passes both through. With either unset
+ the job runs exactly as before: no upload, no proof page link, same Check.
+diff --git a/package.json b/package.json
+index c38c523..2ddd069 100644
+--- a/package.json
++++ b/package.json
+@@ -1,5 +1,5 @@
+ {
+-  "name": "cyclops",
++  "name": "verit",
+   "private": true,
+   "description": "Behavior-proof PR review: understanding-first, dual stores, generative proof UI",
+   "license": "AGPL-3.0-only",
+@@ -10,7 +10,7 @@
+     "test": "pnpm -r run test",
+     "typecheck": "pnpm -r run typecheck",
+     "cli": "tsx packages/cli/src/main.ts",
+-    "workspace": "pnpm --filter @cyclops/workspace dev"
++    "workspace": "pnpm --filter @verit/workspace dev"
+   },
+   "devDependencies": {
+     "@types/node": "^22.15.0",
+diff --git a/packages/action/package.json b/packages/action/package.json
+index c00f344..991f960 100644
+--- a/packages/action/package.json
++++ b/packages/action/package.json
+@@ -1,5 +1,5 @@
+ {
+-  "name": "@cyclops/action",
++  "name": "@verit/action",
+   "license": "AGPL-3.0-only",
+   "version": "0.0.1",
+   "type": "module",
+@@ -10,7 +10,7 @@
+     "build": "tsc -p tsconfig.json"
+   },
+   "dependencies": {
+-    "@cyclops/cli": "workspace:*"
++    "@verit/cli": "workspace:*"
+   },
+   "devDependencies": {
+     "typescript": "^5.8.3",
+diff --git a/packages/action/src/run.ts b/packages/action/src/run.ts
+index ac25c51..18a8674 100644
+--- a/packages/action/src/run.ts
++++ b/packages/action/src/run.ts
+@@ -1,8 +1,8 @@
+ /**
+  * GitHub Action entry. Same pipeline as local `pnpm cli dogfood`.
+- * Env: PR_SPEC=owner/repo#n, GITHUB_TOKEN, optional CYCLOPS_SQLITE_PATH / CYCLOPS_PI_BIN
++ * Env: PR_SPEC=owner/repo#n, GITHUB_TOKEN, optional VERIT_SQLITE_PATH / VERIT_PI_BIN
+  *
+- * Set CYCLOPS_DASHBOARD_URL and CYCLOPS_INGEST_TOKEN together to upload the
++ * Set VERIT_DASHBOARD_URL and VERIT_INGEST_TOKEN together to upload the
+  * finished run and link its proof page from the Check. Leave either unset and
+  * nothing is uploaded.
+  */
+@@ -22,6 +22,6 @@ const run = (args: string[]) => {
+ };
+ 
+ // Mirror CI locally:
+-//   PR_SPEC=solana-foundation/pay#415 CYCLOPS_SQLITE_PATH=.data/cyclops.db \\
+-//     pnpm --filter @cyclops/action exec tsx src/run.ts
++//   PR_SPEC=solana-foundation/pay#415 VERIT_SQLITE_PATH=.data/verit.db \\
++//     pnpm --filter @verit/action exec tsx src/run.ts
+ run(["exec", "tsx", "packages/cli/src/main.ts", "dogfood", pr]);
+diff --git a/packages/adapters/fs-ingest/package.json b/packages/adapters/fs-ingest/package.json
+index a0564b1..246d273 100644
+--- a/packages/adapters/fs-ingest/package.json
++++ b/packages/adapters/fs-ingest/package.json
+@@ -1,5 +1,5 @@
+ {
+-  "name": "@cyclops/adapter-fs-ingest",
++  "name": "@verit/adapter-fs-ingest",
+   "license": "AGPL-3.0-only",
+   "version": "0.0.1",
+   "type": "module",
+@@ -10,9 +10,9 @@
+     "build": "tsc -p tsconfig.json"
+   },
+   "dependencies": {
+-    "@cyclops/application": "workspace:*",
+-    "@cyclops/domain": "workspace:*",
+-    "@cyclops/ports": "workspace:*",
++    "@verit/application": "workspace:*",
++    "@verit/domain": "workspace:*",
++    "@verit/ports": "workspace:*",
+     "effect": "^3.14.14"
+   },
+   "devDependencies": {
+diff --git a/packages/adapters/fs-ingest/src/index.ts b/packages/adapters/fs-ingest/src/index.ts
+index c233e45..803c168 100644
+--- a/packages/adapters/fs-ingest/src/index.ts
++++ b/packages/adapters/fs-ingest/src/index.ts
+@@ -1,9 +1,9 @@
+ import { readdir, readFile, stat } from "node:fs/promises";
+ import { join, relative, extname } from "node:path";
+ import { Effect } from "effect";
+-import { markdownToWikiPages, wikiPagesToChunks, chunkText } from "@cyclops/application";
+-import type { FileNode, SymbolNode, WikiPage } from "@cyclops/domain";
+-import type { DocumentStore, GraphStore, ParserPort, StoreError } from "@cyclops/ports";
++import { markdownToWikiPages, wikiPagesToChunks, chunkText } from "@verit/application";
++import type { FileNode, SymbolNode, WikiPage } from "@verit/domain";
++import type { DocumentStore, GraphStore, ParserPort, StoreError } from "@verit/ports";
+ 
+ const SKIP = new Set(["node_modules", ".git", "dist", "coverage", ".data", "tmp"]);
+ 
+diff --git a/packages/adapters/github/package.json b/packages/adapters/github/package.json
+index d91b1e6..fa472b7 100644
+--- a/packages/adapters/github/package.json
++++ b/packages/adapters/github/package.json
+@@ -1,5 +1,5 @@
+ {
+-  "name": "@cyclops/adapter-github",
++  "name": "@verit/adapter-github",
+   "license": "AGPL-3.0-only",
+   "version": "0.0.1",
+   "type": "module",
+@@ -10,8 +10,8 @@
+     "build": "tsc -p tsconfig.json"
+   },
+   "dependencies": {
+-    "@cyclops/domain": "workspace:*",
+-    "@cyclops/ports": "workspace:*",
++    "@verit/domain": "workspace:*",
++    "@verit/ports": "workspace:*",
+     "effect": "^3.14.14",
+     "@octokit/rest": "^21.1.1"
+   },
+diff --git a/packages/adapters/github/src/index.ts b/packages/adapters/github/src/index.ts
+index a055d36..41a9570 100644
+--- a/packages/adapters/github/src/index.ts
++++ b/packages/adapters/github/src/index.ts
+@@ -1,7 +1,7 @@
+ import { Octokit } from "@octokit/rest";
+ import { Effect } from "effect";
+-import type { CheckPort, VcsPort } from "@cyclops/ports";
+-import { StoreError } from "@cyclops/ports";
++import type { CheckPort, VcsPort } from "@verit/ports";
++import { StoreError } from "@verit/ports";
+ 
+ /**
+  * Check Runs need a token with `checks: write`. In an Action that is the
+diff --git a/packages/adapters/local-blob/package.json b/packages/adapters/local-blob/package.json
+index a89b9c3..c16cd20 100644
+--- a/packages/adapters/local-blob/package.json
++++ b/packages/adapters/local-blob/package.json
+@@ -1,5 +1,5 @@
+ {
+-  "name": "@cyclops/adapter-local-blob",
++  "name": "@verit/adapter-local-blob",
+   "license": "AGPL-3.0-only",
+   "version": "0.0.1",
+   "type": "module",
+@@ -10,7 +10,7 @@
+     "build": "tsc -p tsconfig.json"
+   },
+   "dependencies": {
+-    "@cyclops/ports": "workspace:*",
++    "@verit/ports": "workspace:*",
+     "effect": "^3.14.14"
+   },
+   "devDependencies": {
+diff --git a/packages/adapters/local-blob/src/index.ts b/packages/adapters/local-blob/src/index.ts
+index b85bc79..081cbb8 100644
+--- a/packages/adapters/local-blob/src/index.ts
++++ b/packages/adapters/local-blob/src/index.ts
+@@ -1,8 +1,8 @@
+ import { mkdir, readFile, writeFile } from "node:fs/promises";
+ import { dirname, join, resolve, sep } from "node:path";
+ import { Effect } from "effect";
+-import type { BlobPort, ObjectStorePort, StoredObject } from "@cyclops/ports";
+-import { assertSafeObjectKey, StoreError } from "@cyclops/ports";
++import type { BlobPort, ObjectStorePort, StoredObject } from "@verit/ports";
++import { assertSafeObjectKey, StoreError } from "@verit/ports";
+ 
+ export const makeLocalBlob = (dir = ".data/proofs"): BlobPort => ({
+   writeLocal: (name, body) =>
+diff --git a/packages/adapters/local-blob/src/local-blob.test.ts b/packages/adapters/local-blob/src/local-blob.test.ts
+index 4bbaec4..b20a6c3 100644
+--- a/packages/adapters/local-blob/src/local-blob.test.ts
++++ b/packages/adapters/local-blob/src/local-blob.test.ts
+@@ -5,7 +5,7 @@ import { Effect, Exit } from "effect";
+ import { describe, expect, it } from "vitest";
+ import { makeFsObjectStore } from "./index";
+ 
+-const dir = async () => mkdtemp(join(tmpdir(), "cyclops-obj-"));
++const dir = async () => mkdtemp(join(tmpdir(), "verit-obj-"));
+ 
+ describe("fs object store", () => {
+   it("round-trips a body and its content type", async () => {
+diff --git a/packages/adapters/memory/package.json b/packages/adapters/memory/package.json
+index fb0045c..b729bd6 100644
+--- a/packages/adapters/memory/package.json
++++ b/packages/adapters/memory/package.json
+@@ -1,5 +1,5 @@
+ {
+-  "name": "@cyclops/adapter-memory",
++  "name": "@verit/adapter-memory",
+   "license": "AGPL-3.0-only",
+   "version": "0.0.1",
+   "type": "module",
+@@ -10,9 +10,9 @@
+     "build": "tsc -p tsconfig.json"
+   },
+   "dependencies": {
+-    "@cyclops/domain": "workspace:*",
+-    "@cyclops/ports": "workspace:*",
+-    "@cyclops/application": "workspace:*",
++    "@verit/domain": "workspace:*",
++    "@verit/ports": "workspace:*",
++    "@verit/application": "workspace:*",
+     "effect": "^3.14.14"
+   },
+   "devDependencies": {
+diff --git a/packages/adapters/memory/src/memory.test.ts b/packages/adapters/memory/src/memory.test.ts
+index 3189632..0f27739 100644
+--- a/packages/adapters/memory/src/memory.test.ts
++++ b/packages/adapters/memory/src/memory.test.ts
+@@ -1,6 +1,6 @@
+ import { describe, expect, it } from "vitest";
+ import { Effect } from "effect";
+-import { buildReviewContext, runReviewUnderstand } from "@cyclops/application";
++import { buildReviewContext, runReviewUnderstand } from "@verit/application";
+ import {
+   makeHeuristicClassifier,
+   makeMemoryDocumentStore,
+diff --git a/packages/adapters/memory/src/stores.ts b/packages/adapters/memory/src/stores.ts
+index 4f8782f..7cb9bfe 100644
+--- a/packages/adapters/memory/src/stores.ts
++++ b/packages/adapters/memory/src/stores.ts
+@@ -10,8 +10,8 @@ import type {
+   SymbolNode,
+   Understanding,
+   WikiPage,
+-} from "@cyclops/domain";
+-import type { DocumentStore, GraphStore } from "@cyclops/ports";
++} from "@verit/domain";
++import type { DocumentStore, GraphStore } from "@verit/ports";
+ 
+ export const makeMemoryDocumentStore = (): DocumentStore => {
+   const runs = new Map<string, ReviewRun>();
+diff --git a/packages/adapters/memory/src/stubs.ts b/packages/adapters/memory/src/stubs.ts
+index a213d59..95075da 100644
+--- a/packages/adapters/memory/src/stubs.ts
++++ b/packages/adapters/memory/src/stubs.ts
+@@ -1,8 +1,8 @@
+ import { Effect } from "effect";
+-import type { ReviewContext, ReviewDomain, Understanding } from "@cyclops/domain";
+-import type { ClassifierPort, HarnessPort, ParserPort, ProofRenderPort, VcsPort } from "@cyclops/ports";
+-import { StoreError } from "@cyclops/ports";
+-import { understandingToProofSpec } from "@cyclops/application";
++import type { ReviewContext, ReviewDomain, Understanding } from "@verit/domain";
++import type { ClassifierPort, HarnessPort, ParserPort, ProofRenderPort, VcsPort } from "@verit/ports";
++import { StoreError } from "@verit/ports";
++import { understandingToProofSpec } from "@verit/application";
+ 
+ const pathDomainHints: Array<{ re: RegExp; domain: ReviewDomain }> = [
+   { re: /auth|permission|secret/i, domain: "SECURITY" },
+@@ -42,7 +42,7 @@ export const makeStubHarness = (): HarnessPort => ({
+         what: title.trim() || `Review (${role}): untitled change`,
+         why:
+           (body.trim().split(/\n\n/)[0] ?? "").trim().slice(0, 280) ||
+-          `Change in ${context.domain}${context.focus ? `×${context.focus}` : ""} (stub harness; set CYCLOPS_PI_BIN for live Pi).`,
++          `Change in ${context.domain}${context.focus ? `×${context.focus}` : ""} (stub harness; set VERIT_PI_BIN for live Pi).`,
+         how: `Touched ${paths.length} path(s): ${pathPreview}. Diff ${diff.length} chars. Wiki: ${wikiBit}. PR-graph neighbors: ${context.pr_graph.length}.`,
+         proof_refs: [
+           { kind: "command", label: "diff-stats", value: `chars=${diff.length}; paths=${paths.length}` },
+diff --git a/packages/adapters/neo4j/package.json b/packages/adapters/neo4j/package.json
+index 73a7e82..b8519b2 100644
+--- a/packages/adapters/neo4j/package.json
++++ b/packages/adapters/neo4j/package.json
+@@ -1,5 +1,5 @@
+ {
+-  "name": "@cyclops/adapter-neo4j",
++  "name": "@verit/adapter-neo4j",
+   "license": "AGPL-3.0-only",
+   "version": "0.0.1",
+   "type": "module",
+@@ -10,9 +10,9 @@
+     "build": "tsc -p tsconfig.json"
+   },
+   "dependencies": {
+-    "@cyclops/domain": "workspace:*",
+-    "@cyclops/ports": "workspace:*",
+-    "@cyclops/adapter-memory": "workspace:*",
++    "@verit/domain": "workspace:*",
++    "@verit/ports": "workspace:*",
++    "@verit/adapter-memory": "workspace:*",
+     "effect": "^3.14.14",
+     "neo4j-driver": "^5.28.1"
+   },
+diff --git a/packages/adapters/neo4j/src/index.ts b/packages/adapters/neo4j/src/index.ts
+index c282c88..4e3fa21 100644
+--- a/packages/adapters/neo4j/src/index.ts
++++ b/packages/adapters/neo4j/src/index.ts
+@@ -1,8 +1,8 @@
+ import neo4j, { type Driver } from "neo4j-driver";
+ import { Effect } from "effect";
+-import type { GraphStore } from "@cyclops/ports";
+-import { StoreError } from "@cyclops/ports";
+-import { makeMemoryGraphStore } from "@cyclops/adapter-memory";
++import type { GraphStore } from "@verit/ports";
++import { StoreError } from "@verit/ports";
++import { makeMemoryGraphStore } from "@verit/adapter-memory";
+ 
+ export const neo4jConstraints = `
+ CREATE CONSTRAINT repo_id IF NOT EXISTS FOR (r:Repo) REQUIRE r.id IS UNIQUE;
+@@ -13,12 +13,12 @@ CREATE CONSTRAINT pr_id IF NOT EXISTS FOR (p:PullRequest) REQUIRE p.id IS UNIQUE
+ CREATE CONSTRAINT edge_id IF NOT EXISTS FOR (e:PREdge) REQUIRE e.id IS UNIQUE;
+ `;
+ 
+-/** Prefer live Neo4j when CYCLOPS_NEO4J_URI is set; otherwise memory graph (tests/dogfood without Docker). */
++/** Prefer live Neo4j when VERIT_NEO4J_URI is set; otherwise memory graph (tests/dogfood without Docker). */
+ export const makeGraphStore = async (): Promise<GraphStore> => {
+-  const uri = process.env.CYCLOPS_NEO4J_URI;
++  const uri = process.env.VERIT_NEO4J_URI;
+   if (!uri) return makeMemoryGraphStore();
+-  const user = process.env.CYCLOPS_NEO4J_USER ?? "neo4j";
+-  const password = process.env.CYCLOPS_NEO4J_PASSWORD ?? "cyclops-dev";
++  const user = process.env.VERIT_NEO4J_USER ?? "neo4j";
++  const password = process.env.VERIT_NEO4J_PASSWORD ?? "verit-dev";
+   const driver = neo4j.driver(uri, neo4j.auth.basic(user, password));
+   try {
+     await driver.verifyConnectivity();
+diff --git a/packages/adapters/pi/package.json b/packages/adapters/pi/package.json
+index 4079866..c65e232 100644
+--- a/packages/adapters/pi/package.json
++++ b/packages/adapters/pi/package.json
+@@ -1,5 +1,5 @@
+ {
+-  "name": "@cyclops/adapter-pi",
++  "name": "@verit/adapter-pi",
+   "license": "AGPL-3.0-only",
+   "version": "0.0.1",
+   "type": "module",
+@@ -12,9 +12,9 @@
+     "build": "tsc -p tsconfig.json"
+   },
+   "dependencies": {
+-    "@cyclops/ports": "workspace:*",
++    "@verit/ports": "workspace:*",
+     "effect": "^3.14.14",
+-    "@cyclops/domain": "workspace:*"
++    "@verit/domain": "workspace:*"
+   },
+   "devDependencies": {
+     "typescript": "^5.8.3",
+diff --git a/packages/adapters/pi/src/agent.test.ts b/packages/adapters/pi/src/agent.test.ts
+index 893baa1..c845104 100644
+--- a/packages/adapters/pi/src/agent.test.ts
++++ b/packages/adapters/pi/src/agent.test.ts
+@@ -104,30 +104,30 @@ describe("understanding extraction", () => {
+ 
+ describe("agent harness fallback", () => {
+   it("keeps producing an Understanding when no CLI harness is selected", async () => {
+-    const prev = process.env.CYCLOPS_LANE_HARNESS;
+-    delete process.env.CYCLOPS_LANE_HARNESS;
++    const prev = process.env.VERIT_LANE_HARNESS;
++    delete process.env.VERIT_LANE_HARNESS;
+     try {
+       const u = await Effect.runPromise(makeAgentHarness().runUnderstand(INPUT));
+       expect(u.what).toContain("unlisted mints");
+       expect(u.how).toContain("src/pay.ts");
+     } finally {
+-      if (prev != null) process.env.CYCLOPS_LANE_HARNESS = prev;
++      if (prev != null) process.env.VERIT_LANE_HARNESS = prev;
+     }
+   });
+ 
+   it("falls back to the stub when the selected CLI is not on PATH", async () => {
+-    const prevHarness = process.env.CYCLOPS_LANE_HARNESS;
++    const prevHarness = process.env.VERIT_LANE_HARNESS;
+     const prevPath = process.env.PATH;
+-    process.env.CYCLOPS_LANE_HARNESS = "claude";
+-    process.env.PATH = "/nonexistent-cyclops-test-path";
++    process.env.VERIT_LANE_HARNESS = "claude";
++    process.env.PATH = "/nonexistent-verit-test-path";
+     try {
+       const u = await Effect.runPromise(makeAgentHarness().runUnderstand(INPUT));
+       expect(u.what).toContain("unlisted mints");
+       expect(u.risks.some((r) => r.area === "harness")).toBe(true);
+     } finally {
+       process.env.PATH = prevPath;
+-      if (prevHarness == null) delete process.env.CYCLOPS_LANE_HARNESS;
+-      else process.env.CYCLOPS_LANE_HARNESS = prevHarness;
++      if (prevHarness == null) delete process.env.VERIT_LANE_HARNESS;
++      else process.env.VERIT_LANE_HARNESS = prevHarness;
+     }
+   });
+ });
+diff --git a/packages/adapters/pi/src/agent.ts b/packages/adapters/pi/src/agent.ts
+index e9c0dcf..4880403 100644
+--- a/packages/adapters/pi/src/agent.ts
++++ b/packages/adapters/pi/src/agent.ts
+@@ -5,8 +5,8 @@ import {
+   OUTPUT_STYLE,
+   UNDERSTANDING_JSON_SHAPE,
+   type Understanding,
+-} from "@cyclops/domain";
+-import type { HarnessPort } from "@cyclops/ports";
++} from "@verit/domain";
++import type { HarnessPort } from "@verit/ports";
+ 
+ /* Headless coding CLIs as the Action's Understanding source.
+ 
+@@ -80,7 +80,7 @@ export const agentPrompt = (input: UnderstandInput): string => {
+     .slice(0, 3)
+     .map((n) => `#${n.number} ${n.title} (${n.edgeKind})`);
+ 
+-  return `You are the ${role} lane behind cyclops, a behaviour proof review tool.
++  return `You are the ${role} lane behind verit, a behaviour proof review tool.
+ 
+ Produce the Understanding of one pull request: what it changes, why, how a human can verify the behaviour, and where the risk is. Everything you need is below. Do not fetch anything.
+ 
+@@ -145,8 +145,8 @@ export const runAgentUnderstand = (
+ ): Understanding | null => {
+   const spec = CLI[cli];
+   const prompt = agentPrompt(input);
+-  const timeout = Number(process.env.CYCLOPS_LANE_TIMEOUT_MS ?? DEFAULT_TIMEOUT_MS);
+-  const r = spawnSync(spec.bin, spec.args(prompt, process.env.CYCLOPS_LANE_MODEL), {
++  const timeout = Number(process.env.VERIT_LANE_TIMEOUT_MS ?? DEFAULT_TIMEOUT_MS);
++  const r = spawnSync(spec.bin, spec.args(prompt, process.env.VERIT_LANE_MODEL), {
+     input: spec.promptOnStdin ? prompt : undefined,
+     encoding: "utf8",
+     env: process.env,
+@@ -155,23 +155,23 @@ export const runAgentUnderstand = (
+   });
+   if (r.error || r.status !== 0) {
+     console.error(
+-      `[cyclops-${cli}] spawn failed status=${r.status} err=${r.error?.message ?? r.stderr?.slice(0, 400)}`,
++      `[verit-${cli}] spawn failed status=${r.status} err=${r.error?.message ?? r.stderr?.slice(0, 400)}`,
+     );
+     return null;
+   }
+   const parsed = extractUnderstanding(r.stdout ?? "");
+   if (parsed === null) {
+-    console.error(`[cyclops-${cli}] no JSON object in CLI output`);
++    console.error(`[verit-${cli}] no JSON object in CLI output`);
+     return null;
+   }
+   const decoded = decodeUnderstanding(parsed);
+   if (Either.isLeft(decoded)) {
+-    console.error(`[cyclops-${cli}] Understanding decode failed`, decoded.left);
++    console.error(`[verit-${cli}] Understanding decode failed`, decoded.left);
+     return null;
+   }
+   return decoded.right;
+ };
+ 
+ /** The selector, shared with the workspace lane. */
+-export const agentCli = (value = process.env.CYCLOPS_LANE_HARNESS): AgentCli | null =>
++export const agentCli = (value = process.env.VERIT_LANE_HARNESS): AgentCli | null =>
+   value === "claude" || value === "cursor" ? value : null;
+diff --git a/packages/adapters/pi/src/index.ts b/packages/adapters/pi/src/index.ts
+index 77efe5e..514f555 100644
+--- a/packages/adapters/pi/src/index.ts
++++ b/packages/adapters/pi/src/index.ts
+@@ -1,9 +1,9 @@
+ import { spawnSync } from "node:child_process";
+ import { Either } from "effect";
+ import { Effect } from "effect";
+-import { decodeUnderstanding, type Understanding } from "@cyclops/domain";
+-import type { HarnessPort } from "@cyclops/ports";
+-import { StoreError } from "@cyclops/ports";
++import { decodeUnderstanding, type Understanding } from "@verit/domain";
++import type { HarnessPort } from "@verit/ports";
++import { StoreError } from "@verit/ports";
+ import { agentCli, runAgentUnderstand } from "./agent";
+ 
+ type UnderstandInput = Parameters<HarnessPort["runUnderstand"]>[0];
+@@ -94,9 +94,9 @@ export const buildDeterministicUnderstanding = (input: UnderstandInput): Underst
+       {
+         area: "harness",
+         note:
+-          process.env.CYCLOPS_PI_BIN != null
+-            ? "CYCLOPS_PI_BIN set but stub path active (spawn failed or returned invalid JSON)."
+-            : "CYCLOPS_PI_BIN unset. Using deterministic stub Understanding.",
++          process.env.VERIT_PI_BIN != null
++            ? "VERIT_PI_BIN set but stub path active (spawn failed or returned invalid JSON)."
++            : "VERIT_PI_BIN unset. Using deterministic stub Understanding.",
+         source: "reviewer",
+       },
+     ],
+@@ -122,7 +122,7 @@ const extractAuthorRiskHints = (body: string): Array<{ area: string; note: strin
+ };
+ 
+ const trySpawnPi = (input: UnderstandInput): Understanding | null => {
+-  const bin = process.env.CYCLOPS_PI_BIN;
++  const bin = process.env.VERIT_PI_BIN;
+   if (!bin) return null;
+   const payload = JSON.stringify({
+     verb: "understand",
+@@ -133,7 +133,7 @@ const trySpawnPi = (input: UnderstandInput): Understanding | null => {
+     diff: input.diff,
+     context: input.context,
+   });
+-  const args = (process.env.CYCLOPS_PI_ARGS ?? "understand --json").split(/\s+/).filter(Boolean);
++  const args = (process.env.VERIT_PI_ARGS ?? "understand --json").split(/\s+/).filter(Boolean);
+   const r = spawnSync(bin, args, {
+     input: payload,
+     encoding: "utf8",
+@@ -142,7 +142,7 @@ const trySpawnPi = (input: UnderstandInput): Understanding | null => {
+   });
+   if (r.error || r.status !== 0) {
+     console.error(
+-      `[cyclops-pi] spawn failed status=${r.status} err=${r.error?.message ?? r.stderr?.slice(0, 400)}`,
++      `[verit-pi] spawn failed status=${r.status} err=${r.error?.message ?? r.stderr?.slice(0, 400)}`,
+     );
+     return null;
+   }
+@@ -166,7 +166,7 @@ const trySpawnPi = (input: UnderstandInput): Understanding | null => {
+   }
+   const decoded = decodeUnderstanding(parsed);
+   if (Either.isLeft(decoded)) {
+-    console.error("[cyclops-pi] Understanding decode failed", decoded.left);
++    console.error("[verit-pi] Understanding decode failed", decoded.left);
+     return null;
+   }
+   return decoded.right;
+@@ -174,7 +174,7 @@ const trySpawnPi = (input: UnderstandInput): Understanding | null => {
+ 
+ /**
+  * Pi harness adapter.
+- * - If `CYCLOPS_PI_BIN` is set, spawn that binary with JSON stdin (`CYCLOPS_PI_ARGS`, default `understand --json`).
++ * - If `VERIT_PI_BIN` is set, spawn that binary with JSON stdin (`VERIT_PI_ARGS`, default `understand --json`).
+  * - Otherwise (or on spawn/decode failure) return a high-quality deterministic stub from ReviewContext.
+  */
+ export const makePiHarness = (): HarnessPort => ({
+@@ -187,7 +187,7 @@ export const makePiHarness = (): HarnessPort => ({
+ 
+ /**
+  * Harness for the CLI and Action path, with the same selector the workspace
+- * lane uses. `CYCLOPS_LANE_HARNESS=claude|cursor` asks that CLI for the
++ * lane uses. `VERIT_LANE_HARNESS=claude|cursor` asks that CLI for the
+  * Understanding; anything else keeps Pi.
+  *
+  * Every failure degrades instead of throwing: no API key, no CLI on PATH, a
+diff --git a/packages/adapters/pi/src/pi.test.ts b/packages/adapters/pi/src/pi.test.ts
+index 985de9e..004d43c 100644
+--- a/packages/adapters/pi/src/pi.test.ts
++++ b/packages/adapters/pi/src/pi.test.ts
+@@ -24,9 +24,9 @@ describe("pi adapter", () => {
+     expect(u.proof_refs.some((r) => r.label === "changed-path")).toBe(true);
+   });
+ 
+-  it("makePiHarness returns valid Understanding without CYCLOPS_PI_BIN", async () => {
+-    const prev = process.env.CYCLOPS_PI_BIN;
+-    delete process.env.CYCLOPS_PI_BIN;
++  it("makePiHarness returns valid Understanding without VERIT_PI_BIN", async () => {
++    const prev = process.env.VERIT_PI_BIN;
++    delete process.env.VERIT_PI_BIN;
+     try {
+       const harness = makePiHarness();
+       const u = await Effect.runPromise(
+@@ -42,7 +42,7 @@ describe("pi adapter", () => {
+       expect(u.what).toBe("t");
+       expect(u.how).toContain("a.ts");
+     } finally {
+-      if (prev != null) process.env.CYCLOPS_PI_BIN = prev;
++      if (prev != null) process.env.VERIT_PI_BIN = prev;
+     }
+   });
+ });
+diff --git a/packages/adapters/prove/package.json b/packages/adapters/prove/package.json
+index ec681ed..c166c45 100644
+--- a/packages/adapters/prove/package.json
++++ b/packages/adapters/prove/package.json
+@@ -1,5 +1,5 @@
+ {
+-  "name": "@cyclops/adapter-prove",
++  "name": "@verit/adapter-prove",
+   "license": "AGPL-3.0-only",
+   "version": "0.0.1",
+   "type": "module",
+@@ -10,8 +10,8 @@
+     "build": "tsc -p tsconfig.json"
+   },
+   "dependencies": {
+-    "@cyclops/domain": "workspace:*",
+-    "@cyclops/ports": "workspace:*",
++    "@verit/domain": "workspace:*",
++    "@verit/ports": "workspace:*",
+     "effect": "^3.14.14"
+   },
+   "devDependencies": {
+diff --git a/packages/adapters/prove/src/index.ts b/packages/adapters/prove/src/index.ts
+index d350e4a..99a1ec5 100644
+--- a/packages/adapters/prove/src/index.ts
++++ b/packages/adapters/prove/src/index.ts
+@@ -4,8 +4,8 @@ import { existsSync } from "node:fs";
+ import { join, resolve } from "node:path";
+ import { promisify } from "node:util";
+ import { Effect, Either, Schema as S } from "effect";
+-import type { ProveCommand, ProveOutcome, ProvePort } from "@cyclops/ports";
+-import { StoreError } from "@cyclops/ports";
++import type { ProveCommand, ProveOutcome, ProvePort } from "@verit/ports";
++import { StoreError } from "@verit/ports";
+ 
+ /*
+  * THREAT MODEL: this file starts real processes on the machine running it.
+@@ -16,7 +16,7 @@ import { StoreError } from "@cyclops/ports";
+  *  - The binary comes from a fixed table (pnpm/npm/yarn/bun/cargo/pytest)
+  *    keyed on which manifest and lockfile exist. Repo files decide *whether* a
+  *    known runner applies, never *what* binary runs. The one free-form source
+- *    is CYCLOPS_PROVE_CMD, which is operator config on this same machine.
++ *    is VERIT_PROVE_CMD, which is operator config on this same machine.
+  *  - `run` refuses unless the checkout at `cwd` is the repo the caller named,
+  *    so reviewing a stranger's fork can never run their tests in your tree.
+  *    Fail closed: no remote, no match, no run.
+@@ -60,14 +60,14 @@ const packageManager = (cwd: string): string => {
+   return "npm";
+ };
+ 
+-/** Operator override: `CYCLOPS_PROVE_CMD="cargo test --all"`, split into argv. */
++/** Operator override: `VERIT_PROVE_CMD="cargo test --all"`, split into argv. */
+ const fromEnv = (): ProveCommand | null => {
+-  const raw = process.env.CYCLOPS_PROVE_CMD?.trim();
++  const raw = process.env.VERIT_PROVE_CMD?.trim();
+   if (!raw) return null;
+   const parts = raw.split(/\s+/);
+   const [command, ...args] = parts;
+   if (!command) return null;
+-  return { command, args, source: "CYCLOPS_PROVE_CMD" };
++  return { command, args, source: "VERIT_PROVE_CMD" };
+ };
+ 
+ export const detectProveCommand = async (cwd: string): Promise<ProveCommand | null> => {
+@@ -209,7 +209,7 @@ export const makeProveRunner = (): ProvePort => ({
+         const cmd = await detectProveCommand(dir);
+         if (!cmd) {
+           throw new Error(
+-            `no verification command found in ${dir} (set CYCLOPS_PROVE_CMD to name one)`,
++            `no verification command found in ${dir} (set VERIT_PROVE_CMD to name one)`,
+           );
+         }
+         const startedAt = new Date().toISOString();
+diff --git a/packages/adapters/prove/src/prove.test.ts b/packages/adapters/prove/src/prove.test.ts
+index b6a1f83..6f80dc7 100644
+--- a/packages/adapters/prove/src/prove.test.ts
++++ b/packages/adapters/prove/src/prove.test.ts
+@@ -5,10 +5,10 @@ import { Effect } from "effect";
+ import { afterEach, describe, expect, it } from "vitest";
+ import { detectProveCommand, makeProveRunner } from "./index";
+ 
+-const tmp = () => mkdtemp(join(tmpdir(), "cyclops-prove-"));
++const tmp = () => mkdtemp(join(tmpdir(), "verit-prove-"));
+ 
+ afterEach(() => {
+-  delete process.env.CYCLOPS_PROVE_CMD;
++  delete process.env.VERIT_PROVE_CMD;
+ });
+ 
+ describe("detectProveCommand", () => {
+@@ -52,11 +52,11 @@ describe("detectProveCommand", () => {
+   });
+ 
+   it("takes the operator override as argv, not as a shell string", async () => {
+-    process.env.CYCLOPS_PROVE_CMD = "node -e process.exit(0)";
++    process.env.VERIT_PROVE_CMD = "node -e process.exit(0)";
+     expect(await detectProveCommand(await tmp())).toEqual({
+       command: "node",
+       args: ["-e", "process.exit(0)"],
+-      source: "CYCLOPS_PROVE_CMD",
++      source: "VERIT_PROVE_CMD",
+     });
+   });
+ });
+@@ -65,13 +65,13 @@ describe("prove runner", () => {
+   it("refuses to run outside the repo the caller named", async () => {
+     const dir = await tmp();
+     const result = await Effect.runPromiseExit(
+-      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/cyclops" }),
++      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit" }),
+     );
+     expect(result._tag).toBe("Failure");
+   });
+ 
+   it("records the real exit code, duration and log tail of a failing command", async () => {
+-    process.env.CYCLOPS_PROVE_CMD = "node -e console.log('hello');process.exit(3)";
++    process.env.VERIT_PROVE_CMD = "node -e console.log('hello');process.exit(3)";
+     // run against this checkout, naming it correctly, so the guard passes
+     const runner = makeProveRunner();
+     const repo = await Effect.runPromise(runner.repoAt(process.cwd()));
+@@ -84,7 +84,7 @@ describe("prove runner", () => {
+   });
+ 
+   it("kills a command that overruns its timeout", async () => {
+-    process.env.CYCLOPS_PROVE_CMD = "node -e setTimeout(()=>{},60000)";
++    process.env.VERIT_PROVE_CMD = "node -e setTimeout(()=>{},60000)";
+     const runner = makeProveRunner();
+     const repo = await Effect.runPromise(runner.repoAt(process.cwd()));
+     if (!repo) return;
+diff --git a/packages/adapters/s3-blob/package.json b/packages/adapters/s3-blob/package.json
+index 3530aad..780da2c 100644
+--- a/packages/adapters/s3-blob/package.json
++++ b/packages/adapters/s3-blob/package.json
+@@ -1,5 +1,5 @@
+ {
+-  "name": "@cyclops/adapter-s3-blob",
++  "name": "@verit/adapter-s3-blob",
+   "license": "AGPL-3.0-only",
+   "version": "0.0.1",
+   "type": "module",
+@@ -12,7 +12,7 @@
+     "build": "tsc -p tsconfig.json"
+   },
+   "dependencies": {
+-    "@cyclops/ports": "workspace:*",
++    "@verit/ports": "workspace:*",
+     "aws4fetch": "^1.0.20",
+     "effect": "^3.14.14"
+   },
+diff --git a/packages/adapters/s3-blob/src/index.ts b/packages/adapters/s3-blob/src/index.ts
+index 5074497..b22da34 100644
+--- a/packages/adapters/s3-blob/src/index.ts
++++ b/packages/adapters/s3-blob/src/index.ts
+@@ -1,7 +1,7 @@
+ import { AwsV4Signer } from "aws4fetch";
+ import { Effect } from "effect";
+-import type { ObjectStorePort, StoredObject } from "@cyclops/ports";
+-import { assertSafeObjectKey, StoreError } from "@cyclops/ports";
++import type { ObjectStorePort, StoredObject } from "@verit/ports";
++import { assertSafeObjectKey, StoreError } from "@verit/ports";
+ 
+ export interface S3ObjectStoreConfig {
+   /** Origin only, no bucket and no trailing slash, e.g. `https://<account>.r2.cloudflarestorage.com`. */
+@@ -18,14 +18,14 @@ const BUCKET = /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/;
+ 
+ /** The variable names. Only a name from here ever appears in an error. */
+ const ENV = {
+-  endpoint: "CYCLOPS_S3_ENDPOINT",
+-  bucket: "CYCLOPS_S3_BUCKET",
+-  accessKeyId: "CYCLOPS_S3_ACCESS_KEY_ID",
+-  secretAccessKey: "CYCLOPS_S3_SECRET_ACCESS_KEY",
++  endpoint: "VERIT_S3_ENDPOINT",
++  bucket: "VERIT_S3_BUCKET",
++  accessKeyId: "VERIT_S3_ACCESS_KEY_ID",
++  secretAccessKey: "VERIT_S3_SECRET_ACCESS_KEY",
+ } as const;
+ 
+ /** Optional, so it is not part of the all-or-nothing check above. */
+-const REGION_ENV = "CYCLOPS_S3_REGION";
++const REGION_ENV = "VERIT_S3_REGION";
+ 
+ /**
+  * Reads the S3 configuration out of an environment.
+diff --git a/packages/adapters/s3-blob/src/s3-blob.test.ts b/packages/adapters/s3-blob/src/s3-blob.test.ts
+index 4f8185d..269dd54 100644
+--- a/packages/adapters/s3-blob/src/s3-blob.test.ts
++++ b/packages/adapters/s3-blob/src/s3-blob.test.ts
+@@ -8,17 +8,17 @@ const SECRET = "s3cr3t-do-not-log-me";
+ 
+ const config: S3ObjectStoreConfig = {
+   endpoint: "https://acc123.r2.cloudflarestorage.com",
+-  bucket: "cyclops-proofs",
++  bucket: "verit-proofs",
+   accessKeyId: "AKIDEXAMPLE",
+   secretAccessKey: SECRET,
+   region: "auto",
+ };
+ 
+ const fullEnv = {
+-  CYCLOPS_S3_ENDPOINT: "https://acc123.r2.cloudflarestorage.com",
+-  CYCLOPS_S3_BUCKET: "cyclops-proofs",
+-  CYCLOPS_S3_ACCESS_KEY_ID: "AKIDEXAMPLE",
+-  CYCLOPS_S3_SECRET_ACCESS_KEY: SECRET,
++  VERIT_S3_ENDPOINT: "https://acc123.r2.cloudflarestorage.com",
++  VERIT_S3_BUCKET: "verit-proofs",
++  VERIT_S3_ACCESS_KEY_ID: "AKIDEXAMPLE",
++  VERIT_S3_SECRET_ACCESS_KEY: SECRET,
+ };
+ 
+ interface Sent {
+@@ -49,26 +49,26 @@ describe("s3ConfigFromEnv", () => {
+   });
+ 
+   it("honours an explicit region", () => {
+-    expect(s3ConfigFromEnv({ ...fullEnv, CYCLOPS_S3_REGION: "us-east-1" })?.region).toBe(
++    expect(s3ConfigFromEnv({ ...fullEnv, VERIT_S3_REGION: "us-east-1" })?.region).toBe(
+       "us-east-1",
+     );
+   });
+ 
+   it("strips a trailing slash so the key is not double separated", () => {
+     expect(
+-      s3ConfigFromEnv({ ...fullEnv, CYCLOPS_S3_ENDPOINT: "https://acc123.r2.cloudflarestorage.com/" })
++      s3ConfigFromEnv({ ...fullEnv, VERIT_S3_ENDPOINT: "https://acc123.r2.cloudflarestorage.com/" })
+         ?.endpoint,
+     ).toBe("https://acc123.r2.cloudflarestorage.com");
+   });
+ 
+   it("refuses a half configuration and names only the missing variables", () => {
+-    const partial = { ...fullEnv, CYCLOPS_S3_SECRET_ACCESS_KEY: "" };
+-    expect(() => s3ConfigFromEnv(partial)).toThrow(/CYCLOPS_S3_SECRET_ACCESS_KEY/);
++    const partial = { ...fullEnv, VERIT_S3_SECRET_ACCESS_KEY: "" };
++    expect(() => s3ConfigFromEnv(partial)).toThrow(/VERIT_S3_SECRET_ACCESS_KEY/);
+   });
+ 
+   it("never puts a credential value in the error it throws", () => {
+     try {
+-      s3ConfigFromEnv({ ...fullEnv, CYCLOPS_S3_BUCKET: "" });
++      s3ConfigFromEnv({ ...fullEnv, VERIT_S3_BUCKET: "" });
+       expect.unreachable("expected a half configuration to throw");
+     } catch (e) {
+       expect(String(e)).not.toContain(SECRET);
+@@ -77,10 +77,10 @@ describe("s3ConfigFromEnv", () => {
+   });
+ 
+   it("rejects an endpoint that is not a URL and a bucket that is not a bucket name", () => {
+-    expect(() => s3ConfigFromEnv({ ...fullEnv, CYCLOPS_S3_ENDPOINT: "acc123" })).toThrow(
++    expect(() => s3ConfigFromEnv({ ...fullEnv, VERIT_S3_ENDPOINT: "acc123" })).toThrow(
+       /not a URL/,
+     );
+-    expect(() => s3ConfigFromEnv({ ...fullEnv, CYCLOPS_S3_BUCKET: "Bad/Bucket" })).toThrow(
++    expect(() => s3ConfigFromEnv({ ...fullEnv, VERIT_S3_BUCKET: "Bad/Bucket" })).toThrow(
+       /bucket name/,
+     );
+   });
+@@ -97,7 +97,7 @@ describe("s3 request signing", () => {
+     if (!sent) return;
+     expect(sent.init.method).toBe("PUT");
+     expect(sent.input).toBe(
+-      "https://acc123.r2.cloudflarestorage.com/cyclops-proofs/runs/run_1/prove.log",
++      "https://acc123.r2.cloudflarestorage.com/verit-proofs/runs/run_1/prove.log",
+     );
+ 
+     const auth = sent.headers.get("authorization") ?? "";
+@@ -211,21 +211,21 @@ describe("s3 object store", () => {
+ /**
+  * The real server. `docker compose up -d minio` then:
+  *
+- *   CYCLOPS_S3_TEST_ENDPOINT=http://localhost:9000 \
+- *   CYCLOPS_S3_TEST_BUCKET=cyclops-proofs \
+- *   CYCLOPS_S3_TEST_ACCESS_KEY_ID=cyclops \
+- *   CYCLOPS_S3_TEST_SECRET_ACCESS_KEY=cyclops-dev-secret \
+- *   pnpm --filter @cyclops/adapter-s3-blob test
++ *   VERIT_S3_TEST_ENDPOINT=http://localhost:9000 \
++ *   VERIT_S3_TEST_BUCKET=verit-proofs \
++ *   VERIT_S3_TEST_ACCESS_KEY_ID=verit \
++ *   VERIT_S3_TEST_SECRET_ACCESS_KEY=verit-dev-secret \
++ *   pnpm --filter @verit/adapter-s3-blob test
+  *
+  * Unset, this suite is skipped, so CI without a bucket stays green.
+  */
+-const live = process.env.CYCLOPS_S3_TEST_ENDPOINT
++const live = process.env.VERIT_S3_TEST_ENDPOINT
+   ? {
+-      endpoint: process.env.CYCLOPS_S3_TEST_ENDPOINT,
+-      bucket: process.env.CYCLOPS_S3_TEST_BUCKET ?? "cyclops-proofs",
+-      accessKeyId: process.env.CYCLOPS_S3_TEST_ACCESS_KEY_ID ?? "",
+-      secretAccessKey: process.env.CYCLOPS_S3_TEST_SECRET_ACCESS_KEY ?? "",
+-      region: process.env.CYCLOPS_S3_TEST_REGION ?? "us-east-1",
++      endpoint: process.env.VERIT_S3_TEST_ENDPOINT,
++      bucket: process.env.VERIT_S3_TEST_BUCKET ?? "verit-proofs",
++      accessKeyId: process.env.VERIT_S3_TEST_ACCESS_KEY_ID ?? "",
++      secretAccessKey: process.env.VERIT_S3_TEST_SECRET_ACCESS_KEY ?? "",
++      region: process.env.VERIT_S3_TEST_REGION ?? "us-east-1",
+     }
+   : null;
+ 
+diff --git a/packages/adapters/sqlite/package.json b/packages/adapters/sqlite/package.json
+index da0bed1..b7dc69f 100644
+--- a/packages/adapters/sqlite/package.json
++++ b/packages/adapters/sqlite/package.json
+@@ -1,5 +1,5 @@
+ {
+-  "name": "@cyclops/adapter-sqlite",
++  "name": "@verit/adapter-sqlite",
+   "license": "AGPL-3.0-only",
+   "version": "0.0.1",
+   "type": "module",
+@@ -10,8 +10,8 @@
+     "build": "tsc -p tsconfig.json"
+   },
+   "dependencies": {
+-    "@cyclops/domain": "workspace:*",
+-    "@cyclops/ports": "workspace:*",
++    "@verit/domain": "workspace:*",
++    "@verit/ports": "workspace:*",
+     "effect": "^3.14.14"
+   },
+   "devDependencies": {
+diff --git a/packages/adapters/sqlite/src/index.ts b/packages/adapters/sqlite/src/index.ts
+index 6723d44..589609e 100644
+--- a/packages/adapters/sqlite/src/index.ts
++++ b/packages/adapters/sqlite/src/index.ts
+@@ -8,9 +8,9 @@ import type {
+   ReviewRun,
+   Understanding,
+   WorkspaceRun,
+-} from "@cyclops/domain";
+-import type { DocumentStore, SessionStore } from "@cyclops/ports";
+-import { StoreError } from "@cyclops/ports";
++} from "@verit/domain";
++import type { DocumentStore, SessionStore } from "@verit/ports";
++import { StoreError } from "@verit/ports";
+ 
+ export const migrateSqlite = (db: DatabaseSync): void => {
+   db.exec(`
+diff --git a/packages/adapters/sqlite/src/sqlite.test.ts b/packages/adapters/sqlite/src/sqlite.test.ts
+index d7f4fd3..6b87263 100644
+--- a/packages/adapters/sqlite/src/sqlite.test.ts
++++ b/packages/adapters/sqlite/src/sqlite.test.ts
+@@ -7,7 +7,7 @@ import { makeSqliteDocumentStore, makeSqliteStores } from "./index";
+ 
+ describe("sqlite document store", () => {
+   it("persists run + understanding", async () => {
+-    const dir = mkdtempSync(join(tmpdir(), "cyclops-"));
++    const dir = mkdtempSync(join(tmpdir(), "verit-"));
+     const store = makeSqliteDocumentStore(join(dir, "t.db"));
+     await Effect.runPromise(
+       store.upsertReviewRun({
+@@ -32,7 +32,7 @@ describe("sqlite document store", () => {
+   });
+ 
+   it("indexes chunks with FTS retrieval", async () => {
+-    const dir = mkdtempSync(join(tmpdir(), "cyclops-fts-"));
++    const dir = mkdtempSync(join(tmpdir(), "verit-fts-"));
+     const store = makeSqliteDocumentStore(join(dir, "t.db"));
+     await Effect.runPromise(
+       store.upsertChunk({
+@@ -50,7 +50,7 @@ describe("sqlite document store", () => {
+ 
+ describe("sqlite session store", () => {
+   it("survives a reopen and keeps the latest run of a session", async () => {
+-    const dir = mkdtempSync(join(tmpdir(), "cyclops-sess-"));
++    const dir = mkdtempSync(join(tmpdir(), "verit-sess-"));
+     const file = join(dir, "t.db");
+     const first = makeSqliteStores(file);
+     await Effect.runPromise(
+diff --git a/packages/adapters/treesitter/package.json b/packages/adapters/treesitter/package.json
+index a7d972c..0464394 100644
+--- a/packages/adapters/treesitter/package.json
++++ b/packages/adapters/treesitter/package.json
+@@ -1,5 +1,5 @@
+ {
+-  "name": "@cyclops/adapter-treesitter",
++  "name": "@verit/adapter-treesitter",
+   "license": "AGPL-3.0-only",
+   "version": "0.0.1",
+   "type": "module",
+@@ -10,8 +10,8 @@
+     "build": "tsc -p tsconfig.json"
+   },
+   "dependencies": {
+-    "@cyclops/ports": "workspace:*",
+-    "@cyclops/adapter-memory": "workspace:*",
++    "@verit/ports": "workspace:*",
++    "@verit/adapter-memory": "workspace:*",
+     "effect": "^3.14.14",
+     "web-tree-sitter": "^0.25.3"
+   },
+diff --git a/packages/adapters/treesitter/src/index.ts b/packages/adapters/treesitter/src/index.ts
+index e5946f0..fee7804 100644
+--- a/packages/adapters/treesitter/src/index.ts
++++ b/packages/adapters/treesitter/src/index.ts
+@@ -1,6 +1,6 @@
+ import { Effect } from "effect";
+-import type { ParserPort } from "@cyclops/ports";
+-import { makeRegexParser } from "@cyclops/adapter-memory";
++import type { ParserPort } from "@verit/ports";
++import { makeRegexParser } from "@verit/adapter-memory";
+ 
+ /**
+  * tree-sitter when WASM grammars are configured; falls back to deterministic regex parser.
+diff --git a/packages/application/package.json b/packages/application/package.json
+index ff4586b..8fcb27a 100644
+--- a/packages/application/package.json
++++ b/packages/application/package.json
+@@ -1,5 +1,5 @@
+ {
+-  "name": "@cyclops/application",
++  "name": "@verit/application",
+   "license": "AGPL-3.0-only",
+   "version": "0.0.1",
+   "type": "module",
+@@ -10,8 +10,8 @@
+     "build": "tsc -p tsconfig.json"
+   },
+   "dependencies": {
+-    "@cyclops/domain": "workspace:*",
+-    "@cyclops/ports": "workspace:*",
++    "@verit/domain": "workspace:*",
++    "@verit/ports": "workspace:*",
+     "effect": "^3.14.14"
+   },
+   "devDependencies": {
+diff --git a/packages/application/src/application.test.ts b/packages/application/src/application.test.ts
+index 857557c..9b4e4f0 100644
+--- a/packages/application/src/application.test.ts
++++ b/packages/application/src/application.test.ts
+@@ -6,7 +6,7 @@ import { buildWikiHits, buildReviewContext } from "./context";
+ import { inferEmbeddingSimilarEdges, inferSameAuthorPathEdges } from "./edges";
+ import { markdownToWikiPages } from "./ingest-wiki";
+ import { understandingToProofSpec } from "./proof-spec";
+-import { decodeUnderstanding, type ReviewPresets } from "@cyclops/domain";
++import { decodeUnderstanding, type ReviewPresets } from "@verit/domain";
+ 
+ const basePresets: ReviewPresets = {
+   reviewer_identity: "harsh",
+diff --git a/packages/application/src/check.ts b/packages/application/src/check.ts
+index 2028701..75c9d5e 100644
+--- a/packages/application/src/check.ts
++++ b/packages/application/src/check.ts
+@@ -1,8 +1,8 @@
+-import { proofVerdict, type Understanding } from "@cyclops/domain";
+-import type { CheckRunInput, ProveOutcome } from "@cyclops/ports";
++import { proofVerdict, type Understanding } from "@verit/domain";
++import type { CheckRunInput, ProveOutcome } from "@verit/ports";
+ import { isProveRef } from "./prove";
+ 
+-export const CHECK_NAME = "cyclops / behavior-proof";
++export const CHECK_NAME = "verit / behavior-proof";
+ 
+ /** GitHub caps a check summary at 65535 chars; stay well under with room to spare. */
+ const LOG_CHARS = 8_000;
+@@ -22,7 +22,7 @@ const logExcerpt = (o: ProveOutcome): string =>
+  * `neutral`, never a green check.
+  *
+  * Copy follows STYLE.md: plain labels, short sentences, no em dash. The
+- * Understanding's own prose is normalized in @cyclops/domain when it decodes.
++ * Understanding's own prose is normalized in @verit/domain when it decodes.
+  */
+ export const behaviorProofCheck = (input: {
+   understanding: Understanding;
+@@ -91,7 +91,7 @@ export const behaviorProofCheck = (input: {
+       ? `[Full proof page](${proofPageUrl})`
+       : "_This run has no hosted proof page. Set `PROOF_PAGE_URL` to link one._",
+   );
+-  if (runId) lines.push("", `<sub>cyclops run \`${runId}\`</sub>`);
++  if (runId) lines.push("", `<sub>verit run \`${runId}\`</sub>`);
+ 
+   return { name: CHECK_NAME, conclusion, title, summary: lines.join("\n") };
+ };
+diff --git a/packages/application/src/chunks.ts b/packages/application/src/chunks.ts
+index f8a523e..ee9772a 100644
+--- a/packages/application/src/chunks.ts
++++ b/packages/application/src/chunks.ts
+@@ -1,4 +1,4 @@
+-import type { IndexChunk, WikiPage } from "@cyclops/domain";
++import type { IndexChunk, WikiPage } from "@verit/domain";
+ import { contentHash } from "./hash";
+ 
+ /** Split text into overlapping IndexChunk rows for FTS / retrieval. */
+diff --git a/packages/application/src/compiler.ts b/packages/application/src/compiler.ts
+index 3b38655..3d8da88 100644
+--- a/packages/application/src/compiler.ts
++++ b/packages/application/src/compiler.ts
+@@ -4,8 +4,8 @@ import {
+   OUTPUT_STYLE,
+   REVIEW_SKILLS,
+   type ReviewPresets,
+-} from "@cyclops/domain";
+-import type { CompilerPort } from "@cyclops/ports";
++} from "@verit/domain";
++import type { CompilerPort } from "@verit/ports";
+ import { contentHash } from "./hash";
+ 
+ const skillBlock = (id: string, path: string, extra = ""): string =>
+diff --git a/packages/application/src/context.ts b/packages/application/src/context.ts
+index a56f85a..e0097c9 100644
+--- a/packages/application/src/context.ts
++++ b/packages/application/src/context.ts
+@@ -1,5 +1,5 @@
+-import type { PrGraphNeighbor, ReviewContext, WikiHit, WikiPage, PREdge, PullRequest } from "@cyclops/domain";
+-import type { ReviewDomain } from "@cyclops/domain";
++import type { PrGraphNeighbor, ReviewContext, WikiHit, WikiPage, PREdge, PullRequest } from "@verit/domain";
++import type { ReviewDomain } from "@verit/domain";
+ 
+ export const buildWikiHits = (pages: readonly WikiPage[], q: string, limit = 5): WikiHit[] => {
+   const needle = q.toLowerCase();
+diff --git a/packages/application/src/edges.ts b/packages/application/src/edges.ts
+index 8271879..65f2480 100644
+--- a/packages/application/src/edges.ts
++++ b/packages/application/src/edges.ts
+@@ -1,4 +1,4 @@
+-import type { PREdge, PullRequest } from "@cyclops/domain";
++import type { PREdge, PullRequest } from "@verit/domain";
+ import { contentHash } from "./hash";
+ 
+ export { contentHash };
+diff --git a/packages/application/src/ingest-wiki.ts b/packages/application/src/ingest-wiki.ts
+index 9083a61..3b28f4c 100644
+--- a/packages/application/src/ingest-wiki.ts
++++ b/packages/application/src/ingest-wiki.ts
+@@ -1,4 +1,4 @@
+-import type { WikiPage } from "@cyclops/domain";
++import type { WikiPage } from "@verit/domain";
+ import { contentHash } from "./hash";
+ 
+ /** Split markdown into WikiPage nodes by ATX headings. */
+diff --git a/packages/application/src/proof-spec.ts b/packages/application/src/proof-spec.ts
+index 76f7176..939c5ea 100644
+--- a/packages/application/src/proof-spec.ts
++++ b/packages/application/src/proof-spec.ts
+@@ -1,4 +1,4 @@
+-import type { Understanding } from "@cyclops/domain";
++import type { Understanding } from "@verit/domain";
+ 
+ /** Lattice-inspired proof catalog Spec (json-render shaped). */
+ export const understandingToProofSpec = (input: {
+diff --git a/packages/application/src/prove.ts b/packages/application/src/prove.ts
+index 4a3d806..0d1c72f 100644
+--- a/packages/application/src/prove.ts
++++ b/packages/application/src/prove.ts
+@@ -1,6 +1,6 @@
+ import { Effect } from "effect";
+-import type { ProofRef, Understanding } from "@cyclops/domain";
+-import type { DocumentStore, ProveOutcome, ProvePort, StoreError } from "@cyclops/ports";
++import type { ProofRef, Understanding } from "@verit/domain";
++import type { DocumentStore, ProveOutcome, ProvePort, StoreError } from "@verit/ports";
+ import { contentHash } from "./edges";
+ 
+ /** Marks the refs this verb owns, so a re-run replaces its own evidence only. */
+diff --git a/packages/application/src/review-verbs.ts b/packages/application/src/review-verbs.ts
+index 65c04f9..8fe6e25 100644
+--- a/packages/application/src/review-verbs.ts
++++ b/packages/application/src/review-verbs.ts
+@@ -1,4 +1,4 @@
+-import type { Understanding } from "@cyclops/domain";
++import type { Understanding } from "@verit/domain";
+ 
+ /* Review verbs. `prove` is real (see ./prove.ts) and `post` is a Check Run
+    (see ./check.ts); risk and patch are still stubs until their agents land. */
+diff --git a/packages/application/src/run-review.ts b/packages/application/src/run-review.ts
+index 95cfd02..bbf7504 100644
+--- a/packages/application/src/run-review.ts
++++ b/packages/application/src/run-review.ts
+@@ -1,5 +1,5 @@
+ import { Effect } from "effect";
+-import type { ReviewContext, ReviewPresets, ReviewRun, Understanding } from "@cyclops/domain";
++import type { ReviewContext, ReviewPresets, ReviewRun, Understanding } from "@verit/domain";
+ import type {
+   ClassifierPort,
+   DocumentStore,
+@@ -7,7 +7,7 @@ import type {
+   HarnessPort,
+   ProofRenderPort,
+   StoreError,
+-} from "@cyclops/ports";
++} from "@verit/ports";
+ import { compileReviewPack } from "./compiler";
+ import { contentHash } from "./edges";
+ import { understandingToProofSpec } from "./proof-spec";
+diff --git a/packages/cli/package.json b/packages/cli/package.json
+index 310ed6c..1a1bd88 100644
+--- a/packages/cli/package.json
++++ b/packages/cli/package.json
+@@ -1,9 +1,9 @@
+ {
+-  "name": "@cyclops/cli",
++  "name": "@verit/cli",
+   "license": "AGPL-3.0-only",
+   "version": "0.0.1",
+   "type": "module",
+-  "bin": { "cyclops": "./src/main.ts" },
++  "bin": { "verit": "./src/main.ts" },
+   "exports": { ".": "./src/main.ts" },
+   "scripts": {
+     "test": "vitest run --passWithNoTests",
+@@ -11,18 +11,18 @@
+     "build": "tsc -p tsconfig.json"
+   },
+   "dependencies": {
+-    "@cyclops/adapter-fs-ingest": "workspace:*",
+-    "@cyclops/adapter-github": "workspace:*",
+-    "@cyclops/adapter-local-blob": "workspace:*",
+-    "@cyclops/adapter-memory": "workspace:*",
+-    "@cyclops/adapter-neo4j": "workspace:*",
+-    "@cyclops/adapter-pi": "workspace:*",
+-    "@cyclops/adapter-prove": "workspace:*",
+-    "@cyclops/adapter-sqlite": "workspace:*",
+-    "@cyclops/adapter-treesitter": "workspace:*",
+-    "@cyclops/application": "workspace:*",
+-    "@cyclops/domain": "workspace:*",
+-    "@cyclops/ports": "workspace:*",
++    "@verit/adapter-fs-ingest": "workspace:*",
++    "@verit/adapter-github": "workspace:*",
++    "@verit/adapter-local-blob": "workspace:*",
++    "@verit/adapter-memory": "workspace:*",
++    "@verit/adapter-neo4j": "workspace:*",
++    "@verit/adapter-pi": "workspace:*",
++    "@verit/adapter-prove": "workspace:*",
++    "@verit/adapter-sqlite": "workspace:*",
++    "@verit/adapter-treesitter": "workspace:*",
++    "@verit/application": "workspace:*",
++    "@verit/domain": "workspace:*",
++    "@verit/ports": "workspace:*",
+     "effect": "^3.14.14"
+   },
+   "devDependencies": {
+diff --git a/packages/cli/src/main.ts b/packages/cli/src/main.ts
+index bc053dd..e17732c 100755
+--- a/packages/cli/src/main.ts
++++ b/packages/cli/src/main.ts
+@@ -12,25 +12,25 @@ import {
+   runReviewUnderstand,
+   stubPatch,
+   stubRisk,
+-} from "@cyclops/application";
+-import { ingestRepoPath } from "@cyclops/adapter-fs-ingest";
+-import { makeGithubChecks, makeGithubVcs } from "@cyclops/adapter-github";
+-import { makeProveRunner } from "@cyclops/adapter-prove";
+-import { makeLocalBlob } from "@cyclops/adapter-local-blob";
++} from "@verit/application";
++import { ingestRepoPath } from "@verit/adapter-fs-ingest";
++import { makeGithubChecks, makeGithubVcs } from "@verit/adapter-github";
++import { makeProveRunner } from "@verit/adapter-prove";
++import { makeLocalBlob } from "@verit/adapter-local-blob";
+ import {
+   makeHeuristicClassifier,
+   makeMemoryDocumentStore,
+   makeProofRender,
+-} from "@cyclops/adapter-memory";
+-import { makeGraphStore } from "@cyclops/adapter-neo4j";
+-import { makeAgentHarness } from "@cyclops/adapter-pi";
+-import { makeSqliteDocumentStore } from "@cyclops/adapter-sqlite";
+-import { makeTreeSitterParser } from "@cyclops/adapter-treesitter";
+-import type { PullRequest, ReviewPresets, ReviewRun, Understanding } from "@cyclops/domain";
+-import type { DocumentStore, ProveOutcome } from "@cyclops/ports";
++} from "@verit/adapter-memory";
++import { makeGraphStore } from "@verit/adapter-neo4j";
++import { makeAgentHarness } from "@verit/adapter-pi";
++import { makeSqliteDocumentStore } from "@verit/adapter-sqlite";
++import { makeTreeSitterParser } from "@verit/adapter-treesitter";
++import type { PullRequest, ReviewPresets, ReviewRun, Understanding } from "@verit/domain";
++import type { DocumentStore, ProveOutcome } from "@verit/ports";
+ import { buildUpload, dashboardTarget, proofPageUrl, uploadRun } from "./upload";
+ 
+-const help = `cyclops <command>
++const help = `verit <command>
+ 
+ Commands:
+   ingest <path>              Index repo (files, symbols, wiki, chunks)
+@@ -42,22 +42,22 @@ Commands:
+ 
+ Env:
+   GITHUB_TOKEN          optional for public PRs; needs checks:write to post a Check
+-  CYCLOPS_SQLITE_PATH   default .data/cyclops.db (set empty to use memory)
+-  CYCLOPS_LANE_HARNESS  claude | cursor asks that headless CLI for the Understanding;
++  VERIT_SQLITE_PATH   default .data/verit.db (set empty to use memory)
++  VERIT_LANE_HARNESS  claude | cursor asks that headless CLI for the Understanding;
+                         anything else keeps the Pi path. Any failure falls back
+-  CYCLOPS_LANE_MODEL    optional model for the selected lane harness
+-  CYCLOPS_LANE_TIMEOUT_MS  hard timeout for the lane CLI, default 900000
+-  CYCLOPS_PI_BIN        optional Pi binary; else deterministic stub Understanding
+-  CYCLOPS_PI_ARGS       optional args (default: understand --json)
+-  CYCLOPS_NEO4J_URI     optional bolt://… (memory graph fallback if unset)
+-  CYCLOPS_PROVE_CWD     checkout to prove in (default GITHUB_WORKSPACE); prove is
++  VERIT_LANE_MODEL    optional model for the selected lane harness
++  VERIT_LANE_TIMEOUT_MS  hard timeout for the lane CLI, default 900000
++  VERIT_PI_BIN        optional Pi binary; else deterministic stub Understanding
++  VERIT_PI_ARGS       optional args (default: understand --json)
++  VERIT_NEO4J_URI     optional bolt://… (memory graph fallback if unset)
++  VERIT_PROVE_CWD     checkout to prove in (default GITHUB_WORKSPACE); prove is
+                         refused unless that checkout IS the reviewed repo
+-  CYCLOPS_PROVE_CMD     override the detected command, e.g. "cargo test --all"
+-  CYCLOPS_PROVE_TIMEOUT_MS  hard timeout, default 600000
+-  CYCLOPS_DASHBOARD_URL   base URL of the hosted dashboard. With CYCLOPS_INGEST_TOKEN
++  VERIT_PROVE_CMD     override the detected command, e.g. "cargo test --all"
++  VERIT_PROVE_TIMEOUT_MS  hard timeout, default 600000
++  VERIT_DASHBOARD_URL   base URL of the hosted dashboard. With VERIT_INGEST_TOKEN
+                           the finished run is uploaded and the Check links its proof
+                           page. Leave either unset and nothing is uploaded
+-  CYCLOPS_INGEST_TOKEN    per-repo ingest token issued by the dashboard
++  VERIT_INGEST_TOKEN    per-repo ingest token issued by the dashboard
+   PROOF_PAGE_URL          overrides the computed proof page link in the Check
+ `;
+ 
+@@ -70,9 +70,9 @@ const defaultPresets: ReviewPresets = {
+ };
+ 
+ const makeDocs = () => {
+-  const path = process.env.CYCLOPS_SQLITE_PATH;
++  const path = process.env.VERIT_SQLITE_PATH;
+   if (path === "") return makeMemoryDocumentStore();
+-  return makeSqliteDocumentStore(path ?? ".data/cyclops.db");
++  return makeSqliteDocumentStore(path ?? ".data/verit.db");
+ };
+ 
+ const parsePrSpec = (spec: string): { owner: string; repo: string; number: number } => {
+@@ -110,9 +110,9 @@ const proveIfPointedHere = async (
+   repo: string,
+   understanding: Understanding,
+ ): Promise<{ understanding: Understanding; outcome: ProveOutcome | null }> => {
+-  const cwd = process.env.CYCLOPS_PROVE_CWD || process.env.GITHUB_WORKSPACE;
++  const cwd = process.env.VERIT_PROVE_CWD || process.env.GITHUB_WORKSPACE;
+   if (!cwd) return { understanding, outcome: null };
+-  const timeoutMs = Number(process.env.CYCLOPS_PROVE_TIMEOUT_MS) || undefined;
++  const timeoutMs = Number(process.env.VERIT_PROVE_TIMEOUT_MS) || undefined;
+   try {
+     return await Effect.runPromise(
+       runProve({ prove: makeProveRunner(), docs })({
+@@ -226,7 +226,7 @@ const postBehaviorProofCheck = async (input: {
+   proofPageUrl?: string;
+ }) => {
+   const slug = process.env.GITHUB_REPOSITORY;
+-  const headSha = process.env.CYCLOPS_CHECK_SHA || process.env.GITHUB_SHA;
++  const headSha = process.env.VERIT_CHECK_SHA || process.env.GITHUB_SHA;
+   if (!slug || !headSha) {
+     console.error("post: no GITHUB_REPOSITORY/GITHUB_SHA, skipping check run");
+     return null;
+@@ -239,7 +239,7 @@ const postBehaviorProofCheck = async (input: {
+     proofPageUrl: input.proofPageUrl,
+     runId: input.runId,
+   });
+-  const dry = process.env.CYCLOPS_CHECK_DRY_RUN === "1" || !process.env.GITHUB_TOKEN;
++  const dry = process.env.VERIT_CHECK_DRY_RUN === "1" || !process.env.GITHUB_TOKEN;
+   if (dry) {
+     console.error(`post (dry run) ${check.name} → ${check.conclusion}: ${check.title}`);
+     console.error(check.summary);
+@@ -285,7 +285,7 @@ const prUpload = (pr: PullRequest) => ({
+   title: pr.title,
+   url: pr.url,
+   author: pr.author,
+-  headSha: process.env.CYCLOPS_CHECK_SHA || process.env.GITHUB_SHA || undefined,
++  headSha: process.env.VERIT_CHECK_SHA || process.env.GITHUB_SHA || undefined,
+ });
+ 
+ const ingestPr = async (spec: string) => {
+@@ -401,7 +401,7 @@ const main = async () => {
+ 
+   if (cmd === "understand") {
+     const dry = rest.includes("--dry-run") || rest.includes("-n") || rest.length === 0;
+-    if (!dry) throw new Error("usage: cyclops understand --dry-run");
++    if (!dry) throw new Error("usage: verit understand --dry-run");
+     const context = buildReviewContext({
+       pages: [],
+       query: "dry-run",
+@@ -446,7 +446,7 @@ const main = async () => {
+     const prFlag =
+       rest.find((a) => a.startsWith("--pr="))?.slice(5) ??
+       (rest[0] === "--pr" ? rest[1] : rest[0]);
+-    if (!prFlag) throw new Error("usage: cyclops review --pr=owner/repo#n");
++    if (!prFlag) throw new Error("usage: verit review --pr=owner/repo#n");
+     const { pr: _pr, ...out } = await reviewPr(prFlag.replace(/^--pr=/, ""));
+     console.log(JSON.stringify(printable(out), null, 2));
+     return;
+diff --git a/packages/cli/src/upload.test.ts b/packages/cli/src/upload.test.ts
+index fa9340b..84f4669 100644
+--- a/packages/cli/src/upload.test.ts
++++ b/packages/cli/src/upload.test.ts
+@@ -3,8 +3,8 @@ import { buildUpload, dashboardTarget, proofPageUrl } from "./upload";
+ 
+ describe("proof page URL", () => {
+   it("is the URL shape the Check Run links to", () => {
+-    expect(proofPageUrl("https://cyclops.dev", "acme/widgets", "run:abc:1")).toBe(
+-      "https://cyclops.dev/r/acme/widgets/runs/run%3Aabc%3A1",
++    expect(proofPageUrl("https://verit.dev", "acme/widgets", "run:abc:1")).toBe(
++      "https://verit.dev/r/acme/widgets/runs/run%3Aabc%3A1",
+     );
+   });
+ 
+@@ -18,14 +18,14 @@ describe("proof page URL", () => {
+ describe("upload gating", () => {
+   it("stays off unless both variables are set", () => {
+     expect(dashboardTarget({})).toBeNull();
+-    expect(dashboardTarget({ CYCLOPS_DASHBOARD_URL: "http://x" })).toBeNull();
+-    expect(dashboardTarget({ CYCLOPS_INGEST_TOKEN: "cyc_x" })).toBeNull();
+-    expect(dashboardTarget({ CYCLOPS_DASHBOARD_URL: " ", CYCLOPS_INGEST_TOKEN: "cyc_x" })).toBeNull();
++    expect(dashboardTarget({ VERIT_DASHBOARD_URL: "http://x" })).toBeNull();
++    expect(dashboardTarget({ VERIT_INGEST_TOKEN: "cyc_x" })).toBeNull();
++    expect(dashboardTarget({ VERIT_DASHBOARD_URL: " ", VERIT_INGEST_TOKEN: "cyc_x" })).toBeNull();
+   });
+ 
+   it("turns on when both are set", () => {
+     expect(
+-      dashboardTarget({ CYCLOPS_DASHBOARD_URL: "http://x", CYCLOPS_INGEST_TOKEN: "cyc_x" }),
++      dashboardTarget({ VERIT_DASHBOARD_URL: "http://x", VERIT_INGEST_TOKEN: "cyc_x" }),
+     ).toEqual({ baseUrl: "http://x", token: "cyc_x" });
+   });
+ });
+diff --git a/packages/cli/src/upload.ts b/packages/cli/src/upload.ts
+index 515f4ae..d4adcef 100644
+--- a/packages/cli/src/upload.ts
++++ b/packages/cli/src/upload.ts
+@@ -1,7 +1,7 @@
+-import { encodeRunUpload, type RunUpload } from "@cyclops/domain";
+-import { proveLogBody } from "@cyclops/application";
++import { encodeRunUpload, type RunUpload } from "@verit/domain";
++import { proveLogBody } from "@verit/application";
+ import { Either } from "effect";
+-import type { ProveOutcome } from "@cyclops/ports";
++import type { ProveOutcome } from "@verit/ports";
+ 
+ /**
+  * Where a run's proof page lives. The Check Run links here, so the shape is
+@@ -17,13 +17,13 @@ export interface DashboardTarget {
+ }
+ 
+ /**
+- * Both variables or nothing. An unset CYCLOPS_DASHBOARD_URL means the run is
++ * Both variables or nothing. An unset VERIT_DASHBOARD_URL means the run is
+  * never uploaded and CI behaves exactly as it did before, which is the whole
+  * point of gating this on env.
+  */
+ export const dashboardTarget = (env: NodeJS.ProcessEnv = process.env): DashboardTarget | null => {
+-  const baseUrl = env.CYCLOPS_DASHBOARD_URL?.trim();
+-  const token = env.CYCLOPS_INGEST_TOKEN?.trim();
++  const baseUrl = env.VERIT_DASHBOARD_URL?.trim();
++  const token = env.VERIT_INGEST_TOKEN?.trim();
+   if (!baseUrl || !token) return null;
+   return { baseUrl, token };
+ };
+@@ -83,7 +83,7 @@ export const uploadRun = async (
+       headers: {
+         "Content-Type": "application/json",
+         Authorization: `Bearer ${target.token}`,
+-        "X-Cyclops-Repo": upload.repo,
++        "X-Verit-Repo": upload.repo,
+       },
+       body: JSON.stringify(encoded.right),
+     });
+diff --git a/packages/domain/package.json b/packages/domain/package.json
+index 1e187ae..5aa9b01 100644
+--- a/packages/domain/package.json
++++ b/packages/domain/package.json
+@@ -1,5 +1,5 @@
+ {
+-  "name": "@cyclops/domain",
++  "name": "@verit/domain",
+   "license": "AGPL-3.0-only",
+   "version": "0.0.1",
+   "type": "module",
+diff --git a/packages/domain/src/index.ts b/packages/domain/src/index.ts
+index 73ac644..79e5047 100644
+--- a/packages/domain/src/index.ts
++++ b/packages/domain/src/index.ts
+@@ -294,7 +294,7 @@ export type ProofArtifact = S.Schema.Type<typeof ProofArtifact>;
+ 
+ /**
+  * What `prove` actually did, as a schema. Structurally the same as ProveOutcome
+- * in @cyclops/ports, which stays an interface because nothing decodes it in
++ * in @verit/ports, which stays an interface because nothing decodes it in
+  * process. This one crosses the network, so it is validated.
+  */
+ export const ProveResult = S.Struct({
+diff --git a/packages/ports/package.json b/packages/ports/package.json
+index 3f2716f..6a6feeb 100644
+--- a/packages/ports/package.json
++++ b/packages/ports/package.json
+@@ -1,5 +1,5 @@
+ {
+-  "name": "@cyclops/ports",
++  "name": "@verit/ports",
+   "license": "AGPL-3.0-only",
+   "version": "0.0.1",
+   "type": "module",
+@@ -10,7 +10,7 @@
+     "build": "tsc -p tsconfig.json"
+   },
+   "dependencies": {
+-    "@cyclops/domain": "workspace:*",
++    "@verit/domain": "workspace:*",
+     "effect": "^3.14.14"
+   },
+   "devDependencies": {
+diff --git a/packages/ports/src/index.ts b/packages/ports/src/index.ts
+index 18ff415..319eea6 100644
+--- a/packages/ports/src/index.ts
++++ b/packages/ports/src/index.ts
+@@ -15,7 +15,7 @@ import type {
+   WikiPage,
+   WorkspaceRun,
+   WorkspaceSession,
+-} from "@cyclops/domain";
++} from "@verit/domain";
+ import type { Effect } from "effect";
+ 
+ export class StoreError extends Error {
+diff --git a/packages/proof-ui/package.json b/packages/proof-ui/package.json
+index 74f286c..06cac15 100644
+--- a/packages/proof-ui/package.json
++++ b/packages/proof-ui/package.json
+@@ -1,5 +1,5 @@
+ {
+-  "name": "@cyclops/proof-ui",
++  "name": "@verit/proof-ui",
+   "license": "AGPL-3.0-only",
+   "version": "0.0.1",
+   "type": "module",
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index 6b2ecf6..04cd027 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -23,27 +23,27 @@ importers:
+ 
+   apps/dashboard:
+     dependencies:
+-      '@cyclops/adapter-local-blob':
++      '@json-render/core':
++        specifier: ^0.19.0
++        version: 0.19.0(zod@4.4.3)
++      '@json-render/react':
++        specifier: ^0.19.0
++        version: 0.19.0(react@19.2.4)(zod@4.4.3)
++      '@verit/adapter-local-blob':
+         specifier: workspace:*
+         version: link:../../packages/adapters/local-blob
+-      '@cyclops/adapter-s3-blob':
++      '@verit/adapter-s3-blob':
+         specifier: workspace:*
+         version: link:../../packages/adapters/s3-blob
+-      '@cyclops/domain':
++      '@verit/domain':
+         specifier: workspace:*
+         version: link:../../packages/domain
+-      '@cyclops/ports':
++      '@verit/ports':
+         specifier: workspace:*
+         version: link:../../packages/ports
+-      '@cyclops/proof-ui':
++      '@verit/proof-ui':
+         specifier: workspace:*
+         version: link:../../packages/proof-ui
+-      '@json-render/core':
+-        specifier: ^0.19.0
+-        version: 0.19.0(zod@4.4.3)
+-      '@json-render/react':
+-        specifier: ^0.19.0
+-        version: 0.19.0(react@19.2.4)(zod@4.4.3)
+       clsx:
+         specifier: ^2.1.1
+         version: 2.1.1
+@@ -93,33 +93,33 @@ importers:
+ 
+   apps/workspace:
+     dependencies:
+-      '@cyclops/adapter-memory':
++      '@json-render/core':
++        specifier: ^0.19.0
++        version: 0.19.0(zod@4.4.3)
++      '@json-render/react':
++        specifier: ^0.19.0
++        version: 0.19.0(react@19.2.4)(zod@4.4.3)
++      '@verit/adapter-memory':
+         specifier: workspace:*
+         version: link:../../packages/adapters/memory
+-      '@cyclops/adapter-prove':
++      '@verit/adapter-prove':
+         specifier: workspace:*
+         version: link:../../packages/adapters/prove
+-      '@cyclops/adapter-sqlite':
++      '@verit/adapter-sqlite':
+         specifier: workspace:*
+         version: link:../../packages/adapters/sqlite
+-      '@cyclops/application':
++      '@verit/application':
+         specifier: workspace:*
+         version: link:../../packages/application
+-      '@cyclops/domain':
++      '@verit/domain':
+         specifier: workspace:*
+         version: link:../../packages/domain
+-      '@cyclops/ports':
++      '@verit/ports':
+         specifier: workspace:*
+         version: link:../../packages/ports
+-      '@cyclops/proof-ui':
++      '@verit/proof-ui':
+         specifier: workspace:*
+         version: link:../../packages/proof-ui
+-      '@json-render/core':
+-        specifier: ^0.19.0
+-        version: 0.19.0(zod@4.4.3)
+-      '@json-render/react':
+-        specifier: ^0.19.0
+-        version: 0.19.0(react@19.2.4)(zod@4.4.3)
+       class-variance-authority:
+         specifier: ^0.7.1
+         version: 0.7.1
+@@ -181,7 +181,7 @@ importers:
+ 
+   packages/action:
+     dependencies:
+-      '@cyclops/cli':
++      '@verit/cli':
+         specifier: workspace:*
+         version: link:../cli
+     devDependencies:
+@@ -194,13 +194,13 @@ importers:
+ 
+   packages/adapters/fs-ingest:
+     dependencies:
+-      '@cyclops/application':
++      '@verit/application':
+         specifier: workspace:*
+         version: link:../../application
+-      '@cyclops/domain':
++      '@verit/domain':
+         specifier: workspace:*
+         version: link:../../domain
+-      '@cyclops/ports':
++      '@verit/ports':
+         specifier: workspace:*
+         version: link:../../ports
+       effect:
+@@ -216,15 +216,15 @@ importers:
+ 
+   packages/adapters/github:
+     dependencies:
+-      '@cyclops/domain':
++      '@octokit/rest':
++        specifier: ^21.1.1
++        version: 21.1.1
++      '@verit/domain':
+         specifier: workspace:*
+         version: link:../../domain
+-      '@cyclops/ports':
++      '@verit/ports':
+         specifier: workspace:*
+         version: link:../../ports
+-      '@octokit/rest':
+-        specifier: ^21.1.1
+-        version: 21.1.1
+       effect:
+         specifier: ^3.14.14
+         version: 3.22.1
+@@ -238,7 +238,7 @@ importers:
+ 
+   packages/adapters/local-blob:
+     dependencies:
+-      '@cyclops/ports':
++      '@verit/ports':
+         specifier: workspace:*
+         version: link:../../ports
+       effect:
+@@ -254,13 +254,13 @@ importers:
+ 
+   packages/adapters/memory:
+     dependencies:
+-      '@cyclops/application':
++      '@verit/application':
+         specifier: workspace:*
+         version: link:../../application
+-      '@cyclops/domain':
++      '@verit/domain':
+         specifier: workspace:*
+         version: link:../../domain
+-      '@cyclops/ports':
++      '@verit/ports':
+         specifier: workspace:*
+         version: link:../../ports
+       effect:
+@@ -276,13 +276,13 @@ importers:
+ 
+   packages/adapters/neo4j:
+     dependencies:
+-      '@cyclops/adapter-memory':
++      '@verit/adapter-memory':
+         specifier: workspace:*
+         version: link:../memory
+-      '@cyclops/domain':
++      '@verit/domain':
+         specifier: workspace:*
+         version: link:../../domain
+-      '@cyclops/ports':
++      '@verit/ports':
+         specifier: workspace:*
+         version: link:../../ports
+       effect:
+@@ -301,10 +301,10 @@ importers:
+ 
+   packages/adapters/pi:
+     dependencies:
+-      '@cyclops/domain':
++      '@verit/domain':
+         specifier: workspace:*
+         version: link:../../domain
+-      '@cyclops/ports':
++      '@verit/ports':
+         specifier: workspace:*
+         version: link:../../ports
+       effect:
+@@ -320,10 +320,10 @@ importers:
+ 
+   packages/adapters/prove:
+     dependencies:
+-      '@cyclops/domain':
++      '@verit/domain':
+         specifier: workspace:*
+         version: link:../../domain
+-      '@cyclops/ports':
++      '@verit/ports':
+         specifier: workspace:*
+         version: link:../../ports
+       effect:
+@@ -339,7 +339,7 @@ importers:
+ 
+   packages/adapters/s3-blob:
+     dependencies:
+-      '@cyclops/ports':
++      '@verit/ports':
+         specifier: workspace:*
+         version: link:../../ports
+       aws4fetch:
+@@ -361,10 +361,10 @@ importers:
+ 
+   packages/adapters/sqlite:
+     dependencies:
+-      '@cyclops/domain':
++      '@verit/domain':
+         specifier: workspace:*
+         version: link:../../domain
+-      '@cyclops/ports':
++      '@verit/ports':
+         specifier: workspace:*
+         version: link:../../ports
+       effect:
+@@ -380,10 +380,10 @@ importers:
+ 
+   packages/adapters/treesitter:
+     dependencies:
+-      '@cyclops/adapter-memory':
++      '@verit/adapter-memory':
+         specifier: workspace:*
+         version: link:../memory
+-      '@cyclops/ports':
++      '@verit/ports':
+         specifier: workspace:*
+         version: link:../../ports
+       effect:
+@@ -402,10 +402,10 @@ importers:
+ 
+   packages/application:
+     dependencies:
+-      '@cyclops/domain':
++      '@verit/domain':
+         specifier: workspace:*
+         version: link:../domain
+-      '@cyclops/ports':
++      '@verit/ports':
+         specifier: workspace:*
+         version: link:../ports
+       effect:
+@@ -421,40 +421,40 @@ importers:
+ 
+   packages/cli:
+     dependencies:
+-      '@cyclops/adapter-fs-ingest':
++      '@verit/adapter-fs-ingest':
+         specifier: workspace:*
+         version: link:../adapters/fs-ingest
+-      '@cyclops/adapter-github':
++      '@verit/adapter-github':
+         specifier: workspace:*
+         version: link:../adapters/github
+-      '@cyclops/adapter-local-blob':
++      '@verit/adapter-local-blob':
+         specifier: workspace:*
+         version: link:../adapters/local-blob
+-      '@cyclops/adapter-memory':
++      '@verit/adapter-memory':
+         specifier: workspace:*
+         version: link:../adapters/memory
+-      '@cyclops/adapter-neo4j':
++      '@verit/adapter-neo4j':
+         specifier: workspace:*
+         version: link:../adapters/neo4j
+-      '@cyclops/adapter-pi':
++      '@verit/adapter-pi':
+         specifier: workspace:*
+         version: link:../adapters/pi
+-      '@cyclops/adapter-prove':
++      '@verit/adapter-prove':
+         specifier: workspace:*
+         version: link:../adapters/prove
+-      '@cyclops/adapter-sqlite':
++      '@verit/adapter-sqlite':
+         specifier: workspace:*
+         version: link:../adapters/sqlite
+-      '@cyclops/adapter-treesitter':
++      '@verit/adapter-treesitter':
+         specifier: workspace:*
+         version: link:../adapters/treesitter
+-      '@cyclops/application':
++      '@verit/application':
+         specifier: workspace:*
+         version: link:../application
+-      '@cyclops/domain':
++      '@verit/domain':
+         specifier: workspace:*
+         version: link:../domain
+-      '@cyclops/ports':
++      '@verit/ports':
+         specifier: workspace:*
+         version: link:../ports
+       effect:
+@@ -486,7 +486,7 @@ importers:
+ 
+   packages/ports:
+     dependencies:
+-      '@cyclops/domain':
++      '@verit/domain':
+         specifier: workspace:*
+         version: link:../domain
+       effect:
+diff --git a/skills/build/SKILL.md b/skills/build/SKILL.md
+index fde6dea..8bee17b 100644
+--- a/skills/build/SKILL.md
++++ b/skills/build/SKILL.md
+@@ -1,6 +1,6 @@
+ ---
+ name: build
+-description: Cyclops skill verb `build` (shared catalog).
++description: Verit skill verb `build` (shared catalog).
+ ---
+ 
+-Follow Cyclops Understanding schema. Author risks are hints only, never an allowlist.
++Follow Verit Understanding schema. Author risks are hints only, never an allowlist.
+diff --git a/skills/patch/SKILL.md b/skills/patch/SKILL.md
+index 3f31227..879db30 100644
+--- a/skills/patch/SKILL.md
++++ b/skills/patch/SKILL.md
+@@ -1,6 +1,6 @@
+ ---
+ name: patch
+-description: Cyclops skill verb `patch` (shared catalog).
++description: Verit skill verb `patch` (shared catalog).
+ ---
+ 
+-Follow Cyclops Understanding schema. Author risks are hints only, never an allowlist.
++Follow Verit Understanding schema. Author risks are hints only, never an allowlist.
+diff --git a/skills/plan/SKILL.md b/skills/plan/SKILL.md
+index a98f8a6..a40b86b 100644
+--- a/skills/plan/SKILL.md
++++ b/skills/plan/SKILL.md
+@@ -1,6 +1,6 @@
+ ---
+ name: plan
+-description: Cyclops skill verb `plan` (shared catalog).
++description: Verit skill verb `plan` (shared catalog).
+ ---
+ 
+-Follow Cyclops Understanding schema. Author risks are hints only, never an allowlist.
++Follow Verit Understanding schema. Author risks are hints only, never an allowlist.
+diff --git a/skills/post/SKILL.md b/skills/post/SKILL.md
+index 4717ac4..f44679f 100644
+--- a/skills/post/SKILL.md
++++ b/skills/post/SKILL.md
+@@ -1,6 +1,6 @@
+ ---
+ name: post
+-description: Cyclops skill verb `post` (shared catalog).
++description: Verit skill verb `post` (shared catalog).
+ ---
+ 
+-Follow Cyclops Understanding schema. Author risks are hints only, never an allowlist.
++Follow Verit Understanding schema. Author risks are hints only, never an allowlist.
+diff --git a/skills/prove/SKILL.md b/skills/prove/SKILL.md
+index d346882..f7fc3ff 100644
+--- a/skills/prove/SKILL.md
++++ b/skills/prove/SKILL.md
+@@ -1,6 +1,6 @@
+ ---
+ name: prove
+-description: Cyclops skill verb `prove` (shared catalog).
++description: Verit skill verb `prove` (shared catalog).
+ ---
+ 
+-Follow Cyclops Understanding schema. Author risks are hints only, never an allowlist.
++Follow Verit Understanding schema. Author risks are hints only, never an allowlist.
+diff --git a/skills/render/SKILL.md b/skills/render/SKILL.md
+index 365bdb0..27d174f 100644
+--- a/skills/render/SKILL.md
++++ b/skills/render/SKILL.md
+@@ -1,6 +1,6 @@
+ ---
+ name: render
+-description: Cyclops skill verb `render` (shared catalog).
++description: Verit skill verb `render` (shared catalog).
+ ---
+ 
+-Follow Cyclops Understanding schema. Author risks are hints only, never an allowlist.
++Follow Verit Understanding schema. Author risks are hints only, never an allowlist.
+diff --git a/skills/review/SKILL.md b/skills/review/SKILL.md
+index 5f7407c..77a9166 100644
+--- a/skills/review/SKILL.md
++++ b/skills/review/SKILL.md
+@@ -1,6 +1,6 @@
+ ---
+ name: review
+-description: Cyclops skill verb `review` (shared catalog).
++description: Verit skill verb `review` (shared catalog).
+ ---
+ 
+-Follow Cyclops Understanding schema. Author risks are hints only, never an allowlist.
++Follow Verit Understanding schema. Author risks are hints only, never an allowlist.
+diff --git a/skills/risk/SKILL.md b/skills/risk/SKILL.md
+index 5539637..984be03 100644
+--- a/skills/risk/SKILL.md
++++ b/skills/risk/SKILL.md
+@@ -1,6 +1,6 @@
+ ---
+ name: risk
+-description: Cyclops skill verb `risk` (shared catalog).
++description: Verit skill verb `risk` (shared catalog).
+ ---
+ 
+-Follow Cyclops Understanding schema. Author risks are hints only, never an allowlist.
++Follow Verit Understanding schema. Author risks are hints only, never an allowlist.
+diff --git a/skills/understand/SKILL.md b/skills/understand/SKILL.md
+index 49b2016..3244f47 100644
+--- a/skills/understand/SKILL.md
++++ b/skills/understand/SKILL.md
+@@ -1,9 +1,9 @@
+ ---
+ name: understand
+-description: Cyclops skill verb `understand` (shared catalog).
++description: Verit skill verb `understand` (shared catalog).
+ ---
+ 
+-Follow Cyclops Understanding schema. Author risks are hints only, never an allowlist.
++Follow Verit Understanding schema. Author risks are hints only, never an allowlist.
+ 
+ Write every string a reviewer reads in the house style. See STYLE.md at the repo root:
+ short sentences, active voice, short words, concrete file and function names, no filler,
+diff --git a/skills/verify/SKILL.md b/skills/verify/SKILL.md
+index 15c391d..5a781cb 100644
+--- a/skills/verify/SKILL.md
++++ b/skills/verify/SKILL.md
+@@ -1,6 +1,6 @@
+ ---
+ name: verify
+-description: Cyclops skill verb `verify` (shared catalog).
++description: Verit skill verb `verify` (shared catalog).
+ ---
+ 
+-Follow Cyclops Understanding schema. Author risks are hints only, never an allowlist.
++Follow Verit Understanding schema. Author risks are hints only, never an allowlist.
