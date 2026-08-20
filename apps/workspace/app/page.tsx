@@ -6,7 +6,6 @@ import { Header, Palette, Rail } from "@/components/shell";
 import { useWorkspace, WorkspaceProvider } from "@/lib/store";
 import { ProofUiProvider, registry, type ProofUiHost } from "@verit/proof-ui";
 import { JSONUIProvider, Renderer } from "@json-render/react";
-import { clsx } from "clsx";
 import { useMemo, type ReactNode } from "react";
 
 /** The live store, in the shape the shared proof registry reads. */
@@ -43,13 +42,14 @@ function MetricsStrip() {
 }
 
 function Workspace() {
-  const { spec, status } = useWorkspace();
+  const { spec, status, error } = useWorkspace();
+  const hasSpec = Boolean(spec?.root && spec.elements[spec.root]);
   return (
     <main className="scroller min-w-0 flex-1 overflow-y-auto bg-bg">
       <div className="mx-auto flex max-w-[1080px] flex-col gap-7 px-6 py-5">
         <MetricsStrip />
-        {spec?.root && spec.elements[spec.root] ? (
-          <Renderer spec={spec} registry={registry} />
+        {hasSpec ? (
+          <Renderer spec={spec!} registry={registry} />
         ) : status === "idle" ? (
           <div className="flex flex-col items-center gap-1.5 pt-20 text-center">
             <p className="text-[13px] font-medium text-ink-2">No pull request loaded</p>
@@ -57,8 +57,19 @@ function Workspace() {
               Paste a GitHub PR URL in the header to start analysis.
             </p>
           </div>
+        ) : status === "error" ? (
+          <div className="flex flex-col items-center gap-2 pt-20 text-center">
+            <p className="text-[13px] font-medium text-danger">Analysis could not finish</p>
+            <p className="max-w-[440px] text-[12px] text-ink-2">
+              {error ?? "The pull request could not be loaded."}
+            </p>
+            <p className="text-[12px] text-ink-3">
+              Check the pull request URL in the header, then run it again.
+            </p>
+          </div>
         ) : (
-          <div className="flex flex-col gap-3 pt-2">
+          <div className="flex flex-col gap-3 pt-2" aria-busy="true" aria-live="polite">
+            <span className="sr-only">Loading the review…</span>
             {[0, 1, 2].map((i) => (
               <div key={i} className="rounded-lg border border-line bg-surface p-3">
                 <div className="skeleton mb-2 h-3 w-1/4" />
@@ -66,12 +77,10 @@ function Workspace() {
                 <div className="skeleton h-3 w-1/2" />
               </div>
             ))}
-            <p className={clsx("text-center text-[12px] text-ink-3", status === "error" && "text-danger")}>
+            <p className="text-center text-[12px] text-ink-3">
               {status === "fetching"
                 ? "Fetching pull request from GitHub…"
-                : status === "error"
-                  ? "Analysis failed. Check the header for details."
-                  : "Assembling workspace…"}
+                : "Assembling workspace…"}
             </p>
           </div>
         )}
