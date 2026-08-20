@@ -64,6 +64,8 @@ describe("buildUpload", () => {
         logTail: "ok\n",
         log: "line one\nline two\nok\n",
         startedAt: "2026-08-09T10:00:00.000Z",
+        headSha: "abc1234",
+        porcelainClean: true,
       },
     });
     expect(upload.prove?.logTail).toBe("ok\n");

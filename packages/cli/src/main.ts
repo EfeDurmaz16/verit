@@ -15,7 +15,7 @@ import {
 } from "@verit/application";
 import { ingestRepoPath } from "@verit/adapter-fs-ingest";
 import { makeGithubChecks, makeGithubVcs } from "@verit/adapter-github";
-import { makeProveRunner } from "@verit/adapter-prove";
+import { gitState, makeProveRunner } from "@verit/adapter-prove";
 import { makeLocalBlob } from "@verit/adapter-local-blob";
 import {
   makeHeuristicClassifier,
@@ -28,7 +28,7 @@ import { laneEnabled, makeLaneHarness } from "@verit/lane";
 import { makeSqliteDocumentStore } from "@verit/adapter-sqlite";
 import { makeTreeSitterParser } from "@verit/adapter-treesitter";
 import type { PullRequest, ReviewPresets, ReviewRun, Understanding } from "@verit/domain";
-import type { DocumentStore, ProveOutcome } from "@verit/ports";
+import type { DocumentStore, GitState, ProveOutcome } from "@verit/ports";
 import { buildUpload, dashboardTarget, proofPageUrl, uploadRun } from "./upload";
 
 const help = `verit <command>
@@ -130,6 +130,7 @@ const proveIfPointedHere = async (
   runId: string,
   repo: string,
   understanding: Understanding | null,
+  baseline: GitState | null,
 ): Promise<{ understanding: Understanding | null; outcome: ProveOutcome | null }> => {
   const cwd = process.env.VERIT_PROVE_CWD || process.env.GITHUB_WORKSPACE;
   if (!cwd) return { understanding, outcome: null };
@@ -142,6 +143,7 @@ const proveIfPointedHere = async (
         expectRepo: repo,
         understanding,
         timeoutMs,
+        baseline,
       }),
     );
   } catch (e) {
@@ -164,6 +166,13 @@ const runUnderstandPipeline = async (input: {
 }) => {
   const docs = makeDocs();
   const graph = await makeGraphStore();
+  // Snapshot the prove workspace before the lane runs. prove compares against
+  // this and refuses if the tree moved during analysis. Only the review path
+  // names a repo and points prove at a checkout, so only it has a baseline.
+  const proveCwd = input.repo
+    ? process.env.VERIT_PROVE_CWD || process.env.GITHUB_WORKSPACE
+    : undefined;
+  const baseline = proveCwd ? await gitState(resolve(proveCwd)) : null;
   const result = await Effect.runPromise(
     runReviewUnderstand({
       docs,
@@ -190,7 +199,13 @@ const runUnderstandPipeline = async (input: {
   }
   let outcome: ProveOutcome | null = null;
   if (input.repo) {
-    const proved = await proveIfPointedHere(docs, result.runId, input.repo, understanding);
+    const proved = await proveIfPointedHere(
+      docs,
+      result.runId,
+      input.repo,
+      understanding,
+      baseline,
+    );
     understanding = proved.understanding;
     outcome = proved.outcome;
   }

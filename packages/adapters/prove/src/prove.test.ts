@@ -1,9 +1,11 @@
+import { spawnSync } from "node:child_process";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
+import { proofVerdict } from "@verit/domain";
 import { afterEach, describe, expect, it } from "vitest";
-import { detectProveCommand, makeProveRunner, proveChildEnv } from "./index";
+import { detectProveCommand, gitState, makeProveRunner, proveChildEnv } from "./index";
 
 const tmp = () => mkdtemp(join(tmpdir(), "verit-prove-"));
 
@@ -145,4 +147,71 @@ describe("prove runner", () => {
     expect(out.timedOut).toBe(true);
     expect(out.exitCode).not.toBe(0);
   }, 20_000);
+});
+
+describe("prove dirty-tree guard", () => {
+  const git = (args: readonly string[], cwd: string) =>
+    spawnSync("git", [...args], { cwd, encoding: "utf8" });
+
+  const seedRepo = async (): Promise<string> => {
+    const dir = await mkdtemp(join(tmpdir(), "verit-guard-"));
+    git(["init", "-q", "-b", "main"], dir);
+    git(["config", "user.email", "t@example.com"], dir);
+    git(["config", "user.name", "t"], dir);
+    // a github origin so the repo guard lets prove run at all
+    git(["remote", "add", "origin", "https://github.com/EfeDurmaz16/verit.git"], dir);
+    await writeFile(join(dir, "package.json"), JSON.stringify({ scripts: { test: "true" } }));
+    git(["add", "-A"], dir);
+    git(["commit", "-qm", "seed"], dir);
+    return dir;
+  };
+
+  it("refuses to a neutral outcome when the tree changed since the baseline", async () => {
+    const dir = await seedRepo();
+    const baseline = await gitState(dir);
+    expect(baseline).not.toBeNull();
+    // a mutation lands between the snapshot and prove: exactly what an escaped
+    // lane would do to force a green tree.
+    await writeFile(join(dir, "sneaked-in.txt"), "x");
+    process.env.VERIT_PROVE_CMD = "node -e process.exit(0)";
+    const out = await Effect.runPromise(
+      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit", baseline }),
+    );
+    expect(out.refused).toBeTruthy();
+    expect(out.refused).toContain("working tree changed");
+    // the verdict is neutral, never success, and the command never ran.
+    expect(proofVerdict(out)).toBe("neutral");
+    expect(out.log).toBe("");
+    expect(out.porcelainClean).toBe(false);
+  });
+
+  it("also refuses when HEAD moved but the tree stayed clean", async () => {
+    const dir = await seedRepo();
+    const baseline = await gitState(dir);
+    // a second commit: HEAD moves, porcelain stays empty. A checkout swap must
+    // still trip the guard, so the porcelain hash alone is not enough.
+    await writeFile(join(dir, "second.txt"), "y");
+    git(["add", "-A"], dir);
+    git(["commit", "-qm", "second"], dir);
+    process.env.VERIT_PROVE_CMD = "node -e process.exit(0)";
+    const out = await Effect.runPromise(
+      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit", baseline }),
+    );
+    expect(out.refused).toBeTruthy();
+    expect(proofVerdict(out)).toBe("neutral");
+  });
+
+  it("runs and records head sha and the clean flag when the tree held still", async () => {
+    const dir = await seedRepo();
+    const baseline = await gitState(dir);
+    process.env.VERIT_PROVE_CMD = "node -e process.exit(0)";
+    const out = await Effect.runPromise(
+      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit", baseline }),
+    );
+    expect(out.refused).toBeUndefined();
+    expect(out.exitCode).toBe(0);
+    expect(out.headSha).toBe(baseline?.headSha);
+    expect(out.porcelainClean).toBe(true);
+    expect(proofVerdict(out)).toBe("success");
+  });
 });

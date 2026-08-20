@@ -3,6 +3,7 @@ import { Understanding } from "@verit/domain";
 import type { HarnessPort } from "@verit/ports";
 import { StoreError } from "@verit/ports";
 import { anthropicClient } from "./anthropic";
+import { openLaneCheckout } from "./checkout";
 import type { LaneClient, LaneTool } from "./client";
 import { DEFAULT_CAPS, runLane, type LaneCaps } from "./loop";
 import { openaiCompatClient } from "./openai";
@@ -116,17 +117,24 @@ export const laneClientFor = (config: LaneConfig): LaneClient => {
 export const makeLaneHarness = (config?: LaneConfig): HarnessPort => ({
   runUnderstand: (input) =>
     Effect.tryPromise({
-      try: () => {
+      try: async () => {
         const cfg = config ?? laneConfigFromEnv();
         const client = laneClientFor(cfg);
-        return runLane(client, {
-          system: laneSystemPrompt(input.role),
-          user: laneUserPrompt(input),
-          tools: LANE_TOOLS,
-          submitTool: submitTool(),
-          executeTool: (name, toolInput) => executeLaneTool(cfg.root, name, toolInput),
-          caps: cfg.caps,
-        });
+        // Tools run in an isolated checkout of HEAD, never the tree prove
+        // measures, so the lane cannot mutate its way to a green check.
+        const checkout = openLaneCheckout(cfg.root);
+        try {
+          return await runLane(client, {
+            system: laneSystemPrompt(input.role),
+            user: laneUserPrompt(input),
+            tools: LANE_TOOLS,
+            submitTool: submitTool(),
+            executeTool: (name, toolInput) => executeLaneTool(checkout.root, name, toolInput),
+            caps: cfg.caps,
+          });
+        } finally {
+          checkout.cleanup();
+        }
       },
       catch: (e) => new StoreError("lane harness understand", e),
     }),

@@ -142,6 +142,8 @@ describe("behaviorProofCheck output style", () => {
     logTail: "1 failed\n",
     log: "running 2 tests\n1 failed\n",
     startedAt: "2026-08-09T00:00:00Z",
+    headSha: "abc1234",
+    porcelainClean: true,
   };
 
   it("normalizes the model's em dashes away when decoding", () => {
@@ -179,6 +181,8 @@ describe("behaviorProofCheck on a truncated diff", () => {
     logTail: "12 passed\n",
     log: "12 passed\n",
     startedAt: "2026-08-09T00:00:00Z",
+    headSha: "abc1234",
+    porcelainClean: true,
   };
 
   it("caps a passing proof at neutral and says how much it reviewed", () => {
@@ -227,6 +231,8 @@ describe("behaviorProofCheck without an Understanding", () => {
     logTail: "12 passed\n",
     log: "running 12 tests\n12 passed\n",
     startedAt: "2026-08-09T00:00:00Z",
+    headSha: "abc1234",
+    porcelainClean: true,
   };
 
   it("lane fails + tests pass: conclusion is neutral, never success", () => {
@@ -251,5 +257,60 @@ describe("behaviorProofCheck without an Understanding", () => {
     const check = behaviorProofCheck({ understanding: null, outcome: null });
     expect(check.conclusion).toBe("neutral");
     expect(check.summary).toContain("Nothing was run to check this change");
+  });
+});
+
+describe("behaviorProofCheck and the dirty-tree guard", () => {
+  const understanding = {
+    what: "w",
+    why: "y",
+    how: "h",
+    proof_refs: [],
+    risks: [],
+  };
+  const base = {
+    command: "pnpm run test",
+    source: "package.json#scripts.test",
+    cwd: "/tmp/r",
+    repo: "acme/pay",
+    durationMs: 0,
+    timedOut: false,
+    startedAt: "2026-08-09T00:00:00Z",
+  };
+
+  it("renders a refused prove as neutral and states the tree changed", () => {
+    const check = behaviorProofCheck({
+      understanding,
+      outcome: {
+        ...base,
+        exitCode: 1,
+        logTail: "",
+        log: "",
+        headSha: "abc1234",
+        porcelainClean: false,
+        refused: "the working tree changed during analysis: HEAD or an uncommitted file moved.",
+      },
+    });
+    // never success: a tree that moved under prove cannot earn a green check.
+    expect(check.conclusion).toBe("neutral");
+    expect(check.title.toLowerCase()).toContain("did not run");
+    expect(check.summary).toContain("working tree changed during analysis");
+  });
+
+  it("shows the workspace head sha and clean flag on a real run", () => {
+    const check = behaviorProofCheck({
+      understanding,
+      outcome: {
+        ...base,
+        exitCode: 0,
+        logTail: "ok\n",
+        log: "ok\n",
+        headSha: "abc1234def",
+        porcelainClean: true,
+      },
+    });
+    expect(check.conclusion).toBe("success");
+    expect(check.summary).toContain("abc1234def");
+    expect(check.summary).toContain("clean");
   });
 });

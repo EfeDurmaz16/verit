@@ -1,10 +1,11 @@
 import { execFile, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { Effect, Either, Schema as S } from "effect";
-import type { ProveCommand, ProveOutcome, ProvePort } from "@verit/ports";
+import type { GitState, ProveCommand, ProveOutcome, ProvePort } from "@verit/ports";
 import { StoreError } from "@verit/ports";
 
 /*
@@ -20,6 +21,10 @@ import { StoreError } from "@verit/ports";
  *  - `run` refuses unless the checkout at `cwd` is the repo the caller named,
  *    so reviewing a stranger's fork can never run their tests in your tree.
  *    Fail closed: no remote, no match, no run.
+ *  - `run` refuses a second way. Given a `baseline` git snapshot from before
+ *    the analysis stage, it re-reads the tree and will not run if HEAD or an
+ *    uncommitted file moved. An earlier stage that edited the tree prove is
+ *    about to measure turns the check neutral, never green.
  *  - Hard timeout, killed as a process group so runners cannot outlive it, and
  *    output is capped so a chatty suite cannot exhaust memory.
  *  - Locally the child env is an allowlist (see proveChildEnv), so keys and
@@ -114,6 +119,31 @@ export const repoSlugAt = async (cwd: string): Promise<string | null> => {
     });
     const m = GITHUB_REMOTE.exec(stdout.trim());
     return m ? `${m[1]}/${m[2]}` : null;
+  } catch {
+    return null;
+  }
+};
+
+const GIT_STATUS_BUFFER = 8 * 1024 * 1024;
+
+/**
+ * A snapshot of the working tree at `cwd`: HEAD plus a hash of the porcelain
+ * status. Null when `cwd` is not a git checkout. The caller records one before
+ * an analysis stage runs and hands it back to `run`, which compares against a
+ * fresh read to see whether the tree moved in between.
+ */
+export const gitState = async (cwd: string): Promise<GitState | null> => {
+  try {
+    const head = await exec("git", ["-C", cwd, "rev-parse", "HEAD"], { timeout: 10_000 });
+    const status = await exec("git", ["-C", cwd, "status", "--porcelain"], {
+      timeout: 30_000,
+      maxBuffer: GIT_STATUS_BUFFER,
+    });
+    return {
+      headSha: head.stdout.trim(),
+      porcelainHash: createHash("sha256").update(status.stdout).digest("hex"),
+      clean: status.stdout.trim() === "",
+    };
   } catch {
     return null;
   }
@@ -265,7 +295,7 @@ export const makeProveRunner = (): ProvePort => ({
       catch: fail("prove repoAt"),
     }),
 
-  run: ({ cwd, expectRepo, timeoutMs }) =>
+  run: ({ cwd, expectRepo, timeoutMs, baseline }) =>
     Effect.tryPromise({
       try: async (): Promise<ProveOutcome> => {
         const dir = resolve(cwd);
@@ -282,13 +312,39 @@ export const makeProveRunner = (): ProvePort => ({
             `no verification command found in ${dir} (set VERIT_PROVE_CMD to name one)`,
           );
         }
+        // Read the tree as late as possible, right before the command runs, and
+        // refuse if it moved since the analysis stage's snapshot.
+        const state = await gitState(dir);
         const startedAt = new Date().toISOString();
-        const raw = await spawnCaptured(cmd, dir, timeoutMs ?? DEFAULT_TIMEOUT_MS);
-        return {
+        const moved =
+          baseline != null &&
+          (state === null ||
+            state.headSha !== baseline.headSha ||
+            state.porcelainHash !== baseline.porcelainHash);
+        const common = {
           command: shellDisplay(cmd),
           source: cmd.source,
           cwd: dir,
           repo: local,
+          headSha: state?.headSha ?? null,
+          porcelainClean: state?.clean ?? false,
+        };
+        if (moved) {
+          return {
+            ...common,
+            exitCode: 1,
+            durationMs: 0,
+            timedOut: false,
+            logTail: "",
+            log: "",
+            startedAt,
+            refused:
+              "the working tree changed during analysis: HEAD or an uncommitted file differs from the snapshot taken before the analysis stage ran. prove will not measure a tree that moved under it, so this check stays neutral.",
+          };
+        }
+        const raw = await spawnCaptured(cmd, dir, timeoutMs ?? DEFAULT_TIMEOUT_MS);
+        return {
+          ...common,
           exitCode: raw.exitCode,
           durationMs: raw.durationMs,
           timedOut: raw.timedOut,

@@ -171,6 +171,19 @@ export interface ProveCommand {
   readonly source: string;
 }
 
+/**
+ * A snapshot of a git working tree, used to tell whether it moved across a
+ * window of time. HEAD catches a ref swap; the porcelain hash catches any
+ * staged or unstaged file change even when HEAD holds still.
+ */
+export interface GitState {
+  readonly headSha: string;
+  /** sha256 of `git status --porcelain`: any working-tree change moves it. */
+  readonly porcelainHash: string;
+  /** True when the porcelain output was empty: no uncommitted changes. */
+  readonly clean: boolean;
+}
+
 export interface ProveOutcome {
   /** Display form of the argv, for humans and for the ProofRef label. */
   readonly command: string;
@@ -185,13 +198,25 @@ export interface ProveOutcome {
   /** The whole captured output, capped by the runner. Kept as a blob, not a row. */
   readonly log: string;
   readonly startedAt: string;
+  /** HEAD of the checkout when prove ran, or null when cwd is not a git repo. */
+  readonly headSha: string | null;
+  /** True when the checkout had no uncommitted changes when prove ran. */
+  readonly porcelainClean: boolean;
+  /**
+   * Set when prove refused to run: the reason, in plain words. The command did
+   * not execute, so the verdict is neutral, never success. Left unset on a run
+   * that actually ran, whatever its exit code.
+   */
+  readonly refused?: string;
 }
 
 /**
  * Runs the target repo's own verification command and reports what happened.
  * `run` is a trust boundary: it refuses unless the checkout at `cwd` is the
  * repo named by `expectRepo`, so a review of someone else's PR can never
- * execute anything in the operator's tree.
+ * execute anything in the operator's tree. It refuses a second way when
+ * `baseline` is set and the tree moved since that snapshot: prove will not
+ * measure a checkout that changed under it while the analysis stage ran.
  */
 export interface ProvePort {
   readonly detect: (cwd: string) => Effect.Effect<ProveCommand | null, StoreError>;
@@ -201,6 +226,9 @@ export interface ProvePort {
     cwd: string;
     expectRepo: string;
     timeoutMs?: number;
+    /** Working-tree snapshot from before the analysis stage. When the tree
+        differs by prove time, run refuses and returns a neutral outcome. */
+    baseline?: GitState | null;
   }) => Effect.Effect<ProveOutcome, StoreError>;
 }
 

@@ -53,11 +53,13 @@ export const behaviorProofCheck = (input: {
   const proofTitle =
     outcome === null
       ? "No proof was run."
-      : outcome.timedOut
-        ? `Proof timed out: ${outcome.command}`
-        : outcome.exitCode === 0
-          ? `Proof passed: ${outcome.command}`
-          : `Proof failed: ${outcome.command} (exit ${outcome.exitCode})`;
+      : outcome.refused != null
+        ? "Proof did not run: the working tree changed during analysis."
+        : outcome.timedOut
+          ? `Proof timed out: ${outcome.command}`
+          : outcome.exitCode === 0
+            ? `Proof passed: ${outcome.command}`
+            : `Proof failed: ${outcome.command} (exit ${outcome.exitCode})`;
   const title =
     u === null
       ? `Analysis did not complete. ${proofTitle}`
@@ -96,9 +98,17 @@ export const behaviorProofCheck = (input: {
     lines.push(
       "Nothing was run to check this change. This check proves nothing about behavior.",
     );
+  } else if (outcome.refused != null) {
+    lines.push(
+      `The proof did not run because ${outcome.refused}`,
+      "",
+      `Workspace: HEAD \`${outcome.headSha ?? "unknown"}\` when prove checked.`,
+    );
   } else {
     lines.push(
       `\`${outcome.command}\` ran in \`${outcome.repo}\` and exited **${outcome.exitCode}**${outcome.timedOut ? " (timed out)" : ""} after ${(outcome.durationMs / 1000).toFixed(1)}s.`,
+      "",
+      `Workspace: HEAD \`${outcome.headSha ?? "unknown"}\`, working tree ${outcome.porcelainClean ? "clean" : "dirty"} at prove time.`,
       "",
       `Command source: \`${outcome.source}\``,
       "",

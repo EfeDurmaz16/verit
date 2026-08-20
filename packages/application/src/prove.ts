@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import type { ProofRef, Understanding } from "@verit/domain";
-import type { DocumentStore, ProveOutcome, ProvePort, StoreError } from "@verit/ports";
+import type { DocumentStore, GitState, ProveOutcome, ProvePort, StoreError } from "@verit/ports";
 import { contentHash } from "./edges";
 
 /** Marks the refs this verb owns, so a re-run replaces its own evidence only. */
@@ -9,18 +9,27 @@ export const PROVE_PREFIX = "prove: ";
 export const isProveRef = (r: ProofRef): boolean => r.label.startsWith(PROVE_PREFIX);
 
 const verdict = (o: ProveOutcome): string =>
-  o.timedOut ? "timed out" : o.exitCode === 0 ? "passed" : "failed";
+  o.refused != null
+    ? "refused"
+    : o.timedOut
+      ? "timed out"
+      : o.exitCode === 0
+        ? "passed"
+        : "failed";
 
 /**
  * The evidence a run actually produced. A non-zero exit is carried as
  * `status: "fail"` and said plainly in the label. A failed proof is a result,
- * not something to soften.
+ * not something to soften. A refused run never counts as a pass.
  */
 export const proveRef = (o: ProveOutcome): ProofRef => ({
   kind: "test",
   label: `${PROVE_PREFIX}${o.command}, ${verdict(o)}`,
-  value: `exit ${o.exitCode} · ${(o.durationMs / 1000).toFixed(1)}s · ${o.source} · ${o.cwd}`,
-  status: o.exitCode === 0 ? "pass" : "fail",
+  value:
+    o.refused != null
+      ? `refused: ${o.refused}`
+      : `exit ${o.exitCode} · ${(o.durationMs / 1000).toFixed(1)}s · ${o.source} · ${o.cwd}`,
+  status: o.exitCode === 0 && o.refused == null ? "pass" : "fail",
   log: o.logTail,
 });
 
@@ -30,15 +39,24 @@ export const withProveRef = (u: Understanding, o: ProveOutcome): Understanding =
 });
 
 export const proveLogBody = (o: ProveOutcome): string =>
-  [
-    `$ ${o.command}`,
-    `cwd:   ${o.cwd} (${o.repo})`,
-    `from:  ${o.source}`,
-    `began: ${o.startedAt}`,
-    `exit:  ${o.exitCode} after ${(o.durationMs / 1000).toFixed(1)}s${o.timedOut ? " (timed out)" : ""}`,
-    "",
-    o.log || o.logTail,
-  ].join("\n");
+  o.refused != null
+    ? [
+        `$ ${o.command}`,
+        `cwd:   ${o.cwd} (${o.repo})`,
+        `head:  ${o.headSha ?? "unknown"}`,
+        `began: ${o.startedAt}`,
+        `prove refused: ${o.refused}`,
+      ].join("\n")
+    : [
+        `$ ${o.command}`,
+        `cwd:   ${o.cwd} (${o.repo})`,
+        `head:  ${o.headSha ?? "unknown"}, tree ${o.porcelainClean ? "clean" : "dirty"}`,
+        `from:  ${o.source}`,
+        `began: ${o.startedAt}`,
+        `exit:  ${o.exitCode} after ${(o.durationMs / 1000).toFixed(1)}s${o.timedOut ? " (timed out)" : ""}`,
+        "",
+        o.log || o.logTail,
+      ].join("\n");
 
 /**
  * The real `prove` verb: run the target repo's own verification command, hang
@@ -53,12 +71,15 @@ export const runProve = (deps: { prove: ProvePort; docs: DocumentStore }) =>
   /** Null when the lane produced no analysis. Prove still runs and logs. */
   understanding: Understanding | null;
   timeoutMs?: number;
+  /** Git snapshot from before the lane ran. Prove refuses if the tree moved. */
+  baseline?: GitState | null;
 }): Effect.Effect<{ understanding: Understanding | null; outcome: ProveOutcome }, StoreError> =>
   Effect.gen(function* () {
     const outcome = yield* deps.prove.run({
       cwd: input.cwd,
       expectRepo: input.expectRepo,
       timeoutMs: input.timeoutMs,
+      baseline: input.baseline,
     });
     const understanding =
       input.understanding === null ? null : withProveRef(input.understanding, outcome);

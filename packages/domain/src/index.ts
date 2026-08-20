@@ -328,9 +328,13 @@ export const diffCoveragePercent = (diffChars: number): number =>
  * on one surface and neutral on the other. No prove run is never a success.
  */
 export const proofVerdict = (
-  outcome: { readonly exitCode: number } | null | undefined,
+  outcome: { readonly exitCode: number; readonly refused?: string } | null | undefined,
 ): "success" | "failure" | "neutral" =>
-  outcome == null ? "neutral" : outcome.exitCode === 0 ? "success" : "failure";
+  outcome == null || outcome.refused != null
+    ? "neutral"
+    : outcome.exitCode === 0
+      ? "success"
+      : "failure";
 
 /** The pull request a run reviewed, as the dashboard lists it. */
 export const RunUploadPr = S.Struct({
