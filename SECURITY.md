@@ -23,6 +23,13 @@ verit runs code, so the sharp edges are worth naming.
   the exit code of the command that ran, and `neutral` when nothing ran. Any
   path that produces a passing Check without a passing run is a vulnerability,
   not a cosmetic bug.
+- **An analysis stage mutating the tree prove measures.** The lane runs
+  model-chosen tools, bash included, in an isolated checkout of HEAD, never the
+  workspace prove verifies. prove also snapshots that workspace before the lane
+  and refuses if HEAD or an uncommitted file moved by the time it runs, so the
+  Check goes neutral. A way to make a lane tool change the tree prove measures,
+  or to make prove score a tree that shifted during analysis, earns a green
+  Check without a real passing run and is in scope.
 - **Command injection through pull request content.** Titles, branch names,
   bodies and diffs are attacker controlled on a fork pull request. Commands are
   built as argv, never as shell strings. A way to break out of that is in scope.
@@ -32,6 +39,11 @@ verit runs code, so the sharp edges are worth naming.
   inside the sealed session cookie. Ingest tokens are stored as a sha256 digest.
   Anything that writes either to the database, to a log, or to a proof page is
   in scope.
+- **A lane tool reading a secret.** The lane tool subprocess environment is an
+  allowlist: PATH, language toolchain vars, npm config, and the keys the
+  operator names in `VERIT_LANE_ENV`. No token or key reaches a lane tool, on
+  any platform, GitHub Actions included. A way to get `GITHUB_TOKEN`, an ingest
+  token, or a model API key into a lane tool is in scope.
 
 ## What is not in scope
 
