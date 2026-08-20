@@ -262,14 +262,15 @@ describe("behaviorProofCheck without an Understanding", () => {
 });
 
 describe("review verbs carry no stubs", () => {
-  // The blocker: stubRisk injected a fabricated reviewer risk into every run
-  // and stubPatch printed placeholder patch text. Both are deleted. Nothing
-  // named "stub" survives on the product surface.
+  // The blocker: the deleted review verbs injected a fabricated reviewer risk
+  // into every run and printed placeholder patch text. Both are gone. Nothing
+  // named for a stub survives on the product surface. The key scan catches any
+  // export carrying the word, so it subsumes naming the old verbs one by one.
   it("exports no stub verb", () => {
     const surface = application as Record<string, unknown>;
-    expect(surface.stubRisk).toBeUndefined();
-    expect(surface.stubPatch).toBeUndefined();
-    for (const name of Object.keys(surface)) {
+    const names = Object.keys(surface);
+    expect(names.length).toBeGreaterThan(0);
+    for (const name of names) {
       expect(name.toLowerCase()).not.toContain("stub");
     }
   });
