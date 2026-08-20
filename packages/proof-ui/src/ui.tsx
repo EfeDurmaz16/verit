@@ -79,9 +79,17 @@ const RISK_DOT: Record<Risk, string> = {
 };
 
 export function RiskDot({ level, label }: { level: Risk; label?: boolean }) {
+  // Risk is otherwise color-only: give the dot an accessible name so the level
+  // reads to a screen reader and in greyscale. When the text label is shown it
+  // carries the meaning, so the dot is decorative there.
   return (
     <span className="inline-flex items-center gap-1.5 shrink-0">
-      <span className={clsx("size-[7px] rounded-full", RISK_DOT[level])} />
+      <span
+        className={clsx("size-[7px] rounded-full", RISK_DOT[level])}
+        role={label ? undefined : "img"}
+        aria-label={label ? undefined : `${RISK_LABEL[level]} risk`}
+        aria-hidden={label ? true : undefined}
+      />
       {label && (
         <span className="text-[11px] text-ink-3">{RISK_LABEL[level]}</span>
       )}
@@ -96,27 +104,35 @@ export function StatusIcon({
 }) {
   if (status === "pass")
     return (
-      <span className="inline-flex size-3.5 items-center justify-center rounded-full bg-ok-soft text-ok shrink-0">
-        <svg viewBox="0 0 10 10" className="size-2" fill="none" stroke="currentColor" strokeWidth="2">
+      <span
+        role="img"
+        aria-label="passed"
+        className="inline-flex size-3.5 items-center justify-center rounded-full bg-ok-soft text-ok shrink-0"
+      >
+        <svg viewBox="0 0 10 10" className="size-2" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
           <path d="M1.5 5.5 4 8l4.5-6" />
         </svg>
       </span>
     );
   if (status === "fail")
     return (
-      <span className="inline-flex size-3.5 items-center justify-center rounded-full bg-danger-soft text-danger shrink-0">
-        <svg viewBox="0 0 10 10" className="size-2" fill="none" stroke="currentColor" strokeWidth="2">
+      <span
+        role="img"
+        aria-label="failed"
+        className="inline-flex size-3.5 items-center justify-center rounded-full bg-danger-soft text-danger shrink-0"
+      >
+        <svg viewBox="0 0 10 10" className="size-2" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
           <path d="M2 2l6 6M8 2 2 8" />
         </svg>
       </span>
     );
   if (status === "running")
     return (
-      <span className="inline-flex size-3.5 items-center justify-center shrink-0">
+      <span role="img" aria-label="running" className="inline-flex size-3.5 items-center justify-center shrink-0">
         <span className="size-2.5 rounded-full border-[1.5px] border-line-strong border-t-accent animate-spin" />
       </span>
     );
-  return <span className="size-3.5 rounded-full bg-surface-3 shrink-0" />;
+  return <span role="img" aria-label="skipped" className="size-3.5 rounded-full bg-surface-3 shrink-0" />;
 }
 
 const LANG_COLOR: Record<string, string> = {

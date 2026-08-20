@@ -80,7 +80,7 @@ function Text({ props }: { props: P }) {
   return (
     <p
       className={clsx(
-        "max-w-[72ch] whitespace-pre-line text-[13px]",
+        "max-w-[72ch] whitespace-pre-line break-words text-[13px]",
         str(props.tone) === "muted" ? "text-ink-3" : "text-ink-2",
       )}
     >
@@ -92,8 +92,8 @@ function Text({ props }: { props: P }) {
 function Summary({ props }: { props: P }) {
   return (
     <div>
-      <p className="mb-1.5 text-[15px] font-medium leading-snug">{str(props.headline)}</p>
-      <p className="max-w-[72ch] text-[13px] text-ink-2">{str(props.body)}</p>
+      <p className="mb-1.5 break-words text-[15px] font-medium leading-snug">{str(props.headline)}</p>
+      <p className="max-w-[72ch] break-words text-[13px] text-ink-2">{str(props.body)}</p>
     </div>
   );
 }
@@ -109,7 +109,7 @@ function Callout({ props }: { props: P }) {
   return (
     <div
       className={clsx(
-        "rounded-md px-3 py-2 text-[12.5px] font-medium",
+        "rounded-md px-3 py-2 text-[12.5px] font-medium break-words",
         CALLOUT[str(props.tone, "info")] ?? CALLOUT.info,
       )}
     >
@@ -153,6 +153,16 @@ function ReviewPath({ props }: { props: P }) {
           return (
             <li
               key={i}
+              role="button"
+              tabIndex={0}
+              aria-label={`Step ${i + 1}: ${str(s.title)}`}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  select({ kind: "step", payload: s });
+                  flashFiles(arr<string>(s.files));
+                }
+              }}
               onClick={() => {
                 select({ kind: "step", payload: s });
                 flashFiles(arr<string>(s.files));
@@ -317,7 +327,7 @@ function RiskColumn({ title, hint, items }: { title: string; hint: string; items
           {items.map((r, i) => (
             <li key={i}>
               <span className="font-mono text-[11px] text-ink-3">{str(r.area)}</span>
-              <p className="text-[12px] leading-snug text-ink-2">{str(r.note)}</p>
+              <p className="break-words text-[12px] leading-snug text-ink-2">{str(r.note)}</p>
             </li>
           ))}
         </ul>
@@ -465,7 +475,14 @@ function FileGroup({ props }: { props: P }) {
               key={i}
               role="button"
               tabIndex={0}
-              onKeyDown={(e) => e.key === "Enter" && select({ kind: "file", payload: f })}
+              aria-label={`Open ${path} in the diff`}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  select({ kind: "file", payload: f });
+                  flashFiles([path]);
+                }
+              }}
               onClick={() => {
                 select({ kind: "file", payload: f });
                 flashFiles([path]);
@@ -514,7 +531,13 @@ function CIStatus({ props }: { props: P }) {
               key={i}
               role="button"
               tabIndex={0}
-              onKeyDown={(e) => e.key === "Enter" && select({ kind: "check", payload: c })}
+              aria-label={`Check ${str(c.name)}: ${status}`}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  select({ kind: "check", payload: c });
+                }
+              }}
               onClick={() => select({ kind: "check", payload: c })}
               className={clsx(
                 "cursor-pointer px-3 py-2 transition-colors",
@@ -692,7 +715,7 @@ function ArchGraph({ props }: { props: P }) {
   });
 
   return (
-    <div className="relative h-[300px] rounded-lg border border-line bg-surface">
+    <div className="relative h-[300px] overflow-hidden rounded-lg border border-line bg-surface">
       <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
         {edges.map((e, i) => {
           const a = pos.get(str(e.from));
@@ -826,7 +849,7 @@ function Understanding({ props }: { props: P }) {
             <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-3">
               {label}
             </div>
-            <p className="mt-0.5 max-w-[72ch] whitespace-pre-line text-[13px] text-ink-2">{body}</p>
+            <p className="mt-0.5 max-w-[72ch] whitespace-pre-line break-words text-[13px] text-ink-2">{body}</p>
           </div>
         ))}
     </div>
@@ -852,7 +875,7 @@ function Meta({ props }: { props: P }) {
           </div>
           <ul className="mt-1 flex flex-col gap-1">
             {outOfScope.map((s, i) => (
-              <li key={i} className="text-[12px] leading-snug text-ink-2">
+              <li key={i} className="break-words text-[12px] leading-snug text-ink-2">
                 {s}
               </li>
             ))}
