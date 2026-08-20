@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Either } from "effect";
+import * as application from "./index";
 import { behaviorProofCheck } from "./check";
 import { compileReviewPack } from "./compiler";
 import { buildWikiHits, buildReviewContext } from "./context";
@@ -257,6 +258,36 @@ describe("behaviorProofCheck without an Understanding", () => {
     const check = behaviorProofCheck({ understanding: null, outcome: null });
     expect(check.conclusion).toBe("neutral");
     expect(check.summary).toContain("Nothing was run to check this change");
+  });
+});
+
+describe("review verbs carry no stubs", () => {
+  // The blocker: stubRisk injected a fabricated reviewer risk into every run
+  // and stubPatch printed placeholder patch text. Both are deleted. Nothing
+  // named "stub" survives on the product surface.
+  it("exports no stub verb", () => {
+    const surface = application as Record<string, unknown>;
+    expect(surface.stubRisk).toBeUndefined();
+    expect(surface.stubPatch).toBeUndefined();
+    for (const name of Object.keys(surface)) {
+      expect(name.toLowerCase()).not.toContain("stub");
+    }
+  });
+
+  it("counts zero reviewer risks when the lane produced none", () => {
+    const check = behaviorProofCheck({
+      understanding: {
+        what: "w",
+        why: "y",
+        how: "h",
+        proof_refs: [],
+        // one author hint, no reviewer risk: the count must read zero.
+        risks: [{ area: "a", note: "author hint", source: "author" }],
+      },
+      outcome: null,
+    });
+    expect(check.summary).toContain("0 found by review");
+    expect(check.summary.toLowerCase()).not.toContain("stub");
   });
 });
 

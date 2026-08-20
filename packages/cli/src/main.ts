@@ -10,8 +10,6 @@ import {
   inferSameAuthorPathEdges,
   runProve,
   runReviewUnderstand,
-  stubPatch,
-  stubRisk,
 } from "@verit/application";
 import { ingestRepoPath } from "@verit/adapter-fs-ingest";
 import { makeGithubChecks, makeGithubVcs } from "@verit/adapter-github";
@@ -192,8 +190,7 @@ const runUnderstandPipeline = async (input: {
       nowIso: new Date().toISOString(),
     }),
   );
-  let understanding =
-    result.understanding === null ? null : stubRisk(result.understanding);
+  let understanding = result.understanding;
   if (understanding === null) {
     console.error("understand: the lane produced no Understanding, this run has no analysis");
   }
@@ -209,9 +206,8 @@ const runUnderstandPipeline = async (input: {
     understanding = proved.understanding;
     outcome = proved.outcome;
   }
-  const patch = stubPatch();
-  // Re-render with prove/risk stubs so Spec matches enriched Understanding.
-  // Without an Understanding there is nothing to render and no spec to write.
+  // Re-render so the Spec matches the Understanding after prove hung its ref on
+  // it. Without an Understanding there is nothing to render and no spec to write.
   let enrichedSpec: unknown = null;
   let specPath: string | null = null;
   if (understanding !== null) {
@@ -232,7 +228,6 @@ const runUnderstandPipeline = async (input: {
               kind: "co-changed",
             }))
           : [],
-      suggestedPatch: patch.diff || undefined,
     });
     await Effect.runPromise(docs.saveUnderstandingJson(result.runId, understanding));
     const blob = makeLocalBlob();
@@ -248,7 +243,6 @@ const runUnderstandPipeline = async (input: {
     what: understanding?.what ?? null,
     risks: understanding?.risks.length ?? 0,
     proofRefs: understanding?.proof_refs.length ?? 0,
-    patch: patch.summary,
     specPath,
     understanding,
     prove: outcome
