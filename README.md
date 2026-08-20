@@ -138,9 +138,15 @@ pnpm workspace          # http://localhost:3000
 ```
 
 Node 22 and pnpm 11. Needs `gh` authenticated, plus `VERIT_LANE_PROVIDER`,
-`VERIT_LANE_MODEL` and an API key for live analysis. No coding CLI, no Docker,
-no database, no account. The graph store falls back to memory and runs land in
-`.data/`.
+`VERIT_LANE_MODEL` and an API key for live analysis. On that provider path the
+review is the same built-in HTTP lane the Action runs, straight against the
+model API: no coding CLI, no Docker, no database, no account. The graph store
+falls back to memory and runs land in `.data/`.
+
+With no `VERIT_LANE_PROVIDER` set, the workspace falls back to a headless
+coding CLI, `codex` by default or `claude`/`cursor` via `VERIT_LANE_HARNESS`,
+and needs that binary on your `PATH`. The command-bar follow-ups drive that
+same CLI, so they need it too. The core review does not.
 
 Run the same pipeline headless:
 

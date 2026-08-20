@@ -114,6 +114,9 @@ importers:
       '@verit/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@verit/lane':
+        specifier: workspace:*
+        version: link:../../packages/lane
       '@verit/ports':
         specifier: workspace:*
         version: link:../../packages/ports

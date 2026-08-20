@@ -1,9 +1,11 @@
-/* Lane harness selection.
+/* Legacy coding-CLI lane selection.
 
-   The analysis lane is one headless coding CLI behind a single contract: build
-   argv, stream JSONL on stdout, reduce each line to a session id or a line of
-   activity. Codex is the default. Claude Code and the Cursor CLI agent are drop
-   in alternatives, picked with VERIT_LANE_HARNESS.
+   This is the fallback path, reached only when no VERIT_LANE_PROVIDER is set.
+   The default is the harness-independent HTTP lane in @verit/lane (see
+   sessions.ts). Here the lane is one headless coding CLI behind a single
+   contract: build argv, stream JSONL on stdout, reduce each line to a session
+   id or a line of activity. Codex is the default CLI. Claude Code and the
+   Cursor CLI agent are drop-in alternatives, picked with VERIT_LANE_HARNESS.
 
    Everything here is pure. The spawning, streaming and SSE plumbing lives in
    lane.ts, so arg building and event parsing stay testable without a process. */

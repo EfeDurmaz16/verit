@@ -85,7 +85,10 @@ export const laneChildEnv = (base: NodeJS.ProcessEnv = process.env): NodeJS.Proc
       .map((k) => k.trim())
       .filter(Boolean),
   );
-  const child: NodeJS.ProcessEnv = {};
+  // A plain dict, not ProcessEnv: the scrubbed env is built from nothing and
+  // may legitimately omit NODE_ENV, which some consumers (Next) type as always
+  // present. The cast on return states that intent.
+  const child: Record<string, string> = {};
   for (const [key, value] of Object.entries(base)) {
     if (value === undefined) continue;
     const allowed =
@@ -94,7 +97,9 @@ export const laneChildEnv = (base: NodeJS.ProcessEnv = process.env): NodeJS.Proc
       LANE_ENV_ALLOWED_PREFIXES.some((p) => key.startsWith(p));
     if (allowed) child[key] = value;
   }
-  return { ...child, ...LANE_ENV_FORCED };
+  // forced values win over anything copied from base
+  for (const [key, value] of Object.entries(LANE_ENV_FORCED)) child[key] = value;
+  return child as NodeJS.ProcessEnv;
 };
 
 /** Resolve a model-supplied path inside root, or null when it escapes. */
