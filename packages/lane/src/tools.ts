@@ -1,7 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync, realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
-import { proveChildEnv } from "@verit/adapter-prove";
 import type { LaneTool } from "./client";
 
 /*
@@ -12,10 +11,13 @@ import type { LaneTool } from "./client";
  *    resolved, realpathed, and rejected when they land outside, so `../` and
  *    symlink escapes read nothing.
  *  - bash is bash. The command string is model output and the mitigation is
- *    the environment, not the parser: children get the SAME allowlist scrub as
- *    prove (proveChildEnv), with the lane's own key vars deleted first, so no
- *    API key ever reaches a tool subprocess. Plus a hard timeout and a capped
- *    buffer.
+ *    the environment, not the parser: the child env is an allowlist the lane
+ *    builds itself (laneChildEnv). It never starts from the full environment
+ *    and never widens on CI, so no token or key ever reaches a tool subprocess
+ *    on any platform. Plus a hard timeout and a capped buffer.
+ *  - bash runs in an isolated checkout, not the tree prove measures. See
+ *    openLaneCheckout in ./checkout: the lane cannot mutate the workspace a
+ *    green Check depends on.
  *  - Every result is truncated with an explicit marker, so one chatty command
  *    cannot flood the context window silently.
  */
@@ -30,19 +32,69 @@ export const truncateResult = (s: string, cap: number = TOOL_RESULT_CHARS): stri
     ? s
     : `${s.slice(0, cap)}\n[verit-lane: truncated, showing first ${cap} of ${s.length} chars]`;
 
-/** Env vars that must never reach a tool subprocess, whatever proveChildEnv passes. */
-const LANE_KEY_VARS = ["VERIT_LANE_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"] as const;
+/*
+ * Env var names a lane tool subprocess may inherit. Non-secret infrastructure
+ * only: the vars a toolchain needs to run git, node, cargo, python. No token,
+ * key, or credential is on this list, ever. The lane keeps its own copy rather
+ * than reusing the prove adapter's, because the lane's boundary is stricter:
+ * prove passes the whole environment through on GitHub Actions where the runner
+ * is the isolation boundary, and the lane must never do that. Two boundaries,
+ * two lists, so widening one cannot silently widen the other.
+ */
+const LANE_ENV_ALLOWLIST = new Set([
+  "PATH",
+  "HOME",
+  "TMPDIR",
+  "TEMP",
+  "TMP",
+  "LANG",
+  "LC_ALL",
+  "SHELL",
+  "USER",
+  "CI",
+  "NODE_ENV",
+  // language toolchains
+  "CARGO_HOME",
+  "RUSTUP_HOME",
+  "GOPATH",
+  "GOROOT",
+  "GOCACHE",
+  "GOMODCACHE",
+  "PNPM_HOME",
+  "NVM_DIR",
+  "VOLTA_HOME",
+  "PYTHONPATH",
+  "VIRTUAL_ENV",
+]);
+
+const LANE_ENV_ALLOWED_PREFIXES = ["npm_config_"];
+
+const LANE_ENV_FORCED = { CI: "1", FORCE_COLOR: "0", NO_COLOR: "1" };
 
 /**
- * The environment for lane tool subprocesses: the prove allowlist scrub, with
- * the lane's key vars deleted before the scrub even runs. proveChildEnv passes
- * the full env through on GitHub Actions; the deletion holds there too, so
- * "never pass API keys into tool subprocesses" has no CI exception.
+ * The environment for lane tool subprocesses. Built as an allowlist: the child
+ * starts empty and only named-safe vars are copied in, so nothing unlisted can
+ * leak by accident, on any platform, CI included. The one escape hatch is
+ * VERIT_LANE_ENV, a comma-separated list of extra keys the operator chooses to
+ * pass through. API keys and tokens are never on the base list.
  */
 export const laneChildEnv = (base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv => {
-  const withoutKeys = { ...base };
-  for (const key of LANE_KEY_VARS) delete withoutKeys[key];
-  return proveChildEnv(withoutKeys);
+  const declared = new Set(
+    (base.VERIT_LANE_ENV ?? "")
+      .split(",")
+      .map((k) => k.trim())
+      .filter(Boolean),
+  );
+  const child: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(base)) {
+    if (value === undefined) continue;
+    const allowed =
+      LANE_ENV_ALLOWLIST.has(key) ||
+      declared.has(key) ||
+      LANE_ENV_ALLOWED_PREFIXES.some((p) => key.startsWith(p));
+    if (allowed) child[key] = value;
+  }
+  return { ...child, ...LANE_ENV_FORCED };
 };
 
 /** Resolve a model-supplied path inside root, or null when it escapes. */

@@ -32,37 +32,70 @@ describe("truncateResult", () => {
 });
 
 describe("laneChildEnv", () => {
-  it("scrubs everything off the prove allowlist, lane keys first", () => {
+  it("keeps the toolchain vars a tool needs and forces the CI markers", () => {
     const env = laneChildEnv({
       PATH: "/usr/bin",
       HOME: "/home/u",
-      ANTHROPIC_API_KEY: "sk-a",
-      OPENAI_API_KEY: "sk-o",
-      VERIT_LANE_API_KEY: "sk-l",
+      CARGO_HOME: "/home/u/.cargo",
+      npm_config_registry: "https://registry.npmjs.org",
+      NODE_ENV: "test",
       SOME_RANDOM_SECRET: "s",
     });
     expect(env.PATH).toBe("/usr/bin");
-    expect(env.ANTHROPIC_API_KEY).toBeUndefined();
-    expect(env.OPENAI_API_KEY).toBeUndefined();
-    expect(env.VERIT_LANE_API_KEY).toBeUndefined();
+    expect(env.HOME).toBe("/home/u");
+    expect(env.CARGO_HOME).toBe("/home/u/.cargo");
+    expect(env.npm_config_registry).toBe("https://registry.npmjs.org");
+    expect(env.NODE_ENV).toBe("test");
     expect(env.SOME_RANDOM_SECRET).toBeUndefined();
     expect(env.CI).toBe("1");
+    expect(env.NO_COLOR).toBe("1");
   });
 
-  it("drops the lane keys even on GitHub Actions, where prove passes the env through", () => {
+  it("passes only the keys the operator names in VERIT_LANE_ENV", () => {
+    const env = laneChildEnv({
+      PATH: "/usr/bin",
+      VERIT_LANE_ENV: "DATABASE_URL, MY_FLAG",
+      DATABASE_URL: "postgres://localhost/x",
+      MY_FLAG: "on",
+      OTHER: "nope",
+    });
+    expect(env.DATABASE_URL).toBe("postgres://localhost/x");
+    expect(env.MY_FLAG).toBe("on");
+    expect(env.OTHER).toBeUndefined();
+  });
+
+  // The blocker: on GitHub Actions the lane bash used to inherit the whole
+  // environment, so GITHUB_TOKEN and every planted secret reached a
+  // model-driven subprocess. The allowlist must hold on CI too, with no
+  // exception. Ten secret shapes go in, none survive.
+  it("lets no secret reach a lane subprocess, even on GitHub Actions", () => {
+    const secrets = {
+      GITHUB_TOKEN: "ghp_deadbeef",
+      VERIT_INGEST_TOKEN: "vit_deadbeef",
+      ANTHROPIC_API_KEY: "sk-ant-deadbeef",
+      OPENAI_API_KEY: "sk-deadbeef",
+      AWS_SECRET_ACCESS_KEY: "aws/deadbeef",
+      NPM_TOKEN: "npm_deadbeef",
+      RELEASE_SIGNING_SECRET: "s3cr3t",
+      DB_PASSWORD: "hunter2",
+      STRIPE_SECRET_KEY: "sk_live_deadbeef",
+      SLACK_BEARER_TOKEN: "Bearer deadbeef",
+    };
     const env = laneChildEnv({
       GITHUB_ACTIONS: "true",
-      GITHUB_TOKEN: "gh-token",
-      ANTHROPIC_API_KEY: "sk-a",
-      OPENAI_API_KEY: "sk-o",
-      VERIT_LANE_API_KEY: "sk-l",
+      PATH: "/usr/bin",
+      ...secrets,
     });
-    // Actions passthrough keeps workflow env,
-    expect(env.GITHUB_TOKEN).toBe("gh-token");
-    // but the lane's own keys never reach a tool subprocess.
-    expect(env.ANTHROPIC_API_KEY).toBeUndefined();
-    expect(env.OPENAI_API_KEY).toBeUndefined();
-    expect(env.VERIT_LANE_API_KEY).toBeUndefined();
+    // the tool can still run: PATH survives.
+    expect(env.PATH).toBe("/usr/bin");
+    // none of the ten secret shapes made it through.
+    for (const key of Object.keys(secrets)) {
+      expect(env[key]).toBeUndefined();
+    }
+    // catch any *_TOKEN / *_KEY / *_SECRET / *_PASSWORD the loop missed.
+    for (const key of Object.keys(env)) {
+      expect(key).not.toMatch(/_TOKEN$|_KEY$|_SECRET$|_PASSWORD$/);
+    }
   });
 });
 
