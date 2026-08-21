@@ -50,6 +50,17 @@ Never make the Check Run conclusion anything other than the real exit code of
 the command that ran. A green check that nothing earned is the one bug this
 project cannot ship.
 
+## What to expect after you open something
+
+A pull request or issue gets a first reply within 72 hours. That reply is
+triage, not a promise of a merge or a fix: it says whether the maintainer
+agrees with the direction, needs more from you, or is passing for now, and
+why. The same 72-hour window applies to a security report, in
+[`SECURITY.md`](SECURITY.md).
+
+If 72 hours pass with nothing, that is a bug in the process, not a signal
+to give up. Ping the pull request or issue directly.
+
 ## Reporting a vulnerability
 
 Do not open an issue. See [`SECURITY.md`](SECURITY.md).
