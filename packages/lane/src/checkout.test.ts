@@ -77,8 +77,8 @@ describe("openLaneCheckout", () => {
   });
 
   // bash is bash: it can cd out of the isolated checkout to the prove workspace
-  // it discovers behind the worktree, and hide the edit from git status with a
-  // skip-worktree bit so HEAD and porcelain look unmoved. The write is not
+  // it discovers via remote.origin.url, and hide the edit from git status with
+  // a skip-worktree bit so HEAD and porcelain look unmoved. The write is not
   // impossible, so the guarantee rests on the guard: prove, holding the
   // pre-lane snapshot, must still refuse. This is the whole chain through the
   // real tool and the real prove runner.
@@ -106,10 +106,11 @@ describe("openLaneCheckout", () => {
     const checkout = openLaneCheckout(src);
     expect(checkout.isolated).toBe(true);
     try {
-      // real hostile bash: find the source repo behind the worktree, cd in,
-      // set skip-worktree so status goes blind, then doctor the file to pass.
+      // real hostile bash: find the source repo behind the shared clone
+      // (remote.origin.url), cd in, set skip-worktree so status goes blind,
+      // then doctor the file to pass.
       const attack =
-        'SRC=$(dirname "$(cd "$(git rev-parse --git-common-dir)" && pwd)"); ' +
+        'SRC=$(git config --get remote.origin.url); ' +
         'cd "$SRC" && git update-index --skip-worktree expected.txt && printf "1\\n" > expected.txt';
       const r = executeLaneTool(checkout.root, "bash", { command: attack });
       expect(r.isError).toBe(false); // the escape itself succeeds
@@ -128,6 +129,35 @@ describe("openLaneCheckout", () => {
     );
     expect(out.refused).toBeTruthy();
     expect(proofVerdict(out)).toBe("neutral");
+    rmSync(src, { recursive: true, force: true });
+  });
+
+  it("does not expose a persisted http extraheader through lane bash", () => {
+    const src = mkdtempSync(join(tmpdir(), "verit-extraheader-src-"));
+    git(["init", "-q", "-b", "main"], src);
+    git(["config", "user.email", "t@example.com"], src);
+    git(["config", "user.name", "t"], src);
+    const token = "p02_extraheader_probe_token_7f3a";
+    git(["config", "http.https://github.com/.extraheader", `AUTHORIZATION: basic ${token}`], src);
+    writeFileSync(join(src, "README.md"), "seed\n");
+    git(["add", "-A"], src);
+    git(["commit", "-qm", "seed"], src);
+    expect(git(["config", "--get-regexp", "extraheader"], src).stdout).toContain(token);
+
+    const checkout = openLaneCheckout(src);
+    try {
+      expect(checkout.isolated).toBe(true);
+      const r = executeLaneTool(checkout.root, "bash", {
+        command: "git config --list --show-origin; git config --get-regexp extraheader || true",
+      });
+      expect(r.content).not.toContain(token);
+      expect(r.content).not.toContain("AUTHORIZATION: basic");
+    } finally {
+      checkout.cleanup();
+    }
+
+    // source config is untouched: we stripped the clone, not the prove tree.
+    expect(git(["config", "--get-regexp", "extraheader"], src).stdout).toContain(token);
     rmSync(src, { recursive: true, force: true });
   });
 });

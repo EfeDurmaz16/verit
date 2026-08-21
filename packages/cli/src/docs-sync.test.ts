@@ -65,7 +65,7 @@ const readmeTableKeys = (): string[] =>
   [...readme.matchAll(/^\|\s*`([A-Z_][A-Z0-9_]*)`\s*\|/gm)].map((m) => m[1]!);
 
 /** VERIT_* that the action sets for itself, never user config, so not a doc row. */
-const ACTION_INTERNAL = new Set(["VERIT_CHECK_SHA"]);
+const ACTION_INTERNAL = new Set(["VERIT_CHECK_SHA", "VERIT_TOKEN_DIR"]);
 
 describe("docs stay in sync with the action and the code", () => {
   const configVars = actionConfigVars();

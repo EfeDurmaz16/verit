@@ -23,7 +23,7 @@ import {
 } from "@verit/adapter-memory";
 import { makeGraphStore } from "@verit/adapter-neo4j";
 import { makeAgentHarness } from "@verit/adapter-pi";
-import { laneEnabled, makeLaneHarness } from "@verit/lane";
+import { ensureLaneHostScrubbed, laneEnabled, makeLaneHarness } from "@verit/lane";
 import { makeSqliteDocumentStore } from "@verit/adapter-sqlite";
 import { makeTreeSitterParser } from "@verit/adapter-treesitter";
 import type { PullRequest, ReviewPresets, ReviewRun, Understanding } from "@verit/domain";
@@ -461,6 +461,10 @@ const reviewPr = async (spec: string) => {
 };
 
 const main = async () => {
+  // Re-exec without GITHUB_TOKEN / VERIT_INGEST_TOKEN so the lane host's
+  // /proc/self/environ does not list them. Values return on process.env
+  // for ingest, upload, and Check post.
+  await ensureLaneHostScrubbed();
   const [cmd, ...rest] = process.argv.slice(2);
   if (!cmd || cmd === "--help" || cmd === "-h") {
     console.log(help);

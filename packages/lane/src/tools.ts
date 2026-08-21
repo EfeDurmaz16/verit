@@ -13,8 +13,9 @@ import type { LaneTool } from "./client";
  *  - bash is bash. The command string is model output and the mitigation is
  *    the environment, not the parser: the child env is an allowlist the lane
  *    builds itself (laneChildEnv). It never starts from the full environment
- *    and never widens on CI, so no token or key ever reaches a tool subprocess
- *    on any platform. Plus a hard timeout and a capped buffer.
+ *    and never widens on CI. The host process is also re-exec'd without
+ *    GITHUB_TOKEN and VERIT_INGEST_TOKEN, so /proc/<ppid>/environ does not
+ *    list those keys either. Plus a hard timeout and a capped buffer.
  *  - bash runs in an isolated checkout, not the tree prove measures. See
  *    openLaneCheckout in ./checkout: the lane cannot mutate the workspace a
  *    green Check depends on.

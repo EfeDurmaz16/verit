@@ -5,6 +5,7 @@ import { StoreError } from "@verit/ports";
 import { anthropicClient } from "./anthropic";
 import { openLaneCheckout } from "./checkout";
 import type { LaneClient, LaneTool } from "./client";
+import { dropLaneHostSecrets, restoreLaneHostSecrets } from "./host-env";
 import { DEFAULT_CAPS, runLane, type LaneCaps } from "./loop";
 import { openaiCompatClient } from "./openai";
 import { laneSystemPrompt, laneUserPrompt, SUBMIT_TOOL_NAME } from "./prompt";
@@ -120,20 +121,27 @@ export const makeLaneHarness = (config?: LaneConfig): HarnessPort => ({
       try: async () => {
         const cfg = config ?? laneConfigFromEnv();
         const client = laneClientFor(cfg);
-        // Tools run in an isolated checkout of HEAD, never the tree prove
-        // measures, so the lane cannot mutate its way to a green check.
-        const checkout = openLaneCheckout(cfg.root);
+        // Drop host tokens from process.env for the tool window. The CLI also
+        // re-execs without them so /proc/self/environ is already clean.
+        dropLaneHostSecrets();
         try {
-          return await runLane(client, {
-            system: laneSystemPrompt(input.role),
-            user: laneUserPrompt(input),
-            tools: LANE_TOOLS,
-            submitTool: submitTool(),
-            executeTool: (name, toolInput) => executeLaneTool(checkout.root, name, toolInput),
-            caps: cfg.caps,
-          });
+          // Tools run in an isolated checkout of HEAD, never the tree prove
+          // measures, so the lane cannot mutate its way to a green check.
+          const checkout = openLaneCheckout(cfg.root);
+          try {
+            return await runLane(client, {
+              system: laneSystemPrompt(input.role),
+              user: laneUserPrompt(input),
+              tools: LANE_TOOLS,
+              submitTool: submitTool(),
+              executeTool: (name, toolInput) => executeLaneTool(checkout.root, name, toolInput),
+              caps: cfg.caps,
+            });
+          } finally {
+            checkout.cleanup();
+          }
         } finally {
-          checkout.cleanup();
+          restoreLaneHostSecrets();
         }
       },
       catch: (e) => new StoreError("lane harness understand", e),
@@ -147,6 +155,14 @@ export type { LaneCaps, RunLaneInput } from "./loop";
 export { laneSystemPrompt, laneUserPrompt, SUBMIT_TOOL_NAME } from "./prompt";
 export { executeLaneTool, laneChildEnv, LANE_TOOLS, truncateResult, TOOL_RESULT_CHARS } from "./tools";
 export type { ToolOutcome } from "./tools";
+export {
+  dropLaneHostSecrets,
+  ensureLaneHostScrubbed,
+  LANE_HOST_SECRET_KEYS,
+  restoreLaneHostSecrets,
+  takeLaneHostSecrets,
+} from "./host-env";
+export type { LaneHostSecretKey, LaneHostSecrets } from "./host-env";
 export { LaneError } from "./client";
 export type {
   LaneClient,

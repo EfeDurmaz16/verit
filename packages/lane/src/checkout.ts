@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 /*
  * Isolation for the lane tools. The lane's bash tool runs model-chosen
@@ -35,36 +35,51 @@ export interface LaneCheckout {
 
 const noop = (): void => {};
 
+const isCredentialConfigKey = (name: string): boolean => {
+  const n = name.toLowerCase();
+  if (n === "http.extraheader" || n.endsWith(".extraheader")) return true;
+  if (n === "credential.helper") return true;
+  return n.startsWith("credential.") && n.endsWith(".helper");
+};
+
+/** Drop credential keys from this checkout's local config. Does not touch source. */
+const stripLocalCredentialConfig = (repo: string): void => {
+  const listed = git(["config", "--local", "--name-only", "--list"], repo);
+  if (listed.status !== 0) return;
+  for (const line of listed.stdout.split("\n")) {
+    const key = line.trim();
+    if (key === "" || !isCredentialConfigKey(key)) continue;
+    git(["config", "--local", "--unset-all", key], repo);
+  }
+};
+
 /**
  * An isolated checkout of `source` at HEAD.
  *
- * A git worktree first: it shares the object store and costs almost nothing,
- * and it never touches the source working tree. If worktree add fails, a
- * tarball of the tracked tree at HEAD, extracted into a temp dir. If neither
- * works (no git, no commit), the lane runs in `source` itself; the prove
- * dirty-tree guard is then the remaining net, turning any mutation neutral
- * rather than green. Creating and removing a worktree leaves the source HEAD
- * and `git status` untouched, so a clean run does not trip that guard.
+ * A shared clone first: it shares the object store, has its own config, and
+ * never touches the source working tree. A worktree would inherit the source
+ * `http.*.extraheader` / credential helper, and `git config` from lane bash
+ * would print the token. If clone fails, a tarball of the tracked tree at
+ * HEAD, extracted into a temp dir. If neither works (no git, no commit), the
+ * lane runs in `source` itself; the prove dirty-tree guard is then the
+ * remaining net, turning any mutation neutral rather than green.
  */
 export const openLaneCheckout = (source: string): LaneCheckout => {
   const base = mkdtempSync(join(tmpdir(), "verit-lane-checkout-"));
   const root = join(base, "tree");
   const wipe = () => rmSync(base, { recursive: true, force: true });
+  const absSource = resolve(source);
 
-  // worktree: cheapest, shares objects. Detached so it never locks a branch.
-  const wt = git(["worktree", "add", "--detach", root, "HEAD"], source);
-  if (wt.status === 0) {
-    return {
-      root,
-      isolated: true,
-      cleanup: () => {
-        git(["worktree", "remove", "--force", root], source);
-        wipe();
-      },
-    };
+  // shared clone: own config, shared objects. Not a worktree, so a checkout
+  // that persisted credentials cannot leak them through git config.
+  const cloned = git(["clone", "--shared", "--quiet", absSource, root], absSource);
+  if (cloned.status === 0) {
+    stripLocalCredentialConfig(root);
+    return { root, isolated: true, cleanup: wipe };
   }
 
   // fallback: export the tracked tree at HEAD into the temp dir.
+  rmSync(root, { recursive: true, force: true });
   const tar = join(base, "tree.tar");
   const archive = git(["archive", "--format=tar", "-o", tar, "HEAD"], source);
   if (archive.status === 0) {
