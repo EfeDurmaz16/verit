@@ -307,8 +307,14 @@ const addTrackedWorkingBytes = async (cwd: string, h: Hash): Promise<void> => {
   }
 };
 
+/** Directory npm, pnpm, yarn, and bun prepend to PATH for `run test`.
+    Bare names (`vitest`, a shadowed `node`) resolve here, not from the
+    script text. Tokenizing scripts.test never names this path. */
+const JS_PACKAGE_MANAGER_BIN = "node_modules/.bin";
+
 /** Gitignored roots a detected suite can execute: path tokens from
-    package.json / composer.json test scripts and from VERIT_PROVE_CMD.
+    package.json / composer.json test scripts and from VERIT_PROVE_CMD,
+    plus the package-manager bin dir when a JS suite is detected.
     A file token hashes its ignored parent directory when that parent is
     ignored, so a write anywhere in that toolchain dir moves the snapshot. */
 const addExecutableIgnoredBytes = async (cwd: string, h: Hash): Promise<void> => {
@@ -317,10 +323,13 @@ const addExecutableIgnoredBytes = async (cwd: string, h: Hash): Promise<void> =>
     const n = normalizeRel(raw);
     if (n) tokens.push(n);
   };
-  for (const name of ["package.json", "composer.json"] as const) {
-    const script = await readManifestTestScript(join(cwd, name));
-    if (script == null) continue;
-    for (const part of script.split(PATH_SPLIT)) take(part);
+  const jsTest = await readManifestTestScript(join(cwd, "package.json"));
+  if (jsTest != null) {
+    for (const part of jsTest.split(PATH_SPLIT)) take(part);
+  }
+  const composerTest = await readManifestTestScript(join(cwd, "composer.json"));
+  if (composerTest != null) {
+    for (const part of composerTest.split(PATH_SPLIT)) take(part);
   }
   const env = fromEnv();
   if (env) {
@@ -334,6 +343,11 @@ const addExecutableIgnoredBytes = async (cwd: string, h: Hash): Promise<void> =>
     if (parent !== "" && (await isIgnored(cwd, parent))) roots.add(parent);
     else if (await isIgnored(cwd, rel)) roots.add(rel);
   }
+  // The JS suite is always `npm/pnpm/yarn/bun run test`. That runner
+  // resolves bare script names from node_modules/.bin, which is gitignored.
+  // Hash it whenever a package.json test script exists, not when a token
+  // happens to mention it.
+  if (jsTest != null) roots.add(JS_PACKAGE_MANAGER_BIN);
   for (const root of [...roots].sort()) {
     h.update("ignored:");
     h.update(root);
@@ -351,8 +365,10 @@ const addExecutableIgnoredBytes = async (cwd: string, h: Hash): Promise<void> =>
  *
  * Porcelain and ls-files -v are git metadata. A clean/smudge filter can
  * change the working-tree bytes without flipping either, and an ignored
- * toolchain directory never appears in either. Folding those on-disk bytes
- * in means the snapshot moves when the suite's inputs move.
+ * toolchain directory never appears in either. For a JS suite the package
+ * manager resolves bare names from node_modules/.bin, which is also
+ * ignored. Folding those on-disk bytes in means the snapshot moves when
+ * the suite's inputs move.
  */
 export const gitState = async (cwd: string): Promise<GitState | null> => {
   try {

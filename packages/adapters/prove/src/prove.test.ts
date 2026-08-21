@@ -365,6 +365,38 @@ describe("prove dirty-tree guard", () => {
     expect(out.log).toBe("");
   });
 
+  it("refuses when a bare package.json script is shadowed from the ignored package-manager bin dir", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "verit-guard-"));
+    git(["init", "-q", "-b", "main"], dir);
+    git(["config", "user.email", "t@example.com"], dir);
+    git(["config", "user.name", "t"], dir);
+    git(["remote", "add", "origin", "https://github.com/EfeDurmaz16/verit.git"], dir);
+    // slashless script: every token fails normalizeRel. detectProveCommands
+    // still runs `npm run test`, which resolves `node` from node_modules/.bin.
+    await writeFile(join(dir, "package.json"), JSON.stringify({ scripts: { test: "node check.js" } }));
+    await writeFile(join(dir, "check.js"), "process.exit(1)\n");
+    await writeFile(join(dir, ".gitignore"), "node_modules/\n");
+    git(["add", "-A"], dir);
+    git(["commit", "-qm", "seed"], dir);
+
+    const baseline = await gitState(dir);
+    expect(baseline).not.toBeNull();
+    await mkdir(join(dir, "node_modules", ".bin"), { recursive: true });
+    const shadow = join(dir, "node_modules", ".bin", "node");
+    await writeFile(shadow, "#!/bin/sh\nexit 0\n");
+    spawnSync("chmod", ["+x", shadow]);
+    expect(git(["status", "--porcelain"], dir).stdout).toBe("");
+    expect(git(["ls-files", "-v"], dir).stdout).not.toMatch(/node_modules/);
+
+    const out = await Effect.runPromise(
+      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit", baseline }),
+    );
+    expect(out.refused).toBeTruthy();
+    expect(out.refused).toContain("working tree changed");
+    expect(proofVerdict(out)).toBe("neutral");
+    expect(out.log).toBe("");
+  });
+
   it("runs and records head sha and the clean flag when the tree held still", async () => {
     const dir = await seedRepo();
     const baseline = await gitState(dir);

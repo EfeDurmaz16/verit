@@ -177,8 +177,9 @@ export interface ProveCommand {
  * A snapshot of a git working tree, used to tell whether it moved across a
  * window of time. HEAD catches a ref swap. The porcelain hash folds status,
  * index flags, on-disk bytes of every tracked path, and gitignored paths a
- * detected suite can execute, so a filtered working tree or an ignored
- * toolchain rewrite moves it even when status stays empty.
+ * detected suite can execute (including node_modules/.bin when a JS suite
+ * is detected), so a filtered working tree or a package-manager bin
+ * rewrite moves it even when status stays empty.
  */
 export interface GitState {
   readonly headSha: string;
