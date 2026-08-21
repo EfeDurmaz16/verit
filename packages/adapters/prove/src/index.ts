@@ -699,7 +699,9 @@ const installCleanToolchain = async (root: string): Promise<void> => {
     is not used. `--no-replace-objects` so a `git replace` planted from a
     shared worktree cannot swap the blob the suite will read. Mode
     `120000` is a symlink: the blob is the target path, and checkout
-    creates a link. writeFile of those bytes would make a regular file. */
+    creates a link. writeFile of those bytes would make a regular file.
+    Mode `160000` is a gitlink. checkout-index and a GitHub checkout
+    make an empty directory. Do not fetch the submodule. */
 const writeCommittedTree = async (source: string, headSha: string, root: string): Promise<void> => {
   const listed = spawnSync("git", ["--no-replace-objects", "-C", source, "ls-tree", "-r", "-z", headSha], {
     encoding: "buffer",
@@ -716,8 +718,13 @@ const writeCommittedTree = async (source: string, headSha: string, root: string)
     const meta = entry.slice(0, tab);
     const rel = entry.slice(tab + 1);
     const [mode, kind] = meta.split(" ");
-    if (kind !== "blob" || rel === "" || rel.split("/").includes("..")) continue;
+    if (rel === "" || rel.split("/").includes("..")) continue;
     const dest = join(root, rel);
+    if (mode === "160000") {
+      await mkdir(dest, { recursive: true });
+      continue;
+    }
+    if (kind !== "blob") continue;
     await mkdir(dirname(dest), { recursive: true });
     const blob = spawnSync(
       "git",
@@ -743,6 +750,7 @@ const writeCommittedTree = async (source: string, headSha: string, root: string)
  * A disposable working tree of every committed blob at `headSha`, then a
  * clean toolchain install. Built from ls-tree + cat-file, not archive,
  * so export-ignore paths and unfiltered blobs are what the suite sees.
+ * Gitlink paths are empty directories, as checkout-index would create.
  */
 const prepareProveTree = async (source: string, headSha: string): Promise<ProveTree> => {
   const base = await mkdtemp(join(tmpdir(), "verit-prove-"));

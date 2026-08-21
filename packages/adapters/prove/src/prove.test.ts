@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { lstat, mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -487,6 +488,44 @@ describe("prove dirty-tree guard", () => {
     expect(await readFile(join(dir, "test.js"), "utf8")).toContain("must fail");
     expect(git(["ls-tree", "HEAD", "test.js"], dir).stdout).toMatch(/^120000 blob /);
     expect(git(["cat-file", "blob", "HEAD:test.js"], dir).stdout).toBe("failing.js");
+
+    const baseline = await gitState(dir);
+    expect(baseline).not.toBeNull();
+    const out = await Effect.runPromise(
+      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit", baseline }),
+    );
+    expect(proofVerdict(out)).not.toBe("success");
+    expect(out.refused != null || out.exitCode !== 0).toBe(true);
+  }, 15_000);
+
+  it("does not go green when a committed gitlink named vendor is the failing suite input", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "verit-guard-"));
+    git(["init", "-q", "-b", "main"], dir);
+    git(["config", "user.email", "t@example.com"], dir);
+    git(["config", "user.name", "t"], dir);
+    git(["remote", "add", "origin", "https://github.com/EfeDurmaz16/verit.git"], dir);
+    // missing vendor is a pass. ls-tree lists a gitlink as 160000 commit.
+    // A loop that skips non-blobs never creates the path. checkout-index
+    // and a GitHub checkout make an empty vendor directory, so the suite
+    // fails there and goes green on a prove tree that omitted the path.
+    await writeFile(join(dir, "package.json"), JSON.stringify({ scripts: { test: "node check.js" } }));
+    await writeFile(
+      join(dir, "check.js"),
+      'const fs=require("fs");process.exit(fs.existsSync("vendor")?1:0);\n',
+    );
+    git(["add", "-A"], dir);
+    git(
+      ["update-index", "--add", "--cacheinfo", "160000,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,vendor"],
+      dir,
+    );
+    git(["commit", "-qm", "seed"], dir);
+    await mkdir(join(dir, "vendor"));
+
+    expect(git(["ls-tree", "HEAD", "vendor"], dir).stdout).toMatch(/^160000 commit /);
+    const checked = await mkdtemp(join(tmpdir(), "verit-gitlink-co-"));
+    expect(git(["checkout-index", `--prefix=${checked}/`, "-a"], dir).status).toBe(0);
+    expect((await lstat(join(checked, "vendor"))).isDirectory()).toBe(true);
+    expect(existsSync(join(dir, "vendor"))).toBe(true);
 
     const baseline = await gitState(dir);
     expect(baseline).not.toBeNull();
