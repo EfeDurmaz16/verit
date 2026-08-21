@@ -189,4 +189,54 @@ describe("openLaneCheckout", () => {
     expect(out.log).toBe("");
     rmSync(src, { recursive: true, force: true });
   }, 15_000);
+
+  it("does not go green when a lane worktree plants a git replace for a failing blob", async () => {
+    const src = mkdtempSync(join(tmpdir(), "verit-replace-src-"));
+    git(["init", "-q", "-b", "main"], src);
+    git(["config", "user.email", "t@example.com"], src);
+    git(["config", "user.name", "t"], src);
+    git(["remote", "add", "origin", "https://github.com/EfeDurmaz16/verit.git"], src);
+    writeFileSync(join(src, "package.json"), JSON.stringify({ scripts: { test: "node check.js" } }));
+    writeFileSync(
+      join(src, "check.js"),
+      'const fs=require("fs");process.exit(fs.readFileSync("failing.js","utf8").includes("must fail")?1:0);\n',
+    );
+    writeFileSync(join(src, "failing.js"), "must fail\n");
+    git(["add", "-A"], src);
+    git(["commit", "-qm", "seed"], src);
+
+    const beforeHead = headSha(src);
+    const beforeFailing = readFileSync(join(src, "failing.js"), "utf8");
+    const baseline = await gitState(src);
+    expect(baseline).not.toBeNull();
+
+    const checkout = openLaneCheckout(src);
+    expect(checkout.isolated).toBe(true);
+    try {
+      const attack =
+        "FAIL=$(git rev-parse HEAD:failing.js); " +
+        'PASS=$(printf "pass\\n" | git hash-object -w --stdin); ' +
+        'git replace "$FAIL" "$PASS"';
+      const r = executeLaneTool(checkout.root, "bash", { command: attack });
+      expect(r.isError).toBe(false);
+    } finally {
+      checkout.cleanup();
+    }
+
+    expect(readFileSync(join(src, "failing.js"), "utf8")).toBe(beforeFailing);
+    expect(headSha(src)).toBe(beforeHead);
+    expect(porcelain(src)).toBe("");
+    // the replace is live for ordinary object reads
+    expect(git(["cat-file", "blob", "HEAD:failing.js"], src).stdout).toContain("pass");
+    expect(git(["--no-replace-objects", "cat-file", "blob", "HEAD:failing.js"], src).stdout).toContain(
+      "must fail",
+    );
+
+    const out = await Effect.runPromise(
+      makeProveRunner().run({ cwd: src, expectRepo: "EfeDurmaz16/verit", baseline }),
+    );
+    expect(proofVerdict(out)).not.toBe("success");
+    expect(out.refused != null || out.exitCode !== 0).toBe(true);
+    rmSync(src, { recursive: true, force: true });
+  }, 15_000);
 });

@@ -696,9 +696,10 @@ const installCleanToolchain = async (root: string): Promise<void> => {
 /** Every blob at `headSha`, raw object bytes. `ls-tree` names committed
     paths including export-ignore. `cat-file blob` does not smudge and
     does not honor export-ignore. `git archive` does both of those and
-    is not used. */
+    is not used. `--no-replace-objects` so a `git replace` planted from a
+    shared worktree cannot swap the blob the suite will read. */
 const writeCommittedTree = async (source: string, headSha: string, root: string): Promise<void> => {
-  const listed = spawnSync("git", ["-C", source, "ls-tree", "-r", "-z", headSha], {
+  const listed = spawnSync("git", ["--no-replace-objects", "-C", source, "ls-tree", "-r", "-z", headSha], {
     encoding: "buffer",
     timeout: CHECKOUT_TIMEOUT_MS,
     maxBuffer: GIT_STATUS_BUFFER,
@@ -715,11 +716,15 @@ const writeCommittedTree = async (source: string, headSha: string, root: string)
     if (!meta.includes(" blob ") || rel === "" || rel.split("/").includes("..")) continue;
     const dest = join(root, rel);
     await mkdir(dirname(dest), { recursive: true });
-    const blob = spawnSync("git", ["-C", source, "cat-file", "blob", `${headSha}:${rel}`], {
-      encoding: "buffer",
-      timeout: 30_000,
-      maxBuffer: GIT_STATUS_BUFFER,
-    });
+    const blob = spawnSync(
+      "git",
+      ["--no-replace-objects", "-C", source, "cat-file", "blob", `${headSha}:${rel}`],
+      {
+        encoding: "buffer",
+        timeout: 30_000,
+        maxBuffer: GIT_STATUS_BUFFER,
+      },
+    );
     if (blob.status !== 0) {
       throw new Error(blob.stderr.toString("utf8") || `cat-file failed for ${rel}`);
     }
