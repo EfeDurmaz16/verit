@@ -1338,6 +1338,34 @@ export const netDiffChars = (patch: string): number => {
   return isNettable(analysis) ? analysis.net.stats.netChars : patch.length;
 };
 
+/**
+ * The added-line numbers of each file in the PR head, keyed by new-file path.
+ * Only added lines count: a context line is unchanged and a deleted line is
+ * not in the head, so neither can carry an inline annotation. A deleted file
+ * has no new path, so it never appears here at all. This is the resolver a
+ * Check annotation anchors against: a (path, line) that is not in this map
+ * points at an unchanged or absent line and must be dropped, never nudged to a
+ * nearby line. Pure function of the patch.
+ */
+export const changedHeadLines = (patch: string): Map<string, Set<number>> => {
+  const out = new Map<string, Set<number>>();
+  for (const d of parseDiff(patch)) {
+    if (d.newPath === null) continue;
+    for (const h of d.hunks) {
+      for (const l of h.lines) {
+        if (l.kind !== "add" || l.newNo === null) continue;
+        let set = out.get(d.newPath);
+        if (!set) {
+          set = new Set<number>();
+          out.set(d.newPath, set);
+        }
+        set.add(l.newNo);
+      }
+    }
+  }
+  return out;
+};
+
 /** Ceiling on rendered "real change" lines in diffSection.
     ponytail: flat 40-line cap; make it budget-aware if real diffs hit it */
 const INLINE_FOCUS_MAX_LINES = 40;
