@@ -766,4 +766,36 @@ describe("prove clean-tree install and collection refusal", () => {
     expect(proofVerdict(out)).not.toBe("success");
     expect(proofVerdict(out)).not.toBe("failure");
   }, 60_000);
+
+  it("keeps a collected fixture setup error as failure (ERROR path::test)", async () => {
+    // Tests collected. Fixture raises at setup. Pytest -q prints
+    // `ERROR tests/test_fix.py::test_needs_db`. `^ERROR \S+` matched that
+    // nodeid on 10206f7 and refused it. Setup failure is a real result.
+    putPytestOnPath();
+    expect(hasBin("pytest")).toBe(true);
+
+    const dir = await mkdtemp(join(tmpdir(), "verit-fixture-error-"));
+    git(["init", "-q", "-b", "main"], dir);
+    git(["config", "user.email", "t@example.com"], dir);
+    git(["config", "user.name", "t"], dir);
+    git(["remote", "add", "origin", "https://github.com/EfeDurmaz16/verit.git"], dir);
+    await writeFile(join(dir, "pyproject.toml"), "[project]\nname = 'x'\nversion = '0.0.1'\n");
+    await mkdir(join(dir, "tests"));
+    await writeFile(
+      join(dir, "tests", "test_fix.py"),
+      "import pytest\n\n@pytest.fixture\ndef db():\n    raise RuntimeError('database not available')\n\ndef test_needs_db(db):\n    assert True\n",
+    );
+    git(["add", "-A"], dir);
+    git(["commit", "-qm", "seed"], dir);
+    expect(existsSync(join(dir, "package.json"))).toBe(false);
+
+    const baseline = await gitState(dir);
+    expect(baseline).not.toBeNull();
+    const out = await Effect.runPromise(
+      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit", baseline }),
+    );
+    expect(out.log).toMatch(/ERROR tests\/test_fix\.py::test_needs_db/);
+    expect(out.refused).toBeUndefined();
+    expect(proofVerdict(out)).toBe("failure");
+  }, 60_000);
 });
