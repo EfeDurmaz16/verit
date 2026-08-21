@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import { NextResponse } from "next/server";
 import { authorizeIngest, bearerToken, parseUpload } from "@/lib/ingest";
 import { logKey, objectStore } from "@/lib/objects";
+import { recordRunOntology } from "@/lib/ontology-store";
 import { repoBySlug, saveRun } from "@/lib/runs";
 
 export const runtime = "nodejs";
@@ -57,6 +58,15 @@ export async function POST(req: Request): Promise<NextResponse> {
     keys.push(key);
   }
   await saveRun(upload, keys);
+
+  // The run is stored. Deriving the ontology is bookkeeping on top of it, so a
+  // failure here is logged, not raised: a lost learning is recoverable, a
+  // rejected upload after the run already landed is not.
+  try {
+    await recordRunOntology(upload);
+  } catch (err) {
+    console.error(`[verit-dashboard] ontology record failed for run ${upload.run.id}`, err);
+  }
 
   return NextResponse.json({
     ok: true,
