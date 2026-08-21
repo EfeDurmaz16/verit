@@ -1,8 +1,9 @@
-import { execFile, spawn } from "node:child_process";
-import { createHash } from "node:crypto";
-import { readFile, readdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { execFile, spawn, spawnSync } from "node:child_process";
+import { createHash, type Hash } from "node:crypto";
+import { lstat, mkdir, mkdtemp, readFile, readdir, symlink, writeFile } from "node:fs/promises";
+import { existsSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { Effect, Either, Schema as S } from "effect";
 import type { GitState, ProveCommand, ProveOutcome, ProvePort, SuiteOutcome } from "@verit/ports";
@@ -22,17 +23,22 @@ import { StoreError } from "@verit/ports";
  *    so reviewing a stranger's fork can never run their tests in your tree.
  *    Fail closed: no remote, no match, no run.
  *  - `run` refuses a second way. Given a `baseline` git snapshot from before
- *    the analysis stage, it re-reads the tree and will not run if HEAD or an
- *    uncommitted file moved. An earlier stage that edited the tree prove is
- *    about to measure turns the check neutral, never green.
+ *    the analysis stage, it re-reads the tree and will not run if HEAD moved
+ *    or the snapshot hash moved. That is a secondary guard. Suites then run
+ *    in a fresh tree of every committed blob at the baseline HEAD (filters
+ *    off, export-ignore included) plus a clean toolchain install, not in
+ *    the lane-touched tree. Smudge filters, shadowed bins, and ignored
+ *    package rewrites in the source cwd cannot be what executes.
+ *  - When no baseline is given, suites still run in `cwd`.
  *  - Hard timeout, killed as a process group so runners cannot outlive it, and
  *    output is capped so a chatty suite cannot exhaust memory.
  *  - Locally the child env is an allowlist (see proveChildEnv), so keys and
  *    tokens in the operator's shell never leak into a repo's test scripts. On
  *    GitHub Actions the runner is the boundary and the env passes through.
  *
- * This is not a sandbox. It is "run the command the user already runs, where
- * they already run it." In CI the GitHub runner is the isolation boundary.
+ * This is not a sandbox. With a baseline, the command runs against a fresh
+ * checkout of that HEAD, not the working tree the lane could have edited.
+ * In CI the GitHub runner is the isolation boundary.
  */
 
 const exec = promisify(execFile);
@@ -98,15 +104,19 @@ const fromEnv = (): ProveCommand | null => {
   return { command, args, source: "VERIT_PROVE_CMD" };
 };
 
-/** A test script present and non-empty in a package.json-shaped manifest. */
-const testScript = async (path: string): Promise<boolean> => {
+/** Test script text from a package.json-shaped manifest, or null. */
+const readManifestTestScript = async (path: string): Promise<string | null> => {
   const raw = await readJson(path);
-  if (raw === null) return false;
+  if (raw === null) return null;
   const decoded = decodePackageJson(raw);
-  if (Either.isLeft(decoded)) return false;
+  if (Either.isLeft(decoded)) return null;
   const t = decoded.right.scripts?.["test"];
-  return typeof t === "string" && t.trim() !== "";
+  return typeof t === "string" && t.trim() !== "" ? t : null;
 };
+
+/** A test script present and non-empty in a package.json-shaped manifest. */
+const testScript = async (path: string): Promise<boolean> =>
+  (await readManifestTestScript(path)) != null;
 
 /** True when the Makefile declares a `test` target. */
 const makefileHasTestTarget = async (cwd: string): Promise<boolean> => {
@@ -232,12 +242,137 @@ export const repoSlugAt = async (cwd: string): Promise<string | null> => {
 };
 
 const GIT_STATUS_BUFFER = 8 * 1024 * 1024;
+const PATH_SPLIT = /[\s"'`:;=]+/;
+
+/** Relative path a suite might execute. Rejects flags, abs paths, and `..`. */
+const normalizeRel = (token: string): string | null => {
+  const s = token.replace(/\\/g, "/").replace(/^\.\//, "");
+  if (s === "" || s.startsWith("/") || s.split("/").includes("..") || s.split("/").includes("")) {
+    return null;
+  }
+  if (!s.includes("/")) return null;
+  return s;
+};
+
+const isIgnored = async (cwd: string, rel: string): Promise<boolean> => {
+  try {
+    await exec("git", ["-C", cwd, "check-ignore", "-q", "--", rel], { timeout: 10_000 });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** Fold on-disk bytes at `abs` into `h`. Symlink dirs are not walked. */
+const addTreeBytes = async (abs: string, rel: string, h: Hash): Promise<void> => {
+  const st = await lstat(abs).catch(() => null);
+  if (st === null) {
+    h.update("missing");
+    return;
+  }
+  if (st.isSymbolicLink() || st.isFile()) {
+    try {
+      h.update(await readFile(abs));
+    } catch {
+      h.update("unreadable");
+    }
+    return;
+  }
+  if (!st.isDirectory()) return;
+  const entries = (await readdir(abs, { withFileTypes: true })).sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  for (const e of entries) {
+    const childRel = rel === "" ? e.name : `${rel}/${e.name}`;
+    h.update(childRel);
+    h.update("\0");
+    await addTreeBytes(join(abs, e.name), childRel, h);
+    h.update("\0");
+  }
+};
+
+/** On-disk bytes of every tracked path. `git hash-object` applies clean and
+    would miss a smudge rewrite; readFile does not. */
+const addTrackedWorkingBytes = async (cwd: string, h: Hash): Promise<void> => {
+  const listed = await exec("git", ["-C", cwd, "ls-files", "-z"], {
+    timeout: 30_000,
+    maxBuffer: GIT_STATUS_BUFFER,
+  });
+  const paths = listed.stdout.split("\0").filter(Boolean).sort();
+  for (const rel of paths) {
+    h.update(rel);
+    h.update("\0");
+    try {
+      h.update(await readFile(join(cwd, rel)));
+    } catch {
+      h.update("missing");
+    }
+    h.update("\0");
+  }
+};
+
+/** Directory npm, pnpm, yarn, and bun prepend to PATH for `run test`.
+    Bare names (`vitest`, a shadowed `node`) resolve here, not from the
+    script text. Tokenizing scripts.test never names this path. */
+const JS_PACKAGE_MANAGER_BIN = "node_modules/.bin";
+
+/** Gitignored roots a detected suite can execute: path tokens from
+    package.json / composer.json test scripts and from VERIT_PROVE_CMD,
+    plus the package-manager bin dir when a JS suite is detected.
+    A file token hashes its ignored parent directory when that parent is
+    ignored, so a write anywhere in that toolchain dir moves the snapshot. */
+const addExecutableIgnoredBytes = async (cwd: string, h: Hash): Promise<void> => {
+  const tokens: string[] = [];
+  const take = (raw: string): void => {
+    const n = normalizeRel(raw);
+    if (n) tokens.push(n);
+  };
+  const jsTest = await readManifestTestScript(join(cwd, "package.json"));
+  if (jsTest != null) {
+    for (const part of jsTest.split(PATH_SPLIT)) take(part);
+  }
+  const composerTest = await readManifestTestScript(join(cwd, "composer.json"));
+  if (composerTest != null) {
+    for (const part of composerTest.split(PATH_SPLIT)) take(part);
+  }
+  const env = fromEnv();
+  if (env) {
+    take(env.command);
+    for (const arg of env.args) take(arg);
+  }
+  const roots = new Set<string>();
+  for (const rel of tokens) {
+    const slash = rel.lastIndexOf("/");
+    const parent = slash === -1 ? "" : rel.slice(0, slash);
+    if (parent !== "" && (await isIgnored(cwd, parent))) roots.add(parent);
+    else if (await isIgnored(cwd, rel)) roots.add(rel);
+  }
+  // The JS suite is always `npm/pnpm/yarn/bun run test`. That runner
+  // resolves bare script names from node_modules/.bin, which is gitignored.
+  // Hash it whenever a package.json test script exists, not when a token
+  // happens to mention it.
+  if (jsTest != null) roots.add(JS_PACKAGE_MANAGER_BIN);
+  for (const root of [...roots].sort()) {
+    h.update("ignored:");
+    h.update(root);
+    h.update("\0");
+    await addTreeBytes(join(cwd, root), "", h);
+    h.update("\0");
+  }
+};
 
 /**
- * A snapshot of the working tree at `cwd`: HEAD plus a hash of the porcelain
- * status. Null when `cwd` is not a git checkout. The caller records one before
- * an analysis stage runs and hands it back to `run`, which compares against a
- * fresh read to see whether the tree moved in between.
+ * A snapshot of the working tree at `cwd`. Null when `cwd` is not a git
+ * checkout. The caller records one before an analysis stage runs and hands
+ * it back to `run`, which compares against a fresh read to see whether the
+ * bytes prove will execute moved in between.
+ *
+ * Porcelain and ls-files -v are git metadata. A clean/smudge filter can
+ * change the working-tree bytes without flipping either, and an ignored
+ * toolchain directory never appears in either. For a JS suite the package
+ * manager resolves bare names from node_modules/.bin, which is also
+ * ignored. Folding those on-disk bytes in means the snapshot moves when
+ * the suite's inputs move.
  */
 export const gitState = async (cwd: string): Promise<GitState | null> => {
   try {
@@ -251,19 +386,22 @@ export const gitState = async (cwd: string): Promise<GitState | null> => {
     // porcelain empty with HEAD unmoved. ls-files -v prints the index bit of
     // every path (S skip-worktree, lowercase assume-unchanged, H otherwise);
     // folding it into the hash means setting either bit moves the snapshot, and
-    // the bit cannot be cleared without re-exposing the edit in porcelain. That
-    // closes the "hide the doctoring so the hash still matches" evasion.
+    // the bit cannot be cleared without re-exposing the edit in porcelain.
     const flags = await exec("git", ["-C", cwd, "ls-files", "-v"], {
       timeout: 30_000,
       maxBuffer: GIT_STATUS_BUFFER,
     });
+    const hasher = createHash("sha256");
+    hasher.update(status.stdout);
+    hasher.update("\0");
+    hasher.update(flags.stdout);
+    hasher.update("\0");
+    await addTrackedWorkingBytes(cwd, hasher);
+    hasher.update("\0");
+    await addExecutableIgnoredBytes(cwd, hasher);
     return {
       headSha: head.stdout.trim(),
-      porcelainHash: createHash("sha256")
-        .update(status.stdout)
-        .update("\0")
-        .update(flags.stdout)
-        .digest("hex"),
+      porcelainHash: hasher.digest("hex"),
       clean: status.stdout.trim() === "",
     };
   } catch {
@@ -502,6 +640,135 @@ const combineSuites = (ran: readonly RanSuite[], ctx: CombineCtx): ProveOutcome 
   };
 };
 
+const INSTALL_TIMEOUT_MS = 5 * 60_000;
+const CHECKOUT_TIMEOUT_MS = 60_000;
+
+interface ProveTree {
+  readonly root: string;
+  readonly cleanup: () => void;
+}
+
+const packageJsonHasDeps = (raw: unknown): boolean => {
+  if (raw === null || typeof raw !== "object") return false;
+  const rec = raw as Record<string, unknown>;
+  for (const key of ["dependencies", "devDependencies", "optionalDependencies"] as const) {
+    const v = rec[key];
+    if (v !== null && typeof v === "object" && !Array.isArray(v) && Object.keys(v).length > 0) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/** Install JS deps from the lockfile in a fresh tree. Ignore lifecycle
+    scripts: those are untrusted repo code. Other languages resolve toolchains
+    outside the tree (cargo, go) or are installed later. Skip when the
+    manifest names no packages and there is no lockfile: a clean install is
+    then a no-op, and we do not wait on a registry. */
+const installCleanToolchain = async (root: string): Promise<void> => {
+  if (!existsSync(join(root, "package.json"))) return;
+  const hasLock =
+    existsSync(join(root, "pnpm-lock.yaml")) ||
+    existsSync(join(root, "yarn.lock")) ||
+    existsSync(join(root, "package-lock.json")) ||
+    existsSync(join(root, "bun.lockb")) ||
+    existsSync(join(root, "bun.lock"));
+  if (!hasLock && !packageJsonHasDeps(await readJson(join(root, "package.json")))) return;
+  const pm = packageManager(root);
+  const args =
+    pm === "pnpm"
+      ? ["install", "--frozen-lockfile", "--ignore-scripts"]
+      : pm === "yarn"
+        ? ["install", "--frozen-lockfile", "--ignore-scripts"]
+        : pm === "bun"
+          ? ["install", "--frozen-lockfile", "--ignore-scripts"]
+          : existsSync(join(root, "package-lock.json"))
+            ? ["ci", "--ignore-scripts", "--no-audit", "--no-fund"]
+            : ["install", "--ignore-scripts", "--no-audit", "--no-fund"];
+  await exec(pm, args, {
+    cwd: root,
+    timeout: INSTALL_TIMEOUT_MS,
+    maxBuffer: GIT_STATUS_BUFFER,
+    env: proveChildEnv(),
+  });
+};
+
+/** Every blob at `headSha`, raw object bytes. `ls-tree` names committed
+    paths including export-ignore. `cat-file blob` does not smudge and
+    does not honor export-ignore. `git archive` does both of those and
+    is not used. `--no-replace-objects` so a `git replace` planted from a
+    shared worktree cannot swap the blob the suite will read. Mode
+    `120000` is a symlink: the blob is the target path, and checkout
+    creates a link. writeFile of those bytes would make a regular file.
+    Mode `160000` is a gitlink. checkout-index and a GitHub checkout
+    make an empty directory. Do not fetch the submodule. */
+const writeCommittedTree = async (source: string, headSha: string, root: string): Promise<void> => {
+  const listed = spawnSync("git", ["--no-replace-objects", "-C", source, "ls-tree", "-r", "-z", headSha], {
+    encoding: "buffer",
+    timeout: CHECKOUT_TIMEOUT_MS,
+    maxBuffer: GIT_STATUS_BUFFER,
+  });
+  if (listed.status !== 0) {
+    throw new Error(listed.stderr.toString("utf8") || `ls-tree failed for ${headSha}`);
+  }
+  const entries = listed.stdout.toString("utf8").split("\0").filter(Boolean);
+  for (const entry of entries) {
+    const tab = entry.indexOf("\t");
+    if (tab === -1) continue;
+    const meta = entry.slice(0, tab);
+    const rel = entry.slice(tab + 1);
+    const [mode, kind] = meta.split(" ");
+    if (rel === "" || rel.split("/").includes("..")) continue;
+    const dest = join(root, rel);
+    if (mode === "160000") {
+      await mkdir(dest, { recursive: true });
+      continue;
+    }
+    if (kind !== "blob") continue;
+    await mkdir(dirname(dest), { recursive: true });
+    const blob = spawnSync(
+      "git",
+      ["--no-replace-objects", "-C", source, "cat-file", "blob", `${headSha}:${rel}`],
+      {
+        encoding: "buffer",
+        timeout: 30_000,
+        maxBuffer: GIT_STATUS_BUFFER,
+      },
+    );
+    if (blob.status !== 0) {
+      throw new Error(blob.stderr.toString("utf8") || `cat-file failed for ${rel}`);
+    }
+    if (mode === "120000") {
+      await symlink(blob.stdout.toString("utf8"), dest);
+    } else {
+      await writeFile(dest, blob.stdout);
+    }
+  }
+};
+
+/**
+ * A disposable working tree of every committed blob at `headSha`, then a
+ * clean toolchain install. Built from ls-tree + cat-file, not archive,
+ * so export-ignore paths and unfiltered blobs are what the suite sees.
+ * Gitlink paths are empty directories, as checkout-index would create.
+ */
+const prepareProveTree = async (source: string, headSha: string): Promise<ProveTree> => {
+  const base = await mkdtemp(join(tmpdir(), "verit-prove-"));
+  const root = join(base, "tree");
+  const wipe = (): void => {
+    rmSync(base, { recursive: true, force: true });
+  };
+  try {
+    await mkdir(root);
+    await writeCommittedTree(source, headSha, root);
+    await installCleanToolchain(root);
+    return { root, cleanup: wipe };
+  } catch (e) {
+    wipe();
+    throw e;
+  }
+};
+
 export const makeProveRunner = (): ProvePort => ({
   detect: (cwd) =>
     Effect.tryPromise({
@@ -579,12 +846,45 @@ export const makeProveRunner = (): ProvePort => ({
           };
         }
 
-        // Run every detected suite, independent exit codes, one combined result.
-        const ran: RanSuite[] = [];
-        for (const cmd of detected) {
-          ran.push(await runOneSuite(cmd, dir, timeoutMs ?? DEFAULT_TIMEOUT_MS));
+        // With a baseline, never execute in the source cwd. A lane can change
+        // ignored packages and still leave gitState matching. Materialize
+        // every committed blob at the baseline HEAD and install a clean
+        // toolchain, then run there.
+        let runCwd = dir;
+        let cleanup: (() => void) | null = null;
+        if (baseline != null) {
+          try {
+            const prepared = await prepareProveTree(dir, baseline.headSha);
+            runCwd = prepared.root;
+            cleanup = prepared.cleanup;
+          } catch (e) {
+            return {
+              command: detected.map(shellDisplay).join(" && "),
+              source: detected.map((c) => c.source).join(", "),
+              cwd: dir,
+              repo: local,
+              exitCode: 1,
+              durationMs: 0,
+              timedOut: false,
+              logTail: "",
+              log: "",
+              startedAt,
+              headSha,
+              porcelainClean,
+              refused: `could not prepare a clean prove checkout of ${baseline.headSha}: ${e instanceof Error ? e.message : String(e)}`,
+            };
+          }
         }
-        return combineSuites(ran, { cwd: dir, repo: local, startedAt, headSha, porcelainClean });
+
+        try {
+          const ran: RanSuite[] = [];
+          for (const cmd of detected) {
+            ran.push(await runOneSuite(cmd, runCwd, timeoutMs ?? DEFAULT_TIMEOUT_MS));
+          }
+          return combineSuites(ran, { cwd: dir, repo: local, startedAt, headSha, porcelainClean });
+        } finally {
+          cleanup?.();
+        }
       },
       catch: fail("prove"),
     }),

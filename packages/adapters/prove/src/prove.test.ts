@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { lstat, mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
@@ -334,6 +335,207 @@ describe("prove dirty-tree guard", () => {
     expect(proofVerdict(out)).toBe("neutral");
   });
 
+  it("refuses when a detected suite's gitignored toolchain is rewritten", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "verit-guard-"));
+    git(["init", "-q", "-b", "main"], dir);
+    git(["config", "user.email", "t@example.com"], dir);
+    git(["config", "user.name", "t"], dir);
+    git(["remote", "add", "origin", "https://github.com/EfeDurmaz16/verit.git"], dir);
+    // the detected suite executes an ignored directory. porcelain and
+    // ls-files -v never see writes there, so a snapshot that only hashes
+    // git metadata lets the rewrite run to a green.
+    await writeFile(join(dir, "package.json"), JSON.stringify({ scripts: { test: "node toolchain/run.js" } }));
+    await writeFile(join(dir, ".gitignore"), "toolchain/\n");
+    await mkdir(join(dir, "toolchain"));
+    await writeFile(join(dir, "toolchain", "run.js"), "process.exit(1)\n");
+    git(["add", "-A"], dir);
+    git(["commit", "-qm", "seed"], dir);
+
+    const baseline = await gitState(dir);
+    expect(baseline).not.toBeNull();
+    await writeFile(join(dir, "toolchain", "run.js"), "process.exit(0)\n");
+    expect(git(["status", "--porcelain"], dir).stdout).toBe("");
+    expect(git(["ls-files", "-v"], dir).stdout).not.toMatch(/toolchain/);
+
+    const out = await Effect.runPromise(
+      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit", baseline }),
+    );
+    expect(out.refused).toBeTruthy();
+    expect(out.refused).toContain("working tree changed");
+    expect(proofVerdict(out)).toBe("neutral");
+    expect(out.log).toBe("");
+  });
+
+  it("refuses when a bare package.json script is shadowed from the ignored package-manager bin dir", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "verit-guard-"));
+    git(["init", "-q", "-b", "main"], dir);
+    git(["config", "user.email", "t@example.com"], dir);
+    git(["config", "user.name", "t"], dir);
+    git(["remote", "add", "origin", "https://github.com/EfeDurmaz16/verit.git"], dir);
+    // slashless script: every token fails normalizeRel. detectProveCommands
+    // still runs `npm run test`, which resolves `node` from node_modules/.bin.
+    await writeFile(join(dir, "package.json"), JSON.stringify({ scripts: { test: "node check.js" } }));
+    await writeFile(join(dir, "check.js"), "process.exit(1)\n");
+    await writeFile(join(dir, ".gitignore"), "node_modules/\n");
+    git(["add", "-A"], dir);
+    git(["commit", "-qm", "seed"], dir);
+
+    const baseline = await gitState(dir);
+    expect(baseline).not.toBeNull();
+    await mkdir(join(dir, "node_modules", ".bin"), { recursive: true });
+    const shadow = join(dir, "node_modules", ".bin", "node");
+    await writeFile(shadow, "#!/bin/sh\nexit 0\n");
+    spawnSync("chmod", ["+x", shadow]);
+    expect(git(["status", "--porcelain"], dir).stdout).toBe("");
+    expect(git(["ls-files", "-v"], dir).stdout).not.toMatch(/node_modules/);
+
+    const out = await Effect.runPromise(
+      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit", baseline }),
+    );
+    expect(out.refused).toBeTruthy();
+    expect(out.refused).toContain("working tree changed");
+    expect(proofVerdict(out)).toBe("neutral");
+    expect(out.log).toBe("");
+  });
+
+  it("does not go green when an ignored package the suite requires is rewritten", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "verit-guard-"));
+    git(["init", "-q", "-b", "main"], dir);
+    git(["config", "user.email", "t@example.com"], dir);
+    git(["config", "user.name", "t"], dir);
+    git(["remote", "add", "origin", "https://github.com/EfeDurmaz16/verit.git"], dir);
+    // slashless script, load from an ignored package, not a .bin shim.
+    // Hashing node_modules/.bin leaves this write invisible.
+    await writeFile(join(dir, "package.json"), JSON.stringify({ scripts: { test: "node check.js" } }));
+    await writeFile(
+      join(dir, "check.js"),
+      'try { process.exit(require("./node_modules/payload/index.js") === "pass" ? 0 : 1); } catch { process.exit(1); }\n',
+    );
+    await writeFile(join(dir, ".gitignore"), "node_modules/\n");
+    await mkdir(join(dir, "node_modules", "payload"), { recursive: true });
+    await writeFile(join(dir, "node_modules", "payload", "index.js"), "module.exports = 'fail';\n");
+    git(["add", "-A"], dir);
+    git(["commit", "-qm", "seed"], dir);
+
+    const baseline = await gitState(dir);
+    expect(baseline).not.toBeNull();
+    await writeFile(join(dir, "node_modules", "payload", "index.js"), "module.exports = 'pass';\n");
+    expect(git(["status", "--porcelain"], dir).stdout).toBe("");
+    expect(git(["ls-files", "-v"], dir).stdout).not.toMatch(/node_modules/);
+
+    const out = await Effect.runPromise(
+      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit", baseline }),
+    );
+    expect(proofVerdict(out)).not.toBe("success");
+    expect(out.refused != null || out.exitCode !== 0).toBe(true);
+  }, 15_000);
+
+  it("does not go green when a committed export-ignore file is the failing suite input", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "verit-guard-"));
+    git(["init", "-q", "-b", "main"], dir);
+    git(["config", "user.email", "t@example.com"], dir);
+    git(["config", "user.name", "t"], dir);
+    git(["remote", "add", "origin", "https://github.com/EfeDurmaz16/verit.git"], dir);
+    // missing failing.js is a pass. git archive honors export-ignore and
+    // omits the committed failing file, so an archive-based prove tree
+    // would go green on a checkout GitHub would still merge.
+    await writeFile(join(dir, "package.json"), JSON.stringify({ scripts: { test: "node check.js" } }));
+    await writeFile(
+      join(dir, "check.js"),
+      'const fs=require("fs");process.exit(fs.existsSync("failing.js")?1:0);\n',
+    );
+    await writeFile(join(dir, "failing.js"), "throw new Error('must fail');\n");
+    await writeFile(join(dir, ".gitattributes"), "failing.js export-ignore\n");
+    git(["add", "-A"], dir);
+    git(["commit", "-qm", "seed"], dir);
+    expect(git(["show", "HEAD:failing.js"], dir).status).toBe(0);
+    const arch = spawnSync("git", ["archive", "--format=tar", "HEAD"], { cwd: dir, encoding: "buffer" });
+    expect(arch.status).toBe(0);
+    const names = spawnSync("tar", ["-tf", "-"], { input: arch.stdout, encoding: "utf8" }).stdout;
+    expect(names).toContain("check.js");
+    expect(names.split("\n")).not.toContain("failing.js");
+
+    const baseline = await gitState(dir);
+    expect(baseline).not.toBeNull();
+    const out = await Effect.runPromise(
+      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit", baseline }),
+    );
+    expect(proofVerdict(out)).not.toBe("success");
+    expect(out.refused != null || out.exitCode !== 0).toBe(true);
+  }, 15_000);
+
+  it("does not go green when a committed symlink to a failing blob is the suite input", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "verit-guard-"));
+    git(["init", "-q", "-b", "main"], dir);
+    git(["config", "user.email", "t@example.com"], dir);
+    git(["config", "user.name", "t"], dir);
+    git(["remote", "add", "origin", "https://github.com/EfeDurmaz16/verit.git"], dir);
+    // a real checkout follows test.js to failing.js. ls-tree lists the
+    // link as 120000 blob. cat-file of that blob is the target path
+    // string. writeFile of those bytes makes a regular file, and the
+    // suite that looks for "must fail" in test.js then goes green.
+    await writeFile(join(dir, "package.json"), JSON.stringify({ scripts: { test: "node check.js" } }));
+    await writeFile(
+      join(dir, "check.js"),
+      'const fs=require("fs");process.exit(fs.readFileSync("test.js","utf8").includes("must fail")?1:0);\n',
+    );
+    await writeFile(join(dir, "failing.js"), "must fail\n");
+    await symlink("failing.js", join(dir, "test.js"));
+    git(["add", "-A"], dir);
+    git(["commit", "-qm", "seed"], dir);
+
+    expect((await lstat(join(dir, "test.js"))).isSymbolicLink()).toBe(true);
+    expect(await readFile(join(dir, "test.js"), "utf8")).toContain("must fail");
+    expect(git(["ls-tree", "HEAD", "test.js"], dir).stdout).toMatch(/^120000 blob /);
+    expect(git(["cat-file", "blob", "HEAD:test.js"], dir).stdout).toBe("failing.js");
+
+    const baseline = await gitState(dir);
+    expect(baseline).not.toBeNull();
+    const out = await Effect.runPromise(
+      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit", baseline }),
+    );
+    expect(proofVerdict(out)).not.toBe("success");
+    expect(out.refused != null || out.exitCode !== 0).toBe(true);
+  }, 15_000);
+
+  it("does not go green when a committed gitlink named vendor is the failing suite input", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "verit-guard-"));
+    git(["init", "-q", "-b", "main"], dir);
+    git(["config", "user.email", "t@example.com"], dir);
+    git(["config", "user.name", "t"], dir);
+    git(["remote", "add", "origin", "https://github.com/EfeDurmaz16/verit.git"], dir);
+    // missing vendor is a pass. ls-tree lists a gitlink as 160000 commit.
+    // A loop that skips non-blobs never creates the path. checkout-index
+    // and a GitHub checkout make an empty vendor directory, so the suite
+    // fails there and goes green on a prove tree that omitted the path.
+    await writeFile(join(dir, "package.json"), JSON.stringify({ scripts: { test: "node check.js" } }));
+    await writeFile(
+      join(dir, "check.js"),
+      'const fs=require("fs");process.exit(fs.existsSync("vendor")?1:0);\n',
+    );
+    git(["add", "-A"], dir);
+    git(
+      ["update-index", "--add", "--cacheinfo", "160000,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,vendor"],
+      dir,
+    );
+    git(["commit", "-qm", "seed"], dir);
+    await mkdir(join(dir, "vendor"));
+
+    expect(git(["ls-tree", "HEAD", "vendor"], dir).stdout).toMatch(/^160000 commit /);
+    const checked = await mkdtemp(join(tmpdir(), "verit-gitlink-co-"));
+    expect(git(["checkout-index", `--prefix=${checked}/`, "-a"], dir).status).toBe(0);
+    expect((await lstat(join(checked, "vendor"))).isDirectory()).toBe(true);
+    expect(existsSync(join(dir, "vendor"))).toBe(true);
+
+    const baseline = await gitState(dir);
+    expect(baseline).not.toBeNull();
+    const out = await Effect.runPromise(
+      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit", baseline }),
+    );
+    expect(proofVerdict(out)).not.toBe("success");
+    expect(out.refused != null || out.exitCode !== 0).toBe(true);
+  }, 15_000);
+
   it("runs and records head sha and the clean flag when the tree held still", async () => {
     const dir = await seedRepo();
     const baseline = await gitState(dir);
@@ -346,7 +548,7 @@ describe("prove dirty-tree guard", () => {
     expect(out.headSha).toBe(baseline?.headSha);
     expect(out.porcelainClean).toBe(true);
     expect(proofVerdict(out)).toBe("success");
-  });
+  }, 15_000);
 });
 
 describe("prove multi-suite and detection-driven runs", () => {
