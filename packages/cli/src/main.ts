@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { appendFile, readFile, writeFile, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Effect } from "effect";
 import {
@@ -29,6 +29,27 @@ import { makeTreeSitterParser } from "@verit/adapter-treesitter";
 import type { PullRequest, ReviewPresets, ReviewRun, Understanding } from "@verit/domain";
 import type { DocumentStore, GitState, ProveOutcome } from "@verit/ports";
 import { buildUpload, dashboardTarget, proofPageUrl, uploadRun } from "./upload";
+import { runDoctor } from "./doctor";
+
+/**
+ * Expose results as GitHub Action outputs. Writes key=value lines to the file
+ * named by GITHUB_OUTPUT, which is how a composite action step publishes its
+ * outputs. A no-op locally where the variable is unset, so the CLI behaves the
+ * same off CI. Values here are single tokens (a conclusion word, a run id, a
+ * URL); a stray newline is squashed so one output cannot spill into the next.
+ */
+const writeActionOutputs = async (outputs: Record<string, string>): Promise<void> => {
+  const file = process.env.GITHUB_OUTPUT;
+  if (!file) return;
+  const body = Object.entries(outputs)
+    .map(([k, v]) => `${k}=${v.replace(/[\r\n]+/g, " ").trim()}\n`)
+    .join("");
+  try {
+    await appendFile(file, body, "utf8");
+  } catch (e) {
+    console.error(`action outputs: ${e instanceof Error ? e.message : String(e)}`);
+  }
+};
 
 const help = `verit <command>
 
@@ -39,6 +60,7 @@ Commands:
   review --pr owner/repo#n   Classify → understand → proof Spec (.data/proofs)
   compile-pack               Emit review skills.toml from presets
   dogfood owner/repo#n       ingest-pr → compile-pack → review (Action mirror)
+  doctor                     Check gh auth, node/pnpm, lane config, prove cwd; exit non-zero on a real problem
 
 Env:
   GITHUB_TOKEN          optional for public PRs; needs checks:write to post a Check
@@ -445,6 +467,13 @@ const main = async () => {
     return;
   }
 
+  // doctor runs before any store is opened: a diagnostic must not need the very
+  // environment it is there to diagnose (a graph server, a writable .data).
+  if (cmd === "doctor") {
+    process.exitCode = await runDoctor();
+    return;
+  }
+
   const docs = makeDocs();
   const graph = await makeGraphStore();
   const parser = makeTreeSitterParser();
@@ -561,6 +590,13 @@ const main = async () => {
       runId: out.runId,
       proofPageUrl: pageUrl,
       changedLines: out.changedLines,
+    });
+    // Publish the run's headline results as Action outputs so a caller can gate
+    // later workflow steps on the Check without re-parsing this stdout.
+    await writeActionOutputs({
+      conclusion: check?.conclusion ?? "",
+      "run-id": out.runId,
+      "proof-page-url": pageUrl ?? "",
     });
     const {
       understanding: _u,

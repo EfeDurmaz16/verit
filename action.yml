@@ -149,3 +149,17 @@ runs:
           export VERIT_LANE_PROVIDER=""
         fi
         pnpm exec tsx packages/cli/src/main.ts dogfood "$PR_SPEC"
+
+# Declared after runs: on purpose. The review step writes these to
+# $GITHUB_OUTPUT (see writeActionOutputs in packages/cli/src/main.ts), so a
+# caller can gate later steps on the Check without re-parsing verit's stdout.
+outputs:
+  conclusion:
+    description: "The Check conclusion for this run: success, failure, or neutral."
+    value: ${{ steps.review.outputs.conclusion }}
+  run-id:
+    description: "The verit run id, the key for this run's proof artifacts and dashboard page."
+    value: ${{ steps.review.outputs.run-id }}
+  proof-page-url:
+    description: "URL of the uploaded proof page, empty when no dashboard is configured."
+    value: ${{ steps.review.outputs.proof-page-url }}
