@@ -397,6 +397,38 @@ describe("prove dirty-tree guard", () => {
     expect(out.log).toBe("");
   });
 
+  it("does not go green when an ignored package the suite requires is rewritten", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "verit-guard-"));
+    git(["init", "-q", "-b", "main"], dir);
+    git(["config", "user.email", "t@example.com"], dir);
+    git(["config", "user.name", "t"], dir);
+    git(["remote", "add", "origin", "https://github.com/EfeDurmaz16/verit.git"], dir);
+    // slashless script, load from an ignored package, not a .bin shim.
+    // Hashing node_modules/.bin leaves this write invisible.
+    await writeFile(join(dir, "package.json"), JSON.stringify({ scripts: { test: "node check.js" } }));
+    await writeFile(
+      join(dir, "check.js"),
+      'try { process.exit(require("./node_modules/payload/index.js") === "pass" ? 0 : 1); } catch { process.exit(1); }\n',
+    );
+    await writeFile(join(dir, ".gitignore"), "node_modules/\n");
+    await mkdir(join(dir, "node_modules", "payload"), { recursive: true });
+    await writeFile(join(dir, "node_modules", "payload", "index.js"), "module.exports = 'fail';\n");
+    git(["add", "-A"], dir);
+    git(["commit", "-qm", "seed"], dir);
+
+    const baseline = await gitState(dir);
+    expect(baseline).not.toBeNull();
+    await writeFile(join(dir, "node_modules", "payload", "index.js"), "module.exports = 'pass';\n");
+    expect(git(["status", "--porcelain"], dir).stdout).toBe("");
+    expect(git(["ls-files", "-v"], dir).stdout).not.toMatch(/node_modules/);
+
+    const out = await Effect.runPromise(
+      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit", baseline }),
+    );
+    expect(proofVerdict(out)).not.toBe("success");
+    expect(out.refused != null || out.exitCode !== 0).toBe(true);
+  }, 15_000);
+
   it("runs and records head sha and the clean flag when the tree held still", async () => {
     const dir = await seedRepo();
     const baseline = await gitState(dir);

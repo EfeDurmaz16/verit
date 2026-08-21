@@ -1,7 +1,8 @@
 import { execFile, spawn } from "node:child_process";
 import { createHash, type Hash } from "node:crypto";
-import { lstat, readFile, readdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { lstat, mkdir, mkdtemp, readFile, readdir } from "node:fs/promises";
+import { existsSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { Effect, Either, Schema as S } from "effect";
@@ -23,18 +24,20 @@ import { StoreError } from "@verit/ports";
  *    Fail closed: no remote, no match, no run.
  *  - `run` refuses a second way. Given a `baseline` git snapshot from before
  *    the analysis stage, it re-reads the tree and will not run if HEAD moved
- *    or the bytes prove will execute moved. That includes a clean/smudge
- *    rewrite of a tracked file and a write into a gitignored path a detected
- *    suite runs. An earlier stage that edited the tree prove is about to
- *    measure turns the check neutral, never green.
+ *    or the snapshot hash moved. That is a secondary guard. Suites then run
+ *    in a fresh archive of the baseline HEAD plus a clean toolchain install,
+ *    not in the lane-touched tree. Smudge filters, shadowed bins, and ignored
+ *    package rewrites in the source cwd cannot be what executes.
+ *  - When no baseline is given, suites still run in `cwd`.
  *  - Hard timeout, killed as a process group so runners cannot outlive it, and
  *    output is capped so a chatty suite cannot exhaust memory.
  *  - Locally the child env is an allowlist (see proveChildEnv), so keys and
  *    tokens in the operator's shell never leak into a repo's test scripts. On
  *    GitHub Actions the runner is the boundary and the env passes through.
  *
- * This is not a sandbox. It is "run the command the user already runs, where
- * they already run it." In CI the GitHub runner is the isolation boundary.
+ * This is not a sandbox. With a baseline, the command runs against a fresh
+ * checkout of that HEAD, not the working tree the lane could have edited.
+ * In CI the GitHub runner is the isolation boundary.
  */
 
 const exec = promisify(execFile);
@@ -636,6 +639,90 @@ const combineSuites = (ran: readonly RanSuite[], ctx: CombineCtx): ProveOutcome 
   };
 };
 
+const INSTALL_TIMEOUT_MS = 5 * 60_000;
+const ARCHIVE_TIMEOUT_MS = 60_000;
+
+interface ProveTree {
+  readonly root: string;
+  readonly cleanup: () => void;
+}
+
+const packageJsonHasDeps = (raw: unknown): boolean => {
+  if (raw === null || typeof raw !== "object") return false;
+  const rec = raw as Record<string, unknown>;
+  for (const key of ["dependencies", "devDependencies", "optionalDependencies"] as const) {
+    const v = rec[key];
+    if (v !== null && typeof v === "object" && !Array.isArray(v) && Object.keys(v).length > 0) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/** Install JS deps from the lockfile in a fresh tree. Ignore lifecycle
+    scripts: those are untrusted repo code. Other languages resolve toolchains
+    outside the tree (cargo, go) or are installed later. Skip when the
+    manifest names no packages and there is no lockfile: a clean install is
+    then a no-op, and we do not wait on a registry. */
+const installCleanToolchain = async (root: string): Promise<void> => {
+  if (!existsSync(join(root, "package.json"))) return;
+  const hasLock =
+    existsSync(join(root, "pnpm-lock.yaml")) ||
+    existsSync(join(root, "yarn.lock")) ||
+    existsSync(join(root, "package-lock.json")) ||
+    existsSync(join(root, "bun.lockb")) ||
+    existsSync(join(root, "bun.lock"));
+  if (!hasLock && !packageJsonHasDeps(await readJson(join(root, "package.json")))) return;
+  const pm = packageManager(root);
+  const args =
+    pm === "pnpm"
+      ? ["install", "--frozen-lockfile", "--ignore-scripts"]
+      : pm === "yarn"
+        ? ["install", "--frozen-lockfile", "--ignore-scripts"]
+        : pm === "bun"
+          ? ["install", "--frozen-lockfile", "--ignore-scripts"]
+          : existsSync(join(root, "package-lock.json"))
+            ? ["ci", "--ignore-scripts", "--no-audit", "--no-fund"]
+            : ["install", "--ignore-scripts", "--no-audit", "--no-fund"];
+  await exec(pm, args, {
+    cwd: root,
+    timeout: INSTALL_TIMEOUT_MS,
+    maxBuffer: GIT_STATUS_BUFFER,
+    env: proveChildEnv(),
+  });
+};
+
+/**
+ * A disposable working tree of `headSha` taken through `git archive`, then a
+ * clean toolchain install. Archive reads committed blobs. It does not share
+ * `.git/info/attributes` or `filter.*` with the source, so a worktree-style
+ * smudge cannot follow the suite here.
+ */
+const prepareProveTree = async (source: string, headSha: string): Promise<ProveTree> => {
+  const base = await mkdtemp(join(tmpdir(), "verit-prove-"));
+  const root = join(base, "tree");
+  const tar = join(base, "tree.tar");
+  const wipe = (): void => {
+    rmSync(base, { recursive: true, force: true });
+  };
+  try {
+    await exec("git", ["-C", source, "archive", "--format=tar", "-o", tar, headSha], {
+      timeout: ARCHIVE_TIMEOUT_MS,
+      maxBuffer: GIT_STATUS_BUFFER,
+    });
+    await mkdir(root);
+    await exec("tar", ["-xf", tar, "-C", root], {
+      timeout: ARCHIVE_TIMEOUT_MS,
+      maxBuffer: GIT_STATUS_BUFFER,
+    });
+    await installCleanToolchain(root);
+    return { root, cleanup: wipe };
+  } catch (e) {
+    wipe();
+    throw e;
+  }
+};
+
 export const makeProveRunner = (): ProvePort => ({
   detect: (cwd) =>
     Effect.tryPromise({
@@ -713,12 +800,44 @@ export const makeProveRunner = (): ProvePort => ({
           };
         }
 
-        // Run every detected suite, independent exit codes, one combined result.
-        const ran: RanSuite[] = [];
-        for (const cmd of detected) {
-          ran.push(await runOneSuite(cmd, dir, timeoutMs ?? DEFAULT_TIMEOUT_MS));
+        // With a baseline, never execute in the source cwd. A lane can change
+        // ignored packages and still leave gitState matching. Archive the
+        // baseline HEAD and install a clean toolchain, then run there.
+        let runCwd = dir;
+        let cleanup: (() => void) | null = null;
+        if (baseline != null) {
+          try {
+            const prepared = await prepareProveTree(dir, baseline.headSha);
+            runCwd = prepared.root;
+            cleanup = prepared.cleanup;
+          } catch (e) {
+            return {
+              command: detected.map(shellDisplay).join(" && "),
+              source: detected.map((c) => c.source).join(", "),
+              cwd: dir,
+              repo: local,
+              exitCode: 1,
+              durationMs: 0,
+              timedOut: false,
+              logTail: "",
+              log: "",
+              startedAt,
+              headSha,
+              porcelainClean,
+              refused: `could not prepare a clean prove checkout of ${baseline.headSha}: ${e instanceof Error ? e.message : String(e)}`,
+            };
+          }
         }
-        return combineSuites(ran, { cwd: dir, repo: local, startedAt, headSha, porcelainClean });
+
+        try {
+          const ran: RanSuite[] = [];
+          for (const cmd of detected) {
+            ran.push(await runOneSuite(cmd, runCwd, timeoutMs ?? DEFAULT_TIMEOUT_MS));
+          }
+          return combineSuites(ran, { cwd: dir, repo: local, startedAt, headSha, porcelainClean });
+        } finally {
+          cleanup?.();
+        }
       },
       catch: fail("prove"),
     }),
