@@ -30,10 +30,12 @@ import { StoreError } from "@verit/ports";
  *    the lane-touched tree. Smudge filters, shadowed bins, and ignored
  *    package rewrites in the source cwd cannot be what executes.
  *  - A clean-tree suite that never collected tests is refused, not failed.
- *    installCleanToolchain throw, a missing interpreter, missing deps, and
- *    pytest collection failure (exit 2, ModuleNotFoundError, no tests
- *    collected) stay inconclusive. A suite that collected and ran tests
- *    still maps exit 0 to success and a real assertion failure to failure.
+ *    installCleanToolchain throw, a missing interpreter, and pytest
+ *    collection that never happened (ERROR collecting, no tests collected)
+ *    stay inconclusive. A suite that collected and ran tests still maps
+ *    exit 0 to success and a real assertion failure to failure, even if
+ *    the log mentions ModuleNotFoundError. pytest exit 2 alone is not
+ *    collection failure.
  *  - When no baseline is given, suites still run in `cwd`.
  *  - Hard timeout, killed as a process group so runners cannot outlive it, and
  *    output is capped so a chatty suite cannot exhaust memory.
@@ -590,10 +592,24 @@ const runOneSuite = async (
 };
 
 /**
+ * Pytest ran tests after collection: a nodeid (`FAILED path::test`) or the
+ * session totals (`1 failed`, `2 passed`). Collection-only logs use `ERROR`
+ * and `1 error in`, not these. A log that later ran tests is a real result
+ * even if a test body printed `ERROR collecting` or `ModuleNotFoundError`.
+ */
+const pytestCollectedAndRan = (log: string): boolean =>
+  /FAILED \S+::|PASSED \S+::|\b\d+ failed\b|\b\d+ passed\b/i.test(log);
+
+/** Collection never produced a runnable item. Not a substring in a failed test. */
+const pytestCollectionDidNotHappen = (log: string): boolean =>
+  /ERROR collecting|errors during collection|no tests (were )?collected/i.test(log);
+
+/**
  * A clean-tree result that never ran tests is inconclusive. Never paint that
  * red: source CI can be green while the fresh tree lacks deps or an
  * interpreter. A suite that collected and then failed assertions is left
- * alone. Do not map every non-zero exit here.
+ * alone. Do not map every non-zero exit here. Do not grep ModuleNotFoundError
+ * or treat pytest exit 2 as collection by itself.
  */
 const cleanTreeSuiteRefusal = (s: RanSuite): string | undefined => {
   if (s.skipped != null) {
@@ -601,11 +617,8 @@ const cleanTreeSuiteRefusal = (s: RanSuite): string | undefined => {
   }
   if (s.timedOut || s.exitCode === 0) return undefined;
   const log = `${s.fullLog}\n${s.logTail}`;
-  const pytest = s.command.startsWith("pytest") || s.source === "pyproject.toml";
-  const missingModule = /ModuleNotFoundError|ImportError|No module named /i.test(log);
-  const noCollected = /no tests (were )?collected/i.test(log);
-  const collectionError = /ERROR collecting|errors during collection/i.test(log);
-  if (missingModule || noCollected || collectionError || (pytest && s.exitCode === 2)) {
+  if (pytestCollectedAndRan(log)) return undefined;
+  if (pytestCollectionDidNotHappen(log)) {
     return `the clean prove tree could not collect tests for ${s.command}: missing interpreter, missing dependencies, or collection failure (exit ${s.exitCode}).`;
   }
   return undefined;

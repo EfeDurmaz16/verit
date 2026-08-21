@@ -696,4 +696,35 @@ describe("prove clean-tree install and collection refusal", () => {
     expect(proofVerdict(out)).not.toBe("success");
     expect(proofVerdict(out)).not.toBe("failure");
   }, 60_000);
+
+  it("keeps a collected pytest failure as failure when the log mentions ModuleNotFoundError", async () => {
+    // Collected, then failed: `DID NOT RAISE ModuleNotFoundError`. The log
+    // contains the old refuse substring. That is a real suite result.
+    putPytestOnPath();
+    expect(hasBin("pytest")).toBe(true);
+
+    const dir = await mkdtemp(join(tmpdir(), "verit-did-not-raise-"));
+    git(["init", "-q", "-b", "main"], dir);
+    git(["config", "user.email", "t@example.com"], dir);
+    git(["config", "user.name", "t"], dir);
+    git(["remote", "add", "origin", "https://github.com/EfeDurmaz16/verit.git"], dir);
+    await writeFile(join(dir, "pyproject.toml"), "[project]\nname = 'x'\nversion = '0.0.1'\n");
+    await mkdir(join(dir, "tests"));
+    await writeFile(
+      join(dir, "tests", "test_did_not_raise.py"),
+      "import pytest\n\ndef test_did_not_raise():\n    with pytest.raises(ModuleNotFoundError):\n        import sys\n",
+    );
+    git(["add", "-A"], dir);
+    git(["commit", "-qm", "seed"], dir);
+    expect(existsSync(join(dir, "package.json"))).toBe(false);
+
+    const baseline = await gitState(dir);
+    expect(baseline).not.toBeNull();
+    const out = await Effect.runPromise(
+      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit", baseline }),
+    );
+    expect(out.log).toMatch(/DID NOT RAISE ModuleNotFoundError/);
+    expect(out.refused).toBeUndefined();
+    expect(proofVerdict(out)).toBe("failure");
+  }, 60_000);
 });
