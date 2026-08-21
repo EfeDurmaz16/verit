@@ -69,10 +69,25 @@ export type ReviewDomain = S.Schema.Type<typeof ReviewDomain>;
 export const ProofRefKind = S.Literal("test", "command", "url", "image", "video");
 export type ProofRefKind = S.Schema.Type<typeof ProofRefKind>;
 
+/** True only for a URL with a scheme, e.g. https://x/y. A bare path is not. */
+const isAbsoluteUrl = (s: string): boolean => {
+  try {
+    // new URL throws on a relative reference, so parsing at all means absolute.
+    new URL(s);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 /**
  * A pointer to evidence. `status` and `log` are only set by refs that were
  * actually executed (see the prove verb): a ref carrying `status: "fail"`
  * renders as a failure everywhere, and nothing may drop it to dress a run up.
+ *
+ * A ref of kind `url` must carry an absolute URL. A relative value like
+ * `README.md` is not openable as written, so it fails decode: the run is then
+ * reported unverified rather than shipping a link that 404s in the Check.
  */
 export const ProofRef = S.Struct({
   kind: ProofRefKind,
@@ -80,13 +95,34 @@ export const ProofRef = S.Struct({
   value: S.String,
   status: S.optional(S.Literal("pass", "fail")),
   log: S.optional(S.String),
-});
+}).pipe(
+  S.filter(
+    (r) =>
+      r.kind !== "url" ||
+      isAbsoluteUrl(r.value) ||
+      `proof_ref of kind "url" must be an absolute URL, got: ${r.value}`,
+  ),
+);
 export type ProofRef = S.Schema.Type<typeof ProofRef>;
 
+/** How loud a risk is. Drives the Check Run annotation level for located risks. */
+export const RiskSeverity = S.Literal("info", "warn", "high");
+export type RiskSeverity = S.Schema.Type<typeof RiskSeverity>;
+
+/**
+ * One risk the review names. `file` and `line` anchor it to a spot in the PR
+ * head, when the reviewer found one, so the Check can render it as an inline
+ * annotation. Both stay optional and nullable: an older stored risk that
+ * predates locations decodes unchanged, and a risk about the change as a whole
+ * carries neither.
+ */
 export const RiskItem = S.Struct({
   area: S.String,
   note: S.String,
   source: S.optional(S.Literal("author", "reviewer", "classifier")),
+  file: S.optional(S.NullOr(S.String)),
+  line: S.optional(S.NullOr(S.Number)),
+  severity: S.optional(RiskSeverity),
 });
 export type RiskItem = S.Schema.Type<typeof RiskItem>;
 
