@@ -188,9 +188,11 @@ export const behaviorProofCheck = (input: {
   const uncapped =
     u === null
       ? "neutral"
-      : outcome?.suites && outcome.suites.length > 0
-        ? multiSuiteVerdict(outcome.suites)
-        : proofVerdict(outcome);
+      : outcome?.refused != null
+        ? "neutral"
+        : outcome?.suites && outcome.suites.length > 0
+          ? multiSuiteVerdict(outcome.suites)
+          : proofVerdict(outcome);
   // partial analysis never turns green, however loudly the tests passed
   const capped = uncapped === "success" && coverage < 100 ? "neutral" : uncapped;
   // gating: a neutral check passes required checks, so under fail-on=failure an
@@ -207,7 +209,7 @@ export const behaviorProofCheck = (input: {
       : outcome.probed != null
         ? `No test command found. ${outcome.probed.length} manifest(s) probed.`
         : outcome.refused != null
-          ? "Proof did not run: the working tree changed during analysis."
+          ? "Proof did not run."
           : outcome.suites && outcome.suites.length > 0
             ? multiSuiteTitle(outcome.suites)
             : outcome.timedOut

@@ -29,6 +29,11 @@ import { StoreError } from "@verit/ports";
  *    off, export-ignore included) plus a clean toolchain install, not in
  *    the lane-touched tree. Smudge filters, shadowed bins, and ignored
  *    package rewrites in the source cwd cannot be what executes.
+ *  - A clean-tree suite that never collected tests is refused, not failed.
+ *    installCleanToolchain throw, a missing interpreter, missing deps, and
+ *    pytest collection failure (exit 2, ModuleNotFoundError, no tests
+ *    collected) stay inconclusive. A suite that collected and ran tests
+ *    still maps exit 0 to success and a real assertion failure to failure.
  *  - When no baseline is given, suites still run in `cwd`.
  *  - Hard timeout, killed as a process group so runners cannot outlive it, and
  *    output is capped so a chatty suite cannot exhaust memory.
@@ -584,6 +589,36 @@ const runOneSuite = async (
   }
 };
 
+/**
+ * A clean-tree result that never ran tests is inconclusive. Never paint that
+ * red: source CI can be green while the fresh tree lacks deps or an
+ * interpreter. A suite that collected and then failed assertions is left
+ * alone. Do not map every non-zero exit here.
+ */
+const cleanTreeSuiteRefusal = (s: RanSuite): string | undefined => {
+  if (s.skipped != null) {
+    return `the clean prove tree could not start ${s.command}: ${s.skipped}`;
+  }
+  if (s.timedOut || s.exitCode === 0) return undefined;
+  const log = `${s.fullLog}\n${s.logTail}`;
+  const pytest = s.command.startsWith("pytest") || s.source === "pyproject.toml";
+  const missingModule = /ModuleNotFoundError|ImportError|No module named /i.test(log);
+  const noCollected = /no tests (were )?collected/i.test(log);
+  const collectionError = /ERROR collecting|errors during collection/i.test(log);
+  if (missingModule || noCollected || collectionError || (pytest && s.exitCode === 2)) {
+    return `the clean prove tree could not collect tests for ${s.command}: missing interpreter, missing dependencies, or collection failure (exit ${s.exitCode}).`;
+  }
+  return undefined;
+};
+
+const cleanTreeRefusal = (ran: readonly RanSuite[]): string | undefined => {
+  for (const s of ran) {
+    const reason = cleanTreeSuiteRefusal(s);
+    if (reason != null) return reason;
+  }
+  return undefined;
+};
+
 interface CombineCtx {
   readonly cwd: string;
   readonly repo: string;
@@ -881,7 +916,15 @@ export const makeProveRunner = (): ProvePort => ({
           for (const cmd of detected) {
             ran.push(await runOneSuite(cmd, runCwd, timeoutMs ?? DEFAULT_TIMEOUT_MS));
           }
-          return combineSuites(ran, { cwd: dir, repo: local, startedAt, headSha, porcelainClean });
+          const combined = combineSuites(ran, { cwd: dir, repo: local, startedAt, headSha, porcelainClean });
+          // Only the clean tree. A source-cwd run that actually collected
+          // tests keeps its exit code. installCleanToolchain throw is already
+          // refused above when prepareProveTree fails.
+          if (cleanup != null) {
+            const reason = cleanTreeRefusal(ran);
+            if (reason != null) return { ...combined, refused: reason };
+          }
+          return combined;
         } finally {
           cleanup?.();
         }

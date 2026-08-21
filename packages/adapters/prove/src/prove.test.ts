@@ -641,3 +641,59 @@ describe("prove multi-suite and detection-driven runs", () => {
     expect(proofVerdict(out)).toBe("neutral");
   });
 });
+
+describe("prove clean-tree install and collection refusal", () => {
+  const git = (args: readonly string[], cwd: string) =>
+    spawnSync("git", [...args], { cwd, encoding: "utf8" });
+
+  /** Put a user-local pytest on PATH so this hits collection, not ENOENT. */
+  const putPytestOnPath = (): void => {
+    if (hasBin("pytest")) return;
+    const userBin = join(process.env.HOME ?? "", ".local", "bin");
+    if (existsSync(join(userBin, "pytest"))) {
+      process.env.PATH = `${userBin}${process.env.PATH ? `:${process.env.PATH}` : ""}`;
+      if (hasBin("pytest")) return;
+    }
+    spawnSync("pip3", ["install", "--user", "pytest"], { encoding: "utf8" });
+    if (existsSync(join(userBin, "pytest"))) {
+      process.env.PATH = `${userBin}${process.env.PATH ? `:${process.env.PATH}` : ""}`;
+    }
+  };
+
+  it("refuses a clean-tree pytest collection failure as neutral (itsdangerous case)", async () => {
+    // Measurement on issue 7: pallets/itsdangerous source exit 0 vs clean-tree
+    // pytest exit 2 (missing itsdangerous, freezegun). That was a red Check.
+    // No package.json, pytest detected, deps absent in the clean tree.
+    putPytestOnPath();
+    expect(hasBin("pytest")).toBe(true);
+
+    const dir = await mkdtemp(join(tmpdir(), "verit-itsdangerous-"));
+    git(["init", "-q", "-b", "main"], dir);
+    git(["config", "user.email", "t@example.com"], dir);
+    git(["config", "user.name", "t"], dir);
+    git(["remote", "add", "origin", "https://github.com/EfeDurmaz16/verit.git"], dir);
+    await writeFile(
+      join(dir, "pyproject.toml"),
+      "[project]\nname = 'itsdangerous'\nversion = '2.2.0'\n",
+    );
+    await mkdir(join(dir, "tests"));
+    await writeFile(
+      join(dir, "tests", "test_signing.py"),
+      "import itsdangerous\nimport freezegun\n\ndef test_ok():\n    assert True\n",
+    );
+    git(["add", "-A"], dir);
+    git(["commit", "-qm", "seed"], dir);
+    expect(existsSync(join(dir, "package.json"))).toBe(false);
+    expect((await detectProveCommand(dir))?.command).toBe("pytest");
+
+    const baseline = await gitState(dir);
+    expect(baseline).not.toBeNull();
+    const out = await Effect.runPromise(
+      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit", baseline }),
+    );
+    expect(out.refused).toBeTruthy();
+    expect(proofVerdict(out)).toBe("neutral");
+    expect(proofVerdict(out)).not.toBe("success");
+    expect(proofVerdict(out)).not.toBe("failure");
+  }, 60_000);
+});
