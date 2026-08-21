@@ -10,10 +10,12 @@
     "test": "pnpm -r run test",
     "test:integration": "VERIT_S3_TEST_ENDPOINT=http://localhost:9000 VERIT_S3_TEST_BUCKET=verit-proofs VERIT_S3_TEST_ACCESS_KEY_ID=verit VERIT_S3_TEST_SECRET_ACCESS_KEY=verit-dev-secret VERIT_NEO4J_URI=bolt://localhost:7687 VERIT_NEO4J_PASSWORD=verit-dev VERIT_PG_TEST_URL=postgres://verit:verit-dev@localhost:5433/verit pnpm --filter @verit/adapter-s3-blob --filter @verit/adapter-neo4j --filter @verit/dashboard test",
     "typecheck": "pnpm -r run typecheck",
+    "lint": "biome lint .",
     "cli": "tsx packages/cli/src/main.ts",
     "workspace": "pnpm --filter @verit/workspace dev"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.9",
     "@types/node": "^22.15.0",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3",
