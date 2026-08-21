@@ -17,12 +17,15 @@ export const bearerToken = (header: string | null): string | null => {
  * stored digest in constant time. An unknown repo still runs the comparison
  * against a decoy digest, so "no such repo" and "wrong token" cost the same
  * and answer the same: 401, with nothing said about which it was.
+ *
+ * A revoked repo is rejected even when its token still matches: the comparison
+ * runs first so the timing is unchanged, then revocation vetoes the result.
  */
 export const authorizeIngest = (repo: RepoRow | null, token: string | null): boolean => {
   const presented = hashToken(token ?? "");
   const stored = repo?.ingestTokenHash ?? DECOY_HASH;
   const ok = constantTimeEqualHex(presented, stored);
-  return ok && repo !== null && token !== null;
+  return ok && repo !== null && token !== null && repo.revokedAt == null;
 };
 
 export type ParseResult =
