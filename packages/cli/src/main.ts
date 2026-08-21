@@ -5,6 +5,7 @@ import { Effect } from "effect";
 import {
   behaviorProofCheck,
   buildReviewContext,
+  changedHeadLines,
   compileReviewPack,
   inferEmbeddingSimilarEdges,
   inferSameAuthorPathEdges,
@@ -64,8 +65,13 @@ Env:
   VERIT_NEO4J_URI     optional bolt://… (memory graph fallback if unset)
   VERIT_PROVE_CWD     checkout to prove in (default GITHUB_WORKSPACE); prove is
                         refused unless that checkout IS the reviewed repo
-  VERIT_PROVE_CMD     override the detected command, e.g. "cargo test --all"
+  VERIT_PROVE_CMD     override the detected command. A string splits on
+                        whitespace, e.g. "cargo test --all"; a JSON array is
+                        exact argv, e.g. ["pnpm","test","--","my case"]
   VERIT_PROVE_TIMEOUT_MS  hard timeout, default 600000
+  VERIT_FAIL_ON       failure | never (default never). failure gates the Check:
+                        an inconclusive proof (nothing ran, refused, no command,
+                        or partial) fails instead of passing as a neutral check
   VERIT_DASHBOARD_URL   base URL of the hosted dashboard. With VERIT_INGEST_TOKEN
                           the finished run is uploaded and the Check links its proof
                           page. Leave either unset and nothing is uploaded
@@ -240,6 +246,8 @@ const runUnderstandPipeline = async (input: {
     skillPackHash: result.skillPackHash,
     /** net chars, moves factored out: what the coverage check budgets against */
     diffChars: result.netDiffChars,
+    /** The PR head's changed lines, per path: what a Check annotation anchors to. */
+    changedLines: changedHeadLines(input.diff),
     what: understanding?.what ?? null,
     risks: understanding?.risks.length ?? 0,
     proofRefs: understanding?.proof_refs.length ?? 0,
@@ -257,12 +265,21 @@ const runUnderstandPipeline = async (input: {
  * Without a checks:write token it is a dry run. The body is printed, nothing
  * is posted, and no green check is ever invented for an unproven change.
  */
+/** The GitHub Actions run this job belongs to, for the Check's Details link. */
+const workflowRunUrl = (): string | undefined => {
+  const server = process.env.GITHUB_SERVER_URL;
+  const slug = process.env.GITHUB_REPOSITORY;
+  const runId = process.env.GITHUB_RUN_ID;
+  return server && slug && runId ? `${server}/${slug}/actions/runs/${runId}` : undefined;
+};
+
 const postBehaviorProofCheck = async (input: {
   understanding: Understanding | null;
   outcome: ProveOutcome | null;
   diffChars?: number;
   runId: string;
   proofPageUrl?: string;
+  changedLines?: ReadonlyMap<string, ReadonlySet<number>>;
 }) => {
   const slug = process.env.GITHUB_REPOSITORY;
   const headSha = process.env.VERIT_CHECK_SHA || process.env.GITHUB_SHA;
@@ -272,11 +289,17 @@ const postBehaviorProofCheck = async (input: {
   }
   const [owner, repo] = slug.split("/");
   if (!owner || !repo) return null;
+  // fail-on gating: a required check counts neutral as a pass, so failure maps
+  // an inconclusive proof to a hard failure. never (default) preserves today.
+  const failOn = process.env.VERIT_FAIL_ON === "failure" ? "failure" : "never";
   const check = behaviorProofCheck({
     understanding: input.understanding,
     outcome: input.outcome,
     diffChars: input.diffChars,
     proofPageUrl: input.proofPageUrl,
+    workflowRunUrl: workflowRunUrl(),
+    changedLines: input.changedLines,
+    failOn,
     runId: input.runId,
   });
   const dry = process.env.VERIT_CHECK_DRY_RUN === "1" || !process.env.GITHUB_TOKEN;
@@ -311,11 +334,12 @@ const printable = <
     outcome: ProveOutcome | null;
     run: ReviewRun;
     spec: unknown;
+    changedLines: ReadonlyMap<string, ReadonlySet<number>>;
   },
 >(
   out: T,
-): Omit<T, "understanding" | "outcome" | "run" | "spec"> => {
-  const { understanding: _u, outcome: _o, run: _r, spec: _s, ...rest } = out;
+): Omit<T, "understanding" | "outcome" | "run" | "spec" | "changedLines"> => {
+  const { understanding: _u, outcome: _o, run: _r, spec: _s, changedLines: _c, ...rest } = out;
   return rest;
 };
 
@@ -535,8 +559,17 @@ const main = async () => {
       diffChars: out.diffChars,
       runId: out.runId,
       proofPageUrl: pageUrl,
+      changedLines: out.changedLines,
     });
-    const { understanding: _u, outcome: _o, run: _r, spec: _s, pr: _p, ...summary } = out;
+    const {
+      understanding: _u,
+      outcome: _o,
+      run: _r,
+      spec: _s,
+      pr: _p,
+      changedLines: _c,
+      ...summary
+    } = out;
     console.log(
       JSON.stringify(
         {
