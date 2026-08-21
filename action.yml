@@ -21,6 +21,10 @@ inputs:
     description: "Hard timeout for the verification command. The process group is killed."
     required: false
     default: "600000"
+  install-command:
+    description: "Install the reviewed repo's own dependencies before prove, in GITHUB_WORKSPACE, e.g. 'pnpm install --frozen-lockfile' or 'npm ci'. Empty means verit installs nothing for you: a repo whose tests need node_modules must install them in an earlier workflow step, or prove cannot run its command."
+    required: false
+    default: ""
   fail-on:
     description: "failure or never. Default never keeps neutral neutral. failure gates the Check: an inconclusive proof (nothing ran, refused, no command found, or partial coverage) fails instead of passing, since a required check counts neutral as a pass."
     required: false
@@ -82,7 +86,25 @@ runs:
       if: inputs.lane-harness == 'claude' && inputs.anthropic-api-key != ''
       shell: bash
       run: npm install -g @anthropic-ai/claude-code
+    # Install the reviewed repo's OWN dependencies, in the caller's checkout, so
+    # a healthy JS PR whose tests need node_modules reaches a real prove run
+    # instead of a false failure. The steps above install verit in
+    # github.action_path; this one installs the caller's deps in
+    # github.workspace, the same directory prove runs in (VERIT_PROVE_CWD).
+    # Passed through env, never inlined into the script, so a workflow input
+    # cannot inject shell. Empty input skips this: the caller installs its own.
+    - name: Install the reviewed repo's dependencies
+      if: inputs.install-command != ''
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        INSTALL_COMMAND: ${{ inputs.install-command }}
+      run: |
+        echo "verit: installing reviewed repo dependencies in $PWD"
+        echo "verit: $INSTALL_COMMAND"
+        $INSTALL_COMMAND
     - name: Review, prove and post the Check
+      id: review
       shell: bash
       working-directory: ${{ github.action_path }}
       env:
