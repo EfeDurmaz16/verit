@@ -1,0 +1,134 @@
+name: release
+
+# Cut a release the safe way: tag main, PROVE the action at that exact tag,
+# and only then (guarded, off by default) move the v0 major alias so `@v0`
+# callers pick it up. Moving v0 is a deliberate separate click, never a side
+# effect of tagging. Rollback is documented at the bottom of this file and in
+# CHANGELOG.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to cut, as vX.Y.Z (for example v0.3.0)."
+        required: true
+      move_major_alias:
+        description: "Also move the v0 alias to this tag. Leave false. Flip to true only to make @v0 callers adopt this release, after the tag is proven."
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write # create and push tags, publish the release
+  checks: write # the prove step posts its behavior-proof Check
+  pull-requests: read
+
+# One release at a time. A second dispatch waits instead of racing tag pushes.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # all history and tags, for the notes range and the alias
+
+      - name: Validate the version and that the tag is new
+        id: check
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "version must look like vX.Y.Z, got '$VERSION'" >&2
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
+            echo "tag $VERSION already exists. Pick a new version." >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Generate release notes from conventional commits
+        id: notes
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
+        run: |
+          # Last real semver tag, ignoring the v0 major alias.
+          PREV=$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' 2>/dev/null || true)
+          RANGE="HEAD"
+          [ -n "$PREV" ] && RANGE="$PREV..HEAD"
+          # Subjects in this range, one bucket per conventional-commit type. The
+          # sed strips the `type(scope): ` prefix so the line reads as a change.
+          bucket() {
+            git log --no-merges --pretty=format:'%s' "$RANGE" \
+              | grep -E "$1" \
+              | sed -E 's/^[a-z]+(\([^)]*\))?!?: //' \
+              | sed 's/^/- /'
+          }
+          {
+            echo "## $VERSION"
+            echo
+            if [ -n "$PREV" ]; then echo "Changes since $PREV."; else echo "First tagged release."; fi
+            echo
+            F=$(bucket '^feat'); [ -n "$F" ] && printf '### Features\n%s\n\n' "$F"
+            X=$(bucket '^fix');  [ -n "$X" ] && printf '### Fixes\n%s\n\n' "$X"
+            D=$(bucket '^docs'); [ -n "$D" ] && printf '### Docs\n%s\n\n' "$D"
+            O=$(git log --no-merges --pretty=format:'%s' "$RANGE" | grep -vE '^(feat|fix|docs)(\(|:|!)' | sed 's/^/- /')
+            [ -n "$O" ] && printf '### Other\n%s\n\n' "$O"
+          } > RELEASE_NOTES.md
+          cat RELEASE_NOTES.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create and push the tag
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$VERSION" -m "$VERSION"
+          git push origin "refs/tags/$VERSION"
+
+      # Prove the action AS IT EXISTS AT THIS TAG. `uses: ./` runs action.yml
+      # from this checkout, which is the commit the tag was just cut at, so a
+      # green job here means the tag itself works end to end. A broken action
+      # fails this step, the job stops, and the alias step below never runs.
+      - name: Prove the action at the tag runs
+        uses: ./
+        with:
+          pr: ${{ vars.RELEASE_VERIFY_PR || 'solana-foundation/pay#415' }}
+          prove-timeout-ms: "900000"
+          lane-provider: ${{ vars.VERIT_LANE_PROVIDER }}
+          lane-model: ${{ vars.VERIT_LANE_MODEL }}
+          lane-api-key: ${{ secrets.VERIT_LANE_API_KEY }}
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.check.outputs.version }}
+        run: gh release create "$VERSION" --title "$VERSION" --notes-file RELEASE_NOTES.md
+
+      # GUARDED, off by default. Moving v0 is what makes `@v0` callers adopt
+      # this release, so it is a deliberate separate decision, not a tagging
+      # side effect. Runs only when move_major_alias is true AND every step
+      # above, the prove included, passed.
+      - name: Move the v0 major alias to the new tag
+        if: ${{ inputs.move_major_alias }}
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
+        run: |
+          MAJOR="${VERSION%%.*}" # v0.3.0 -> v0
+          echo "moving $MAJOR to $VERSION"
+          git tag -f "$MAJOR" "$VERSION"
+          git push -f origin "refs/tags/$MAJOR"
+
+# Rollback, if a moved v0 turns out bad:
+#
+#   git tag -f v0 <last-good-vX.Y.Z>
+#   git push -f origin refs/tags/v0
+#
+# Then add a yank line to CHANGELOG.md naming the bad tag and why. Deleting a
+# published vX.Y.Z is a last resort:
+#
+#   git push origin :refs/tags/vX.Y.Z   # and delete its GitHub release
