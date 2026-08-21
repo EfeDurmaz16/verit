@@ -7,6 +7,8 @@ export interface RepoRow {
   readonly owner: string;
   readonly name: string;
   readonly ingestTokenHash: string;
+  /** Set once revoked. A revoked repo's token no longer ingests. */
+  readonly revokedAt: Date | null;
 }
 
 export interface RunSummary {
@@ -66,17 +68,30 @@ const toSummary = (r: SummaryRow): RunSummary => ({
   createdAt: r.created_at,
 });
 
+const toRepoRow = (row: {
+  id: string;
+  owner: string;
+  name: string;
+  ingest_token_hash: string;
+  revoked_at: Date | null;
+}): RepoRow => ({
+  id: row.id,
+  owner: row.owner,
+  name: row.name,
+  ingestTokenHash: row.ingest_token_hash,
+  revokedAt: row.revoked_at,
+});
+
 export const repoBySlug = async (slug: string): Promise<RepoRow | null> => {
   const rows = await query<{
     id: string;
     owner: string;
     name: string;
     ingest_token_hash: string;
-  }>(`SELECT id, owner, name, ingest_token_hash FROM repos WHERE id = $1`, [slug]);
+    revoked_at: Date | null;
+  }>(`SELECT id, owner, name, ingest_token_hash, revoked_at FROM repos WHERE id = $1`, [slug]);
   const row = rows[0];
-  return row
-    ? { id: row.id, owner: row.owner, name: row.name, ingestTokenHash: row.ingest_token_hash }
-    : null;
+  return row ? toRepoRow(row) : null;
 };
 
 /** Connected repos of one org, each with the run that finished most recently. */
@@ -84,11 +99,17 @@ export const listReposForOwner = async (
   owner: string,
 ): Promise<Array<{ repo: RepoRow; lastRun: RunSummary | null }>> => {
   const rows = await query<
-    { repo_id: string; owner: string; name: string; ingest_token_hash: string } & {
+    {
+      repo_id: string;
+      owner: string;
+      name: string;
+      ingest_token_hash: string;
+      revoked_at: Date | null;
+    } & {
       [K in keyof SummaryRow]: SummaryRow[K] | null;
     }
   >(
-    `SELECT r.id AS repo_id, r.owner, r.name, r.ingest_token_hash, last.*
+    `SELECT r.id AS repo_id, r.owner, r.name, r.ingest_token_hash, r.revoked_at, last.*
        FROM repos r
        LEFT JOIN LATERAL (
          SELECT ${SUMMARY_COLUMNS} FROM runs WHERE repo_id = r.id
@@ -104,6 +125,7 @@ export const listReposForOwner = async (
       owner: row.owner,
       name: row.name,
       ingestTokenHash: row.ingest_token_hash,
+      revokedAt: row.revoked_at,
     },
     lastRun:
       row.id !== null && row.created_at !== null
@@ -120,10 +142,14 @@ export const listReposForOwner = async (
 
 export const listAllRepos = async (): Promise<RepoRow[]> =>
   (
-    await query<{ id: string; owner: string; name: string; ingest_token_hash: string }>(
-      `SELECT id, owner, name, ingest_token_hash FROM repos ORDER BY owner, name`,
-    )
-  ).map((r) => ({ id: r.id, owner: r.owner, name: r.name, ingestTokenHash: r.ingest_token_hash }));
+    await query<{
+      id: string;
+      owner: string;
+      name: string;
+      ingest_token_hash: string;
+      revoked_at: Date | null;
+    }>(`SELECT id, owner, name, ingest_token_hash, revoked_at FROM repos ORDER BY owner, name`)
+  ).map(toRepoRow);
 
 export const listOwners = async (): Promise<Array<{ owner: string; repos: number }>> =>
   (

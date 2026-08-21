@@ -14,10 +14,13 @@ const main = async (): Promise<void> => {
   }
   const [owner, name] = slug.split("/") as [string, string];
   const token = newIngestToken();
+  // A fresh token also lifts a prior revocation: reissuing is how a revoked
+  // repo comes back, with a new secret and the old one already dead.
   await query(
     `INSERT INTO repos (id, owner, name, ingest_token_hash)
      VALUES ($1, $2, $3, $4)
-     ON CONFLICT (id) DO UPDATE SET ingest_token_hash = excluded.ingest_token_hash`,
+     ON CONFLICT (id) DO UPDATE SET
+       ingest_token_hash = excluded.ingest_token_hash, revoked_at = NULL`,
     [slug, owner, name, hashToken(token)],
   );
   console.log(`repo ${slug} connected`);

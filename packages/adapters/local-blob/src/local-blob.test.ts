@@ -21,6 +21,19 @@ describe("fs object store", () => {
     expect(await Effect.runPromise(store.get("runs/run_1/missing.log"))).toBeNull();
   });
 
+  it("deletes a body and its content type, and reads back null after", async () => {
+    const store = makeFsObjectStore(await dir());
+    await Effect.runPromise(store.put("runs/run_1/test.log", "hello\n", "text/plain"));
+    await Effect.runPromise(store.delete("runs/run_1/test.log"));
+    expect(await Effect.runPromise(store.get("runs/run_1/test.log"))).toBeNull();
+  });
+
+  it("deleting a key that was never written is a success, not an error", async () => {
+    const store = makeFsObjectStore(await dir());
+    const exit = await Effect.runPromiseExit(store.delete("runs/run_1/missing.log"));
+    expect(Exit.isSuccess(exit)).toBe(true);
+  });
+
   it("refuses a key that would escape the store", async () => {
     const root = await dir();
     const store = makeFsObjectStore(root);

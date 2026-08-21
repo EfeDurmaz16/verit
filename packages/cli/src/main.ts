@@ -301,6 +301,7 @@ const postBehaviorProofCheck = async (input: {
     changedLines: input.changedLines,
     failOn,
     runId: input.runId,
+    forceNeutral: process.env.VERIT_FORCE_NEUTRAL,
   });
   const dry = process.env.VERIT_CHECK_DRY_RUN === "1" || !process.env.GITHUB_TOKEN;
   if (dry) {

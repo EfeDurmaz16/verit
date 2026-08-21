@@ -5,6 +5,7 @@ export * from "./chunks";
 export { changedHeadLines } from "@verit/netdiff";
 export * from "./compiler";
 export * from "./prove";
+export * from "./redact";
 export * from "./context";
 export * from "./edges";
 export * from "./hash";

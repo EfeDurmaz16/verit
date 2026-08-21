@@ -218,6 +218,30 @@ describe("behaviorProofCheck on a truncated diff", () => {
     expect(check.conclusion).toBe("success");
     expect(check.summary).not.toContain("Coverage");
   });
+
+  it("freezes a would-be green to neutral and names the reason", () => {
+    const check = behaviorProofCheck({
+      understanding,
+      outcome: passing,
+      diffChars: 5_000,
+      forceNeutral: "false green on repo acme/pay, INC-42",
+    });
+    expect(check.conclusion).toBe("neutral");
+    expect(check.title).toContain("Frozen to no-claim");
+    expect(check.summary).toContain("INC-42");
+    // The proof result is still shown, only the claim is withheld.
+    expect(check.summary).toContain("pnpm run test");
+  });
+
+  it("an empty freeze reason is not a freeze", () => {
+    const check = behaviorProofCheck({
+      understanding,
+      outcome: passing,
+      diffChars: 5_000,
+      forceNeutral: "  ",
+    });
+    expect(check.conclusion).toBe("success");
+  });
 });
 
 describe("behaviorProofCheck without an Understanding", () => {

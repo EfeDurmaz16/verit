@@ -3,11 +3,12 @@ import { hashToken, newIngestToken } from "./crypto";
 import { authorizeIngest, bearerToken, parseUpload } from "./ingest";
 import type { RepoRow } from "./runs";
 
-const repo = (token: string): RepoRow => ({
+const repo = (token: string, revokedAt: Date | null = null): RepoRow => ({
   id: "acme/widgets",
   owner: "acme",
   name: "widgets",
   ingestTokenHash: hashToken(token),
+  revokedAt,
 });
 
 const validUpload = (over: Record<string, unknown> = {}) => ({
@@ -52,6 +53,11 @@ describe("ingest token auth", () => {
   it("rejects a token that is a prefix of the right one", () => {
     const token = newIngestToken();
     expect(authorizeIngest(repo(token), token.slice(0, -1))).toBe(false);
+  });
+
+  it("rejects a revoked repo even with the token whose hash is stored", () => {
+    const token = newIngestToken();
+    expect(authorizeIngest(repo(token, new Date("2026-08-20T00:00:00Z")), token)).toBe(false);
   });
 
   it("reads the token out of an Authorization header, or nothing", () => {

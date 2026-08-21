@@ -15,6 +15,11 @@ CREATE TABLE IF NOT EXISTS repos (
   created_at         timestamptz NOT NULL DEFAULT now()
 );
 
+-- A revoked repo can no longer ingest, even with its right token. Distinct
+-- from reissue: revoke stops uploads without minting a new secret, and
+-- register-repo clears it again by issuing a fresh token.
+ALTER TABLE repos ADD COLUMN IF NOT EXISTS revoked_at timestamptz;
+
 CREATE TABLE IF NOT EXISTS runs (
   id             text PRIMARY KEY,
   repo_id        text NOT NULL REFERENCES repos(id) ON DELETE CASCADE,

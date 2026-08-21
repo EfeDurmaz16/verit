@@ -281,6 +281,22 @@ org-wide dashboards and no infrastructure to run, is coming.
 Want in early? Email [efe@sardis.sh](mailto:efe@sardis.sh) with "verit" in the
 subject.
 
+### Subprocessors
+
+The hosted dashboard runs on these third parties. Self-hosting removes all of
+them except the model provider, which is your own account.
+
+| Subprocessor | Role |
+|---|---|
+| GitHub | Source of the code and pull requests, and the repo read-access answer |
+| Neon | Postgres host for run history and access cache |
+| Vercel | Dashboard hosting |
+| Cloudflare R2 | Object storage for prove logs |
+| The lane model provider | Runs the review model. Anthropic by default, or whatever `VERIT_LANE_PROVIDER` names |
+
+Full field-by-field detail, retention windows, and who can read what:
+[`docs/data.md`](docs/data.md).
+
 ---
 
 ## Configuration
@@ -293,6 +309,7 @@ subject.
 | `VERIT_PROVE_TIMEOUT_MS` | `600000` | Hard timeout. The process group is killed |
 | `VERIT_FAIL_ON` | `never` | `failure` gates the Check: an inconclusive proof (nothing ran, refused, no command found, or partial coverage) maps to `failure` instead of `neutral`, since a required check counts `neutral` as a pass. `never` keeps today's behavior |
 | `VERIT_CHECK_DRY_RUN` | unset | `1` prints the Check body instead of posting it |
+| `VERIT_FORCE_NEUTRAL` | unset | Incident freeze. Any non-empty reason forces every Check to `neutral`, whatever the proof said. Only downgrades a claim, never invents one. See [`docs/runbook.md`](docs/runbook.md) |
 | `VERIT_LANE_PROVIDER` | unset | `anthropic` or `openai-compat` turns on the built-in HTTP lane, the default path whenever it is set. An unknown value is an error, never a silent fallback |
 | `VERIT_LANE_MODEL` | unset | Model id for the lane. Required with `VERIT_LANE_PROVIDER`: the lane pins its model and never guesses one. Also the optional model override for the legacy CLI harnesses |
 | `VERIT_LANE_BASE_URL` | provider default | API base URL override. `openai-compat` covers OpenAI, Grok (`https://api.x.ai/v1`), DeepSeek, GLM, and local vLLM |

@@ -154,6 +154,15 @@ export const behaviorProofCheck = (input: {
       it cannot pass as a neutral check. `never` (default) is today's behavior. */
   failOn?: "failure" | "never";
   runId?: string;
+  /**
+   * The incident freeze lever. When set to a reason, the check concludes
+   * neutral no matter what the proof said. This is the "force the affected
+   * path to no-claim" mechanism the false-green runbook drill uses: an operator
+   * sets VERIT_FORCE_NEUTRAL to stop a bad path from ever claiming green while
+   * the root cause is being fixed. It can only downgrade a claim, never invent
+   * one, so it is always safe to leave on.
+   */
+  forceNeutral?: string;
 }): Omit<CheckRunInput, "owner" | "repo" | "headSha"> => {
   const {
     understanding: u,
@@ -164,7 +173,9 @@ export const behaviorProofCheck = (input: {
     changedLines,
     failOn = "never",
     runId,
+    forceNeutral,
   } = input;
+  const frozen = forceNeutral !== undefined && forceNeutral.trim() !== "";
   const coverage = diffChars === undefined ? 100 : diffCoveragePercent(diffChars);
 
   const sortedRisks = u === null
@@ -185,7 +196,10 @@ export const behaviorProofCheck = (input: {
   // gating: a neutral check passes required checks, so under fail-on=failure an
   // inconclusive proof must fail rather than pass silently.
   const gated = failOn === "failure" && capped === "neutral";
-  const conclusion = gated ? "failure" : capped;
+  // freeze is the incident lever: it forces no-claim and can only downgrade a
+  // claim, never invent one, so it is the last word and overrides gating too
+  // (leaving it on can never turn a check into failure).
+  const conclusion = frozen ? "neutral" : gated ? "failure" : capped;
 
   const proofTitle =
     outcome === null
@@ -201,14 +215,23 @@ export const behaviorProofCheck = (input: {
               : outcome.exitCode === 0
                 ? `Proof passed: ${outcome.command}`
                 : `Proof failed: ${outcome.command} (exit ${outcome.exitCode})`;
-  const title =
-    u === null
+  const title = frozen
+    ? `Frozen to no-claim: ${condense(forceNeutral ?? "", 120)}`
+    : u === null
       ? `Analysis did not complete. ${proofTitle}`
       : outcome === null
         ? "No proof was run. Understanding only."
         : proofTitle;
 
   const lines: string[] = [];
+  if (frozen) {
+    lines.push(
+      `**Frozen.** An operator forced this check to no-claim: ${condense(forceNeutral ?? "", 400)}`,
+      "",
+      "The proof result below still shows what ran. The conclusion stays neutral until the freeze is lifted.",
+      "",
+    );
+  }
   if (u === null) {
     lines.push(
       "Analysis did not complete. No Understanding was produced for this run, so this check stays neutral whatever the tests say.",

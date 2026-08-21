@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import { Effect } from "effect";
 import type { BlobPort, ObjectStorePort, StoredObject } from "@verit/ports";
@@ -59,5 +59,16 @@ export const makeFsObjectStore = (dir = ".data/objects"): ObjectStorePort => ({
         return { body: new Uint8Array(body), contentType };
       },
       catch: (e) => (e instanceof StoreError ? e : new StoreError("fs object get", e)),
+    }),
+  delete: (key) =>
+    Effect.tryPromise({
+      try: async () => {
+        const path = pathFor(dir, key);
+        // `force` makes a missing file a success, which is what an idempotent
+        // delete wants: a retry after a half-finished purge must still converge.
+        await rm(path, { force: true });
+        await rm(`${path}.type`, { force: true });
+      },
+      catch: (e) => (e instanceof StoreError ? e : new StoreError("fs object delete", e)),
     }),
 });

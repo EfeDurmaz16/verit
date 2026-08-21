@@ -132,7 +132,7 @@ export const makeS3ObjectStore = (config: S3ObjectStoreConfig): ObjectStorePort 
    * length, on a patched `fetch` and a plain one alike.
    */
   const send = async (
-    method: "GET" | "PUT",
+    method: "GET" | "PUT" | "DELETE",
     target: string,
     body?: { readonly bytes: ArrayBuffer; readonly sha256: string },
     contentType?: string,
@@ -191,6 +191,20 @@ export const makeS3ObjectStore = (config: S3ObjectStoreConfig): ObjectStorePort 
           };
         },
         catch: (e) => (e instanceof StoreError ? e : new StoreError("s3 object get", e)),
+      }),
+
+    delete: (key) =>
+      Effect.tryPromise({
+        try: async () => {
+          const res = await send("DELETE", url(key));
+          // S3 answers 204 whether or not the key existed, so a delete is
+          // idempotent by the protocol. 404 is folded in for stores that 404.
+          if (!res.ok && res.status !== 404) {
+            throw failed("delete", res, await res.text().catch(() => ""));
+          }
+          await res.arrayBuffer().catch(() => undefined);
+        },
+        catch: (e) => (e instanceof StoreError ? e : new StoreError("s3 object delete", e)),
       }),
   };
 };

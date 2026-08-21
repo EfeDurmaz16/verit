@@ -10,6 +10,8 @@
     "start": "next start --port 3001",
     "migrate": "tsx scripts/migrate.ts",
     "register-repo": "tsx scripts/register-repo.ts",
+    "revoke-repo": "tsx scripts/revoke-repo.ts",
+    "retention": "tsx scripts/retention.ts",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
