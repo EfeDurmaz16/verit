@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process";
-import { createHash } from "node:crypto";
-import { readFile, readdir } from "node:fs/promises";
+import { createHash, type Hash } from "node:crypto";
+import { lstat, readFile, readdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -22,9 +22,11 @@ import { StoreError } from "@verit/ports";
  *    so reviewing a stranger's fork can never run their tests in your tree.
  *    Fail closed: no remote, no match, no run.
  *  - `run` refuses a second way. Given a `baseline` git snapshot from before
- *    the analysis stage, it re-reads the tree and will not run if HEAD or an
- *    uncommitted file moved. An earlier stage that edited the tree prove is
- *    about to measure turns the check neutral, never green.
+ *    the analysis stage, it re-reads the tree and will not run if HEAD moved
+ *    or the bytes prove will execute moved. That includes a clean/smudge
+ *    rewrite of a tracked file and a write into a gitignored path a detected
+ *    suite runs. An earlier stage that edited the tree prove is about to
+ *    measure turns the check neutral, never green.
  *  - Hard timeout, killed as a process group so runners cannot outlive it, and
  *    output is capped so a chatty suite cannot exhaust memory.
  *  - Locally the child env is an allowlist (see proveChildEnv), so keys and
@@ -98,15 +100,19 @@ const fromEnv = (): ProveCommand | null => {
   return { command, args, source: "VERIT_PROVE_CMD" };
 };
 
-/** A test script present and non-empty in a package.json-shaped manifest. */
-const testScript = async (path: string): Promise<boolean> => {
+/** Test script text from a package.json-shaped manifest, or null. */
+const readManifestTestScript = async (path: string): Promise<string | null> => {
   const raw = await readJson(path);
-  if (raw === null) return false;
+  if (raw === null) return null;
   const decoded = decodePackageJson(raw);
-  if (Either.isLeft(decoded)) return false;
+  if (Either.isLeft(decoded)) return null;
   const t = decoded.right.scripts?.["test"];
-  return typeof t === "string" && t.trim() !== "";
+  return typeof t === "string" && t.trim() !== "" ? t : null;
 };
+
+/** A test script present and non-empty in a package.json-shaped manifest. */
+const testScript = async (path: string): Promise<boolean> =>
+  (await readManifestTestScript(path)) != null;
 
 /** True when the Makefile declares a `test` target. */
 const makefileHasTestTarget = async (cwd: string): Promise<boolean> => {
@@ -232,12 +238,121 @@ export const repoSlugAt = async (cwd: string): Promise<string | null> => {
 };
 
 const GIT_STATUS_BUFFER = 8 * 1024 * 1024;
+const PATH_SPLIT = /[\s"'`:;=]+/;
+
+/** Relative path a suite might execute. Rejects flags, abs paths, and `..`. */
+const normalizeRel = (token: string): string | null => {
+  const s = token.replace(/\\/g, "/").replace(/^\.\//, "");
+  if (s === "" || s.startsWith("/") || s.split("/").includes("..") || s.split("/").includes("")) {
+    return null;
+  }
+  if (!s.includes("/")) return null;
+  return s;
+};
+
+const isIgnored = async (cwd: string, rel: string): Promise<boolean> => {
+  try {
+    await exec("git", ["-C", cwd, "check-ignore", "-q", "--", rel], { timeout: 10_000 });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** Fold on-disk bytes at `abs` into `h`. Symlink dirs are not walked. */
+const addTreeBytes = async (abs: string, rel: string, h: Hash): Promise<void> => {
+  const st = await lstat(abs).catch(() => null);
+  if (st === null) {
+    h.update("missing");
+    return;
+  }
+  if (st.isSymbolicLink() || st.isFile()) {
+    try {
+      h.update(await readFile(abs));
+    } catch {
+      h.update("unreadable");
+    }
+    return;
+  }
+  if (!st.isDirectory()) return;
+  const entries = (await readdir(abs, { withFileTypes: true })).sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  for (const e of entries) {
+    const childRel = rel === "" ? e.name : `${rel}/${e.name}`;
+    h.update(childRel);
+    h.update("\0");
+    await addTreeBytes(join(abs, e.name), childRel, h);
+    h.update("\0");
+  }
+};
+
+/** On-disk bytes of every tracked path. `git hash-object` applies clean and
+    would miss a smudge rewrite; readFile does not. */
+const addTrackedWorkingBytes = async (cwd: string, h: Hash): Promise<void> => {
+  const listed = await exec("git", ["-C", cwd, "ls-files", "-z"], {
+    timeout: 30_000,
+    maxBuffer: GIT_STATUS_BUFFER,
+  });
+  const paths = listed.stdout.split("\0").filter(Boolean).sort();
+  for (const rel of paths) {
+    h.update(rel);
+    h.update("\0");
+    try {
+      h.update(await readFile(join(cwd, rel)));
+    } catch {
+      h.update("missing");
+    }
+    h.update("\0");
+  }
+};
+
+/** Gitignored roots a detected suite can execute: path tokens from
+    package.json / composer.json test scripts and from VERIT_PROVE_CMD.
+    A file token hashes its ignored parent directory when that parent is
+    ignored, so a write anywhere in that toolchain dir moves the snapshot. */
+const addExecutableIgnoredBytes = async (cwd: string, h: Hash): Promise<void> => {
+  const tokens: string[] = [];
+  const take = (raw: string): void => {
+    const n = normalizeRel(raw);
+    if (n) tokens.push(n);
+  };
+  for (const name of ["package.json", "composer.json"] as const) {
+    const script = await readManifestTestScript(join(cwd, name));
+    if (script == null) continue;
+    for (const part of script.split(PATH_SPLIT)) take(part);
+  }
+  const env = fromEnv();
+  if (env) {
+    take(env.command);
+    for (const arg of env.args) take(arg);
+  }
+  const roots = new Set<string>();
+  for (const rel of tokens) {
+    const slash = rel.lastIndexOf("/");
+    const parent = slash === -1 ? "" : rel.slice(0, slash);
+    if (parent !== "" && (await isIgnored(cwd, parent))) roots.add(parent);
+    else if (await isIgnored(cwd, rel)) roots.add(rel);
+  }
+  for (const root of [...roots].sort()) {
+    h.update("ignored:");
+    h.update(root);
+    h.update("\0");
+    await addTreeBytes(join(cwd, root), "", h);
+    h.update("\0");
+  }
+};
 
 /**
- * A snapshot of the working tree at `cwd`: HEAD plus a hash of the porcelain
- * status. Null when `cwd` is not a git checkout. The caller records one before
- * an analysis stage runs and hands it back to `run`, which compares against a
- * fresh read to see whether the tree moved in between.
+ * A snapshot of the working tree at `cwd`. Null when `cwd` is not a git
+ * checkout. The caller records one before an analysis stage runs and hands
+ * it back to `run`, which compares against a fresh read to see whether the
+ * bytes prove will execute moved in between.
+ *
+ * Porcelain and ls-files -v are git metadata. A clean/smudge filter can
+ * change the working-tree bytes without flipping either, and an ignored
+ * toolchain directory never appears in either. Folding those on-disk bytes
+ * in means the snapshot moves when the suite's inputs move.
  */
 export const gitState = async (cwd: string): Promise<GitState | null> => {
   try {
@@ -251,19 +366,22 @@ export const gitState = async (cwd: string): Promise<GitState | null> => {
     // porcelain empty with HEAD unmoved. ls-files -v prints the index bit of
     // every path (S skip-worktree, lowercase assume-unchanged, H otherwise);
     // folding it into the hash means setting either bit moves the snapshot, and
-    // the bit cannot be cleared without re-exposing the edit in porcelain. That
-    // closes the "hide the doctoring so the hash still matches" evasion.
+    // the bit cannot be cleared without re-exposing the edit in porcelain.
     const flags = await exec("git", ["-C", cwd, "ls-files", "-v"], {
       timeout: 30_000,
       maxBuffer: GIT_STATUS_BUFFER,
     });
+    const hasher = createHash("sha256");
+    hasher.update(status.stdout);
+    hasher.update("\0");
+    hasher.update(flags.stdout);
+    hasher.update("\0");
+    await addTrackedWorkingBytes(cwd, hasher);
+    hasher.update("\0");
+    await addExecutableIgnoredBytes(cwd, hasher);
     return {
       headSha: head.stdout.trim(),
-      porcelainHash: createHash("sha256")
-        .update(status.stdout)
-        .update("\0")
-        .update(flags.stdout)
-        .digest("hex"),
+      porcelainHash: hasher.digest("hex"),
       clean: status.stdout.trim() === "",
     };
   } catch {

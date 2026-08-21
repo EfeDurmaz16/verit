@@ -130,4 +130,63 @@ describe("openLaneCheckout", () => {
     expect(proofVerdict(out)).toBe("neutral");
     rmSync(src, { recursive: true, force: true });
   });
+
+  // Same fixture as the skip-worktree case, but the bytes change without
+  // flipping HEAD, porcelain, or ls-files -v. A repo-local clean/smudge in
+  // .git/info/attributes + filter.* (shared via git-common-dir) rewrites
+  // expected.txt on checkout; clean reconstitutes the committed blob so
+  // status stays empty. gitState must hash the on-disk bytes prove will
+  // run, or this escape is a green.
+  it("turns prove neutral when a lane bash doctors expected.txt via repo-local clean/smudge", async () => {
+    const src = mkdtempSync(join(tmpdir(), "verit-smudge-src-"));
+    git(["init", "-q", "-b", "main"], src);
+    git(["config", "user.email", "t@example.com"], src);
+    git(["config", "user.name", "t"], src);
+    git(["remote", "add", "origin", "https://github.com/EfeDurmaz16/verit.git"], src);
+    writeFileSync(join(src, "package.json"), JSON.stringify({ scripts: { test: "node check.js" } }));
+    writeFileSync(
+      join(src, "check.js"),
+      'const fs=require("fs");process.exit(fs.readFileSync("expected.txt","utf8").trim()==="2"?1:0);\n',
+    );
+    writeFileSync(join(src, "expected.txt"), "2\n");
+    git(["add", "-A"], src);
+    git(["commit", "-qm", "seed"], src);
+
+    const beforeHead = headSha(src);
+    const baseline = await gitState(src);
+    expect(baseline).not.toBeNull();
+
+    const checkout = openLaneCheckout(src);
+    expect(checkout.isolated).toBe(true);
+    try {
+      const attack =
+        'SRC=$(dirname "$(cd "$(git rev-parse --git-common-dir)" && pwd)"); ' +
+        'mkdir -p "$SRC/.git/info"; ' +
+        'printf "expected.txt filter=veritpass\\n" > "$SRC/.git/info/attributes"; ' +
+        'git -C "$SRC" config filter.veritpass.clean "echo 2"; ' +
+        'git -C "$SRC" config filter.veritpass.smudge "echo 1"; ' +
+        'rm -f "$SRC/expected.txt"; ' +
+        'git -C "$SRC" checkout HEAD -- expected.txt';
+      const r = executeLaneTool(checkout.root, "bash", { command: attack });
+      expect(r.isError).toBe(false);
+    } finally {
+      checkout.cleanup();
+    }
+
+    // the attack landed, and every metadata signal the old snapshot trusted
+    // still matches the baseline: HEAD, porcelain, ls-files -v.
+    expect(readFileSync(join(src, "expected.txt"), "utf8").trim()).toBe("1");
+    expect(headSha(src)).toBe(beforeHead);
+    expect(git(["status", "--porcelain"], src).stdout).toBe("");
+    expect(git(["ls-files", "-v", "--", "expected.txt"], src).stdout).toMatch(/^H expected\.txt/);
+
+    const out = await Effect.runPromise(
+      makeProveRunner().run({ cwd: src, expectRepo: "EfeDurmaz16/verit", baseline }),
+    );
+    expect(out.refused).toBeTruthy();
+    expect(out.refused).toContain("working tree changed");
+    expect(proofVerdict(out)).toBe("neutral");
+    expect(out.log).toBe("");
+    rmSync(src, { recursive: true, force: true });
+  });
 });

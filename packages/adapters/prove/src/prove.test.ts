@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
@@ -332,6 +332,37 @@ describe("prove dirty-tree guard", () => {
     );
     expect(out.refused).toBeTruthy();
     expect(proofVerdict(out)).toBe("neutral");
+  });
+
+  it("refuses when a detected suite's gitignored toolchain is rewritten", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "verit-guard-"));
+    git(["init", "-q", "-b", "main"], dir);
+    git(["config", "user.email", "t@example.com"], dir);
+    git(["config", "user.name", "t"], dir);
+    git(["remote", "add", "origin", "https://github.com/EfeDurmaz16/verit.git"], dir);
+    // the detected suite executes an ignored directory. porcelain and
+    // ls-files -v never see writes there, so a snapshot that only hashes
+    // git metadata lets the rewrite run to a green.
+    await writeFile(join(dir, "package.json"), JSON.stringify({ scripts: { test: "node toolchain/run.js" } }));
+    await writeFile(join(dir, ".gitignore"), "toolchain/\n");
+    await mkdir(join(dir, "toolchain"));
+    await writeFile(join(dir, "toolchain", "run.js"), "process.exit(1)\n");
+    git(["add", "-A"], dir);
+    git(["commit", "-qm", "seed"], dir);
+
+    const baseline = await gitState(dir);
+    expect(baseline).not.toBeNull();
+    await writeFile(join(dir, "toolchain", "run.js"), "process.exit(0)\n");
+    expect(git(["status", "--porcelain"], dir).stdout).toBe("");
+    expect(git(["ls-files", "-v"], dir).stdout).not.toMatch(/toolchain/);
+
+    const out = await Effect.runPromise(
+      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit", baseline }),
+    );
+    expect(out.refused).toBeTruthy();
+    expect(out.refused).toContain("working tree changed");
+    expect(proofVerdict(out)).toBe("neutral");
+    expect(out.log).toBe("");
   });
 
   it("runs and records head sha and the clean flag when the tree held still", async () => {

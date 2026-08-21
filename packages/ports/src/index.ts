@@ -175,14 +175,15 @@ export interface ProveCommand {
 
 /**
  * A snapshot of a git working tree, used to tell whether it moved across a
- * window of time. HEAD catches a ref swap; the porcelain hash catches any
- * staged or unstaged file change even when HEAD holds still.
+ * window of time. HEAD catches a ref swap. The porcelain hash folds status,
+ * index flags, on-disk bytes of every tracked path, and gitignored paths a
+ * detected suite can execute, so a filtered working tree or an ignored
+ * toolchain rewrite moves it even when status stays empty.
  */
 export interface GitState {
   readonly headSha: string;
-  /** sha256 of `git status --porcelain` folded with `git ls-files -v`: any
-      working-tree change moves it, including a file doctored on disk while
-      hidden from status by a skip-worktree or assume-unchanged index bit. */
+  /** sha256 of porcelain, ls-files -v, tracked on-disk bytes, and executable
+      ignored paths. Any change to the bytes prove will run moves it. */
   readonly porcelainHash: string;
   /** True when the porcelain output was empty: no uncommitted changes. */
   readonly clean: boolean;
