@@ -1,6 +1,6 @@
 import { execFile, spawn, spawnSync } from "node:child_process";
 import { createHash, type Hash } from "node:crypto";
-import { lstat, mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, readdir, symlink, writeFile } from "node:fs/promises";
 import { existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -697,7 +697,9 @@ const installCleanToolchain = async (root: string): Promise<void> => {
     paths including export-ignore. `cat-file blob` does not smudge and
     does not honor export-ignore. `git archive` does both of those and
     is not used. `--no-replace-objects` so a `git replace` planted from a
-    shared worktree cannot swap the blob the suite will read. */
+    shared worktree cannot swap the blob the suite will read. Mode
+    `120000` is a symlink: the blob is the target path, and checkout
+    creates a link. writeFile of those bytes would make a regular file. */
 const writeCommittedTree = async (source: string, headSha: string, root: string): Promise<void> => {
   const listed = spawnSync("git", ["--no-replace-objects", "-C", source, "ls-tree", "-r", "-z", headSha], {
     encoding: "buffer",
@@ -713,7 +715,8 @@ const writeCommittedTree = async (source: string, headSha: string, root: string)
     if (tab === -1) continue;
     const meta = entry.slice(0, tab);
     const rel = entry.slice(tab + 1);
-    if (!meta.includes(" blob ") || rel === "" || rel.split("/").includes("..")) continue;
+    const [mode, kind] = meta.split(" ");
+    if (kind !== "blob" || rel === "" || rel.split("/").includes("..")) continue;
     const dest = join(root, rel);
     await mkdir(dirname(dest), { recursive: true });
     const blob = spawnSync(
@@ -728,7 +731,11 @@ const writeCommittedTree = async (source: string, headSha: string, root: string)
     if (blob.status !== 0) {
       throw new Error(blob.stderr.toString("utf8") || `cat-file failed for ${rel}`);
     }
-    await writeFile(dest, blob.stdout);
+    if (mode === "120000") {
+      await symlink(blob.stdout.toString("utf8"), dest);
+    } else {
+      await writeFile(dest, blob.stdout);
+    }
   }
 };
 

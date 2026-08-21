@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
@@ -453,6 +453,40 @@ describe("prove dirty-tree guard", () => {
     const names = spawnSync("tar", ["-tf", "-"], { input: arch.stdout, encoding: "utf8" }).stdout;
     expect(names).toContain("check.js");
     expect(names.split("\n")).not.toContain("failing.js");
+
+    const baseline = await gitState(dir);
+    expect(baseline).not.toBeNull();
+    const out = await Effect.runPromise(
+      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit", baseline }),
+    );
+    expect(proofVerdict(out)).not.toBe("success");
+    expect(out.refused != null || out.exitCode !== 0).toBe(true);
+  }, 15_000);
+
+  it("does not go green when a committed symlink to a failing blob is the suite input", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "verit-guard-"));
+    git(["init", "-q", "-b", "main"], dir);
+    git(["config", "user.email", "t@example.com"], dir);
+    git(["config", "user.name", "t"], dir);
+    git(["remote", "add", "origin", "https://github.com/EfeDurmaz16/verit.git"], dir);
+    // a real checkout follows test.js to failing.js. ls-tree lists the
+    // link as 120000 blob. cat-file of that blob is the target path
+    // string. writeFile of those bytes makes a regular file, and the
+    // suite that looks for "must fail" in test.js then goes green.
+    await writeFile(join(dir, "package.json"), JSON.stringify({ scripts: { test: "node check.js" } }));
+    await writeFile(
+      join(dir, "check.js"),
+      'const fs=require("fs");process.exit(fs.readFileSync("test.js","utf8").includes("must fail")?1:0);\n',
+    );
+    await writeFile(join(dir, "failing.js"), "must fail\n");
+    await symlink("failing.js", join(dir, "test.js"));
+    git(["add", "-A"], dir);
+    git(["commit", "-qm", "seed"], dir);
+
+    expect((await lstat(join(dir, "test.js"))).isSymbolicLink()).toBe(true);
+    expect(await readFile(join(dir, "test.js"), "utf8")).toContain("must fail");
+    expect(git(["ls-tree", "HEAD", "test.js"], dir).stdout).toMatch(/^120000 blob /);
+    expect(git(["cat-file", "blob", "HEAD:test.js"], dir).stdout).toBe("failing.js");
 
     const baseline = await gitState(dir);
     expect(baseline).not.toBeNull();
