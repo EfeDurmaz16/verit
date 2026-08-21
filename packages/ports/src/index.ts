@@ -186,6 +186,29 @@ export interface GitState {
   readonly clean: boolean;
 }
 
+/**
+ * One suite in a multi-suite prove run: a Go module beside a Rust crate beside
+ * a package.json, each with its own command and its own exit code. A run that
+ * detects one suite carries none of these; the combined ProveOutcome is the
+ * single suite. A run that detects several carries one per suite.
+ */
+export interface SuiteOutcome {
+  /** Display form of the argv, e.g. `go test ./...`. */
+  readonly command: string;
+  /** Which manifest named it, e.g. `go.mod` or `package.json#scripts.test`. */
+  readonly source: string;
+  readonly exitCode: number;
+  readonly durationMs: number;
+  readonly timedOut: boolean;
+  readonly logTail: string;
+  /**
+   * Set when the suite was detected but did not run, e.g. its runner binary is
+   * missing. A skipped suite is never a pass: the combined conclusion states it
+   * and cannot go green while one suite went unproven.
+   */
+  readonly skipped?: string;
+}
+
 export interface ProveOutcome {
   /** Display form of the argv, for humans and for the ProofRef label. */
   readonly command: string;
@@ -210,6 +233,19 @@ export interface ProveOutcome {
    * that actually ran, whatever its exit code.
    */
   readonly refused?: string;
+  /**
+   * Per-suite breakdown, set only when more than one suite ran. The top-level
+   * fields above are the combined view: exitCode is non-zero if any suite
+   * failed, durationMs is the sum, logTail is the joined tails. A single-suite
+   * run leaves this unset and every surface renders it exactly as before.
+   */
+  readonly suites?: readonly SuiteOutcome[];
+  /**
+   * The manifests prove examined when it found no suite to run. Lets the Check
+   * name what it probed (package.json, go.mod, Makefile, ...) instead of a bare
+   * "nothing ran". Set only on the no-command outcome, alongside `refused`.
+   */
+  readonly probed?: readonly string[];
 }
 
 /**
@@ -234,6 +270,23 @@ export interface ProvePort {
   }) => Effect.Effect<ProveOutcome, StoreError>;
 }
 
+/**
+ * One inline annotation on a Check Run, already resolved and safe to post.
+ * `path` and the lines are validated against the PR head by the caller, so the
+ * adapter posts them verbatim: it never resolves or clamps a line itself.
+ * `annotationLevel` is GitHub's own vocabulary, derived from the risk severity.
+ */
+export interface CheckAnnotation {
+  readonly path: string;
+  readonly startLine: number;
+  readonly endLine: number;
+  readonly annotationLevel: "notice" | "warning" | "failure";
+  /** <= 64KB, verbatim-derived from the risk text. */
+  readonly message: string;
+  /** <= 255 chars. */
+  readonly title?: string;
+}
+
 export interface CheckRunInput {
   readonly owner: string;
   readonly repo: string;
@@ -242,6 +295,14 @@ export interface CheckRunInput {
   readonly conclusion: "success" | "failure" | "neutral";
   readonly title: string;
   readonly summary: string;
+  /**
+   * Inline annotations, already resolved to changed lines and capped by the
+   * caller. The adapter batches them to GitHub's 50-per-call limit and posts
+   * them as-is. Absent or empty means a Check with no annotations.
+   */
+  readonly annotations?: readonly CheckAnnotation[];
+  /** Where the Check's "Details" links: the proof page, else the workflow run. */
+  readonly detailsUrl?: string;
 }
 
 /** Posts the review outcome as a GitHub Check Run. */
