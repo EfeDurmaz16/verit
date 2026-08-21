@@ -42,8 +42,12 @@ const isCredentialConfigKey = (name: string): boolean => {
   return n.startsWith("credential.") && n.endsWith(".helper");
 };
 
-/** Drop credential keys from this checkout's local config. Does not touch source. */
-const stripLocalCredentialConfig = (repo: string): void => {
+/**
+ * Drop credential keys from this checkout's local config. Used on the prove
+ * cwd before the lane runs, not only on the isolated clone: lane bash can
+ * read VERIT_PROVE_CWD from /proc/<ppid>/environ and git-config that path.
+ */
+export const stripCheckoutCredentialConfig = (repo: string): void => {
   const listed = git(["config", "--local", "--name-only", "--list"], repo);
   if (listed.status !== 0) return;
   for (const line of listed.stdout.split("\n")) {
@@ -53,28 +57,48 @@ const stripLocalCredentialConfig = (repo: string): void => {
   }
 };
 
+/** Strip extraheader / credential.helper on every prove-cwd path the host names. */
+export const stripProveWorkspaceCredentials = (
+  env: NodeJS.ProcessEnv = process.env,
+  extra?: string,
+): void => {
+  const seen = new Set<string>();
+  for (const raw of [extra, env.VERIT_PROVE_CWD, env.GITHUB_WORKSPACE]) {
+    if (raw === undefined || raw === "") continue;
+    const abs = resolve(raw);
+    if (seen.has(abs)) continue;
+    seen.add(abs);
+    stripCheckoutCredentialConfig(abs);
+  }
+};
+
 /**
  * An isolated checkout of `source` at HEAD.
  *
- * A shared clone first: it shares the object store, has its own config, and
- * never touches the source working tree. A worktree would inherit the source
- * `http.*.extraheader` / credential helper, and `git config` from lane bash
- * would print the token. If clone fails, a tarball of the tracked tree at
- * HEAD, extracted into a temp dir. If neither works (no git, no commit), the
- * lane runs in `source` itself; the prove dirty-tree guard is then the
- * remaining net, turning any mutation neutral rather than green.
+ * Credential keys are stripped from the prove cwd first. A shared clone then
+ * shares the object store and has its own config. A worktree would inherit
+ * the source `http.*.extraheader`. clone --shared does not copy it, but lane
+ * bash can still git-config the source via VERIT_PROVE_CWD in the parent
+ * environ, so the source itself must be clean before tools run. If clone
+ * fails, a tarball of the tracked tree at HEAD. If neither works, the lane
+ * runs in `source` itself; the prove dirty-tree guard is then the remaining
+ * net.
  */
 export const openLaneCheckout = (source: string): LaneCheckout => {
   const base = mkdtempSync(join(tmpdir(), "verit-lane-checkout-"));
   const root = join(base, "tree");
   const wipe = () => rmSync(base, { recursive: true, force: true });
   const absSource = resolve(source);
+  // The token must not sit in the source config while the lane runs. Hiding
+  // VERIT_PROVE_CWD from the parent environ is not enough: bash can still
+  // find the workspace.
+  stripProveWorkspaceCredentials(process.env, absSource);
 
   // shared clone: own config, shared objects. Not a worktree, so a checkout
   // that persisted credentials cannot leak them through git config.
   const cloned = git(["clone", "--shared", "--quiet", absSource, root], absSource);
   if (cloned.status === 0) {
-    stripLocalCredentialConfig(root);
+    stripCheckoutCredentialConfig(root);
     return { root, isolated: true, cleanup: wipe };
   }
 

@@ -1,7 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Effect } from "effect";
 import { proofVerdict } from "@verit/domain";
 import { gitState, makeProveRunner } from "@verit/adapter-prove";
@@ -19,6 +20,15 @@ import { executeLaneTool } from "./tools";
 
 const git = (args: readonly string[], cwd: string) =>
   spawnSync("git", [...args], { cwd, encoding: "utf8" });
+
+const repoRoot = (): string => {
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (let i = 0; i < 8; i++) {
+    if (existsSync(join(dir, "pnpm-workspace.yaml"))) return dir;
+    dir = dirname(dir);
+  }
+  throw new Error("repo root not found");
+};
 
 const headSha = (dir: string) => git(["rev-parse", "HEAD"], dir).stdout.trim();
 const porcelain = (dir: string) => git(["status", "--porcelain"], dir).stdout;
@@ -156,8 +166,42 @@ describe("openLaneCheckout", () => {
       checkout.cleanup();
     }
 
-    // source config is untouched: we stripped the clone, not the prove tree.
+    expect(git(["config", "--get-regexp", "extraheader"], src).stdout).not.toContain(token);
+    rmSync(src, { recursive: true, force: true });
+  });
+
+  /*
+   * clone --shared does not copy extraheader. That path is already closed.
+   * This one plants extraheader on the source, puts VERIT_PROVE_CWD in the
+   * host exec environ, and reads it the way lane bash does.
+   */
+  it("does not expose source extraheader via VERIT_PROVE_CWD in the parent environ", () => {
+    const src = mkdtempSync(join(tmpdir(), "verit-prove-cwd-extraheader-"));
+    git(["init", "-q", "-b", "main"], src);
+    git(["config", "user.email", "t@example.com"], src);
+    git(["config", "user.name", "t"], src);
+    const token = "p02_source_extraheader_via_prove_cwd_7f3a";
+    git(["config", "http.https://github.com/.extraheader", `AUTHORIZATION: basic ${token}`], src);
+    writeFileSync(join(src, "README.md"), "seed\n");
+    git(["add", "-A"], src);
+    git(["commit", "-qm", "seed"], src);
     expect(git(["config", "--get-regexp", "extraheader"], src).stdout).toContain(token);
+
+    const probe = join(dirname(fileURLToPath(import.meta.url)), "prove-cwd-extraheader-probe.ts");
+    const r = spawnSync(process.execPath, ["--import", "tsx", probe, src], {
+      cwd: repoRoot(),
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        VERIT_PROVE_CWD: src,
+        GITHUB_WORKSPACE: src,
+      },
+    });
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).not.toContain(token);
+    expect(r.stdout).not.toContain("AUTHORIZATION: basic");
+    const parsed: unknown = JSON.parse(r.stdout);
+    expect(parsed).toMatchObject({ isError: false });
     rmSync(src, { recursive: true, force: true });
   });
 });

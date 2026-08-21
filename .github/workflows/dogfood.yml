@@ -21,6 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       # The dogfood run consumes the published composite action from this same
       # checkout, so every PR proves action.yml still works instead of drifting
       # from a duplicated copy of the pipeline.

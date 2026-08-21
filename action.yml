@@ -148,6 +148,21 @@ runs:
           echo "lane: provider set but no API key is available, lane disabled, the Check will be neutral"
           export VERIT_LANE_PROVIDER=""
         fi
+        # Drop persist-credentials extraheader from the prove checkout.
+        # Lane bash can read VERIT_PROVE_CWD from /proc/<ppid>/environ and
+        # git config that path. Hiding the path is not enough.
+        strip_git_credentials() {
+          local dir="$1"
+          [ -n "$dir" ] || return 0
+          [ -e "$dir/.git" ] || return 0
+          git -C "$dir" config --local --name-only --list 2>/dev/null \
+            | grep -E '(^http\.extraheader$|\.extraheader$|^credential\.helper$|^credential\..*\.helper$)' \
+            | while IFS= read -r key; do
+                git -C "$dir" config --local --unset-all "$key" || true
+              done
+        }
+        strip_git_credentials "${VERIT_PROVE_CWD:-}"
+        strip_git_credentials "${GITHUB_WORKSPACE:-}"
         # Persist tokens off this process, then replace the shell. Lane bash
         # is the same user and can read /proc/<ppid>/environ; the lane host
         # must not have these keys at exec time.

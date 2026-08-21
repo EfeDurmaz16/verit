@@ -3,7 +3,7 @@ import { Understanding } from "@verit/domain";
 import type { HarnessPort } from "@verit/ports";
 import { StoreError } from "@verit/ports";
 import { anthropicClient } from "./anthropic";
-import { openLaneCheckout } from "./checkout";
+import { openLaneCheckout, stripProveWorkspaceCredentials } from "./checkout";
 import type { LaneClient, LaneTool } from "./client";
 import { dropLaneHostSecrets, restoreLaneHostSecrets } from "./host-env";
 import { DEFAULT_CAPS, runLane, type LaneCaps } from "./loop";
@@ -125,6 +125,10 @@ export const makeLaneHarness = (config?: LaneConfig): HarnessPort => ({
         // re-execs without them so /proc/self/environ is already clean.
         dropLaneHostSecrets();
         try {
+          // Strip persist-credentials extraheader on the prove cwd before
+          // tools run. Lane bash can read VERIT_PROVE_CWD from the parent
+          // environ and git-config that path.
+          stripProveWorkspaceCredentials(process.env, cfg.root);
           // Tools run in an isolated checkout of HEAD, never the tree prove
           // measures, so the lane cannot mutate its way to a green check.
           const checkout = openLaneCheckout(cfg.root);
@@ -153,6 +157,8 @@ export { openaiCompatClient } from "./openai";
 export { runLane, DEFAULT_CAPS } from "./loop";
 export type { LaneCaps, RunLaneInput } from "./loop";
 export { laneSystemPrompt, laneUserPrompt, SUBMIT_TOOL_NAME } from "./prompt";
+export { openLaneCheckout, stripCheckoutCredentialConfig, stripProveWorkspaceCredentials } from "./checkout";
+export type { LaneCheckout } from "./checkout";
 export { executeLaneTool, laneChildEnv, LANE_TOOLS, truncateResult, TOOL_RESULT_CHARS } from "./tools";
 export type { ToolOutcome } from "./tools";
 export {

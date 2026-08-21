@@ -25,6 +25,7 @@ const repoRoot = (): string => {
 const ROOT = repoRoot();
 const actionYml = readFileSync(join(ROOT, "action.yml"), "utf8");
 const mainTs = readFileSync(join(ROOT, "packages/cli/src/main.ts"), "utf8");
+const dogfoodYml = readFileSync(join(ROOT, ".github/workflows/dogfood.yml"), "utf8");
 
 const stepAround = (anchor: string): string => {
   const at = actionYml.indexOf(anchor);
@@ -46,5 +47,16 @@ describe("review step drops host tokens before the lane", () => {
 
   it("has the CLI re-exec the lane host without those keys", () => {
     expect(mainTs).toContain("ensureLaneHostScrubbed");
+  });
+
+  it("strips extraheader from the prove checkout before the CLI starts", () => {
+    const step = stepAround("main.ts dogfood");
+    expect(step).toContain("strip_git_credentials");
+    expect(step).toContain("VERIT_PROVE_CWD");
+    expect(step).toMatch(/extraheader/);
+  });
+
+  it("does not persist checkout credentials on the dogfood prove tree", () => {
+    expect(dogfoodYml).toMatch(/persist-credentials:\s*false/);
   });
 });
