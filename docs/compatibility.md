@@ -77,3 +77,5 @@ inputs onto these. A non-empty input wins over the matching env var.
 | `VERIT_DASHBOARD_URL` | 0.1.0 | — | Dashboard base URL. With `VERIT_INGEST_TOKEN` the run is uploaded |
 | `VERIT_INGEST_TOKEN` | 0.1.0 | — | Per-repo ingest token from the dashboard |
 | `PROOF_PAGE_URL` | 0.1.0 | — | Only to override the computed proof page link |
+
+<!-- v0.3.1 live smoke: first real PR exercising install-command, check annotations, fail-on, and the integration CI job. -->
