@@ -54,6 +54,8 @@ describe("review step drops host tokens before the lane", () => {
     expect(step).toContain("strip_git_credentials");
     expect(step).toContain("VERIT_PROVE_CWD");
     expect(step).toMatch(/extraheader/);
+    // no match must not fail the step under Actions pipefail
+    expect(step).toMatch(/grep -E .* \|\| true/);
   });
 
   it("does not persist checkout credentials on the dogfood prove tree", () => {

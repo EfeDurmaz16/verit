@@ -155,11 +155,15 @@ runs:
           local dir="$1"
           [ -n "$dir" ] || return 0
           [ -e "$dir/.git" ] || return 0
-          git -C "$dir" config --local --name-only --list 2>/dev/null \
-            | grep -E '(^http\.extraheader$|\.extraheader$|^credential\.helper$|^credential\..*\.helper$)' \
-            | while IFS= read -r key; do
-                git -C "$dir" config --local --unset-all "$key" || true
-              done
+          # grep exits 1 on no match. pipefail would fail the step. Keep going.
+          local keys
+          keys="$(git -C "$dir" config --local --name-only --list 2>/dev/null \
+            | grep -E '(^http\.extraheader$|\.extraheader$|^credential\.helper$|^credential\..*\.helper$)' || true)"
+          [ -n "$keys" ] || return 0
+          while IFS= read -r key; do
+            [ -n "$key" ] || continue
+            git -C "$dir" config --local --unset-all "$key" || true
+          done <<< "$keys"
         }
         strip_git_credentials "${VERIT_PROVE_CWD:-}"
         strip_git_credentials "${GITHUB_WORKSPACE:-}"
