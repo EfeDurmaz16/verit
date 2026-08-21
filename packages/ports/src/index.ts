@@ -232,9 +232,11 @@ export interface ProveOutcome {
   /** True when the checkout had no uncommitted changes when prove ran. */
   readonly porcelainClean: boolean;
   /**
-   * Set when prove refused to run: the reason, in plain words. The command did
-   * not execute, so the verdict is neutral, never success. Left unset on a run
-   * that actually ran, whatever its exit code.
+   * Set when prove refused to treat the outcome as a result: the reason, in
+   * plain words. Covers a command that never started, a clean-tree install or
+   * collection failure, and a tree that moved under prove. The verdict is
+   * then neutral, never success or failure. Left unset when a suite
+   * collected and ran tests.
    */
   readonly refused?: string;
   /**

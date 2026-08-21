@@ -641,3 +641,161 @@ describe("prove multi-suite and detection-driven runs", () => {
     expect(proofVerdict(out)).toBe("neutral");
   });
 });
+
+describe("prove clean-tree install and collection refusal", () => {
+  const git = (args: readonly string[], cwd: string) =>
+    spawnSync("git", [...args], { cwd, encoding: "utf8" });
+
+  /** Put a user-local pytest on PATH so this hits collection, not ENOENT. */
+  const putPytestOnPath = (): void => {
+    if (hasBin("pytest")) return;
+    const userBin = join(process.env.HOME ?? "", ".local", "bin");
+    if (existsSync(join(userBin, "pytest"))) {
+      process.env.PATH = `${userBin}${process.env.PATH ? `:${process.env.PATH}` : ""}`;
+      if (hasBin("pytest")) return;
+    }
+    spawnSync("pip3", ["install", "--user", "pytest"], { encoding: "utf8" });
+    if (existsSync(join(userBin, "pytest"))) {
+      process.env.PATH = `${userBin}${process.env.PATH ? `:${process.env.PATH}` : ""}`;
+    }
+  };
+
+  it("refuses a clean-tree pytest collection failure as neutral (itsdangerous case)", async () => {
+    // Measurement on issue 7: pallets/itsdangerous source exit 0 vs clean-tree
+    // pytest exit 2 (missing itsdangerous, freezegun). That was a red Check.
+    // No package.json, pytest detected, deps absent in the clean tree.
+    putPytestOnPath();
+    expect(hasBin("pytest")).toBe(true);
+
+    const dir = await mkdtemp(join(tmpdir(), "verit-itsdangerous-"));
+    git(["init", "-q", "-b", "main"], dir);
+    git(["config", "user.email", "t@example.com"], dir);
+    git(["config", "user.name", "t"], dir);
+    git(["remote", "add", "origin", "https://github.com/EfeDurmaz16/verit.git"], dir);
+    await writeFile(
+      join(dir, "pyproject.toml"),
+      "[project]\nname = 'itsdangerous'\nversion = '2.2.0'\n",
+    );
+    await mkdir(join(dir, "tests"));
+    await writeFile(
+      join(dir, "tests", "test_signing.py"),
+      "import itsdangerous\nimport freezegun\n\ndef test_ok():\n    assert True\n",
+    );
+    git(["add", "-A"], dir);
+    git(["commit", "-qm", "seed"], dir);
+    expect(existsSync(join(dir, "package.json"))).toBe(false);
+    expect((await detectProveCommand(dir))?.command).toBe("pytest");
+
+    const baseline = await gitState(dir);
+    expect(baseline).not.toBeNull();
+    const out = await Effect.runPromise(
+      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit", baseline }),
+    );
+    expect(out.refused).toBeTruthy();
+    expect(proofVerdict(out)).toBe("neutral");
+    expect(proofVerdict(out)).not.toBe("success");
+    expect(proofVerdict(out)).not.toBe("failure");
+  }, 60_000);
+
+  it("keeps a collected pytest failure as failure when the log mentions ModuleNotFoundError", async () => {
+    // Collected, then failed: `DID NOT RAISE ModuleNotFoundError`. The log
+    // contains the old refuse substring. That is a real suite result.
+    putPytestOnPath();
+    expect(hasBin("pytest")).toBe(true);
+
+    const dir = await mkdtemp(join(tmpdir(), "verit-did-not-raise-"));
+    git(["init", "-q", "-b", "main"], dir);
+    git(["config", "user.email", "t@example.com"], dir);
+    git(["config", "user.name", "t"], dir);
+    git(["remote", "add", "origin", "https://github.com/EfeDurmaz16/verit.git"], dir);
+    await writeFile(join(dir, "pyproject.toml"), "[project]\nname = 'x'\nversion = '0.0.1'\n");
+    await mkdir(join(dir, "tests"));
+    await writeFile(
+      join(dir, "tests", "test_did_not_raise.py"),
+      "import pytest\n\ndef test_did_not_raise():\n    with pytest.raises(ModuleNotFoundError):\n        import sys\n",
+    );
+    git(["add", "-A"], dir);
+    git(["commit", "-qm", "seed"], dir);
+    expect(existsSync(join(dir, "package.json"))).toBe(false);
+
+    const baseline = await gitState(dir);
+    expect(baseline).not.toBeNull();
+    const out = await Effect.runPromise(
+      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit", baseline }),
+    );
+    expect(out.log).toMatch(/DID NOT RAISE ModuleNotFoundError/);
+    expect(out.refused).toBeUndefined();
+    expect(proofVerdict(out)).toBe("failure");
+  }, 60_000);
+
+  it("refuses clean-tree collection as neutral when addopts --tb=no drops the ERROR collecting banner", async () => {
+    // Pytest 9 + --tb=no: no ERROR collecting banner. Singular
+    // `Interrupted: 1 error during collection` and `ERROR tests/…`.
+    // On fae5631 both helpers were false, so this was a red Check.
+    putPytestOnPath();
+    expect(hasBin("pytest")).toBe(true);
+
+    const dir = await mkdtemp(join(tmpdir(), "verit-itsdangerous-tbno-"));
+    git(["init", "-q", "-b", "main"], dir);
+    git(["config", "user.email", "t@example.com"], dir);
+    git(["config", "user.name", "t"], dir);
+    git(["remote", "add", "origin", "https://github.com/EfeDurmaz16/verit.git"], dir);
+    await writeFile(
+      join(dir, "pyproject.toml"),
+      "[project]\nname = 'itsdangerous'\nversion = '2.2.0'\n\n[tool.pytest.ini_options]\naddopts = '--tb=no'\n",
+    );
+    await mkdir(join(dir, "tests"));
+    await writeFile(
+      join(dir, "tests", "test_signing.py"),
+      "import itsdangerous\nimport freezegun\n\ndef test_ok():\n    assert True\n",
+    );
+    git(["add", "-A"], dir);
+    git(["commit", "-qm", "seed"], dir);
+    expect(existsSync(join(dir, "package.json"))).toBe(false);
+    expect((await detectProveCommand(dir))?.command).toBe("pytest");
+
+    const baseline = await gitState(dir);
+    expect(baseline).not.toBeNull();
+    const out = await Effect.runPromise(
+      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit", baseline }),
+    );
+    expect(out.log).not.toMatch(/ERROR collecting/);
+    expect(out.log).toMatch(/Interrupted:.*error during collection|ERROR tests\//);
+    expect(out.refused).toBeTruthy();
+    expect(proofVerdict(out)).toBe("neutral");
+    expect(proofVerdict(out)).not.toBe("success");
+    expect(proofVerdict(out)).not.toBe("failure");
+  }, 60_000);
+
+  it("keeps a collected fixture setup error as failure (ERROR path::test)", async () => {
+    // Tests collected. Fixture raises at setup. Pytest -q prints
+    // `ERROR tests/test_fix.py::test_needs_db`. `^ERROR \S+` matched that
+    // nodeid on 10206f7 and refused it. Setup failure is a real result.
+    putPytestOnPath();
+    expect(hasBin("pytest")).toBe(true);
+
+    const dir = await mkdtemp(join(tmpdir(), "verit-fixture-error-"));
+    git(["init", "-q", "-b", "main"], dir);
+    git(["config", "user.email", "t@example.com"], dir);
+    git(["config", "user.name", "t"], dir);
+    git(["remote", "add", "origin", "https://github.com/EfeDurmaz16/verit.git"], dir);
+    await writeFile(join(dir, "pyproject.toml"), "[project]\nname = 'x'\nversion = '0.0.1'\n");
+    await mkdir(join(dir, "tests"));
+    await writeFile(
+      join(dir, "tests", "test_fix.py"),
+      "import pytest\n\n@pytest.fixture\ndef db():\n    raise RuntimeError('database not available')\n\ndef test_needs_db(db):\n    assert True\n",
+    );
+    git(["add", "-A"], dir);
+    git(["commit", "-qm", "seed"], dir);
+    expect(existsSync(join(dir, "package.json"))).toBe(false);
+
+    const baseline = await gitState(dir);
+    expect(baseline).not.toBeNull();
+    const out = await Effect.runPromise(
+      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit", baseline }),
+    );
+    expect(out.log).toMatch(/ERROR tests\/test_fix\.py::test_needs_db/);
+    expect(out.refused).toBeUndefined();
+    expect(proofVerdict(out)).toBe("failure");
+  }, 60_000);
+});

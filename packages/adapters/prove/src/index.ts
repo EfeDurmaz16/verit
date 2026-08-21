@@ -29,6 +29,15 @@ import { StoreError } from "@verit/ports";
  *    off, export-ignore included) plus a clean toolchain install, not in
  *    the lane-touched tree. Smudge filters, shadowed bins, and ignored
  *    package rewrites in the source cwd cannot be what executes.
+ *  - A clean-tree suite that never collected tests is refused, not failed.
+ *    installCleanToolchain throw, a missing interpreter, and pytest
+ *    collection that never happened (ERROR collecting, singular or plural
+ *    error during collection, Interrupted, ERROR file with no ::, no tests
+ *    collected) stay inconclusive. ERROR path::test is a collected setup
+ *    error and stays failure. A suite that collected and ran tests still maps
+ *    exit 0 to success and a real assertion failure to failure, even if
+ *    the log mentions ModuleNotFoundError. pytest exit 2 alone is not
+ *    collection failure.
  *  - When no baseline is given, suites still run in `cwd`.
  *  - Hard timeout, killed as a process group so runners cannot outlive it, and
  *    output is capped so a chatty suite cannot exhaust memory.
@@ -584,6 +593,55 @@ const runOneSuite = async (
   }
 };
 
+/**
+ * Pytest ran tests after collection: a nodeid (`FAILED path::test`) or the
+ * session totals (`1 failed`, `2 passed`). Collection-only logs use `ERROR`
+ * and `1 error in`, not these. A log that later ran tests is a real result
+ * even if a test body printed `ERROR collecting` or `ModuleNotFoundError`.
+ */
+const pytestCollectedAndRan = (log: string): boolean =>
+  /FAILED \S+::|PASSED \S+::|\b\d+ failed\b|\b\d+ passed\b/i.test(log);
+
+/**
+ * Collection never produced a runnable item. `--tb=no` drops the
+ * `ERROR collecting` banner. Pytest 9 then prints singular
+ * `Interrupted: 1 error during collection` and `ERROR path` with no `::`.
+ * `ERROR path::test` is a collected setup/call error, not collection.
+ * A later FAILED/PASSED run is filtered out before this is consulted.
+ */
+const pytestCollectionDidNotHappen = (log: string): boolean =>
+  /ERROR collecting|errors? during collection|no tests (were )?collected|^Interrupted:|^ERROR (?!\S*::)\S+\s*$/im.test(
+    log,
+  );
+
+/**
+ * A clean-tree result that never ran tests is inconclusive. Never paint that
+ * red: source CI can be green while the fresh tree lacks deps or an
+ * interpreter. A suite that collected and then failed assertions is left
+ * alone. Do not map every non-zero exit here. Do not grep ModuleNotFoundError
+ * or treat pytest exit 2 as collection by itself.
+ */
+const cleanTreeSuiteRefusal = (s: RanSuite): string | undefined => {
+  if (s.skipped != null) {
+    return `the clean prove tree could not start ${s.command}: ${s.skipped}`;
+  }
+  if (s.timedOut || s.exitCode === 0) return undefined;
+  const log = `${s.fullLog}\n${s.logTail}`;
+  if (pytestCollectedAndRan(log)) return undefined;
+  if (pytestCollectionDidNotHappen(log)) {
+    return `the clean prove tree could not collect tests for ${s.command}: missing interpreter, missing dependencies, or collection failure (exit ${s.exitCode}).`;
+  }
+  return undefined;
+};
+
+const cleanTreeRefusal = (ran: readonly RanSuite[]): string | undefined => {
+  for (const s of ran) {
+    const reason = cleanTreeSuiteRefusal(s);
+    if (reason != null) return reason;
+  }
+  return undefined;
+};
+
 interface CombineCtx {
   readonly cwd: string;
   readonly repo: string;
@@ -881,7 +939,15 @@ export const makeProveRunner = (): ProvePort => ({
           for (const cmd of detected) {
             ran.push(await runOneSuite(cmd, runCwd, timeoutMs ?? DEFAULT_TIMEOUT_MS));
           }
-          return combineSuites(ran, { cwd: dir, repo: local, startedAt, headSha, porcelainClean });
+          const combined = combineSuites(ran, { cwd: dir, repo: local, startedAt, headSha, porcelainClean });
+          // Only the clean tree. A source-cwd run that actually collected
+          // tests keeps its exit code. installCleanToolchain throw is already
+          // refused above when prepareProveTree fails.
+          if (cleanup != null) {
+            const reason = cleanTreeRefusal(ran);
+            if (reason != null) return { ...combined, refused: reason };
+          }
+          return combined;
         } finally {
           cleanup?.();
         }
