@@ -1,9 +1,9 @@
-import { execFile, spawn } from "node:child_process";
+import { execFile, spawn, spawnSync } from "node:child_process";
 import { createHash, type Hash } from "node:crypto";
-import { lstat, mkdir, mkdtemp, readFile, readdir } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { Effect, Either, Schema as S } from "effect";
 import type { GitState, ProveCommand, ProveOutcome, ProvePort, SuiteOutcome } from "@verit/ports";
@@ -25,8 +25,9 @@ import { StoreError } from "@verit/ports";
  *  - `run` refuses a second way. Given a `baseline` git snapshot from before
  *    the analysis stage, it re-reads the tree and will not run if HEAD moved
  *    or the snapshot hash moved. That is a secondary guard. Suites then run
- *    in a fresh archive of the baseline HEAD plus a clean toolchain install,
- *    not in the lane-touched tree. Smudge filters, shadowed bins, and ignored
+ *    in a fresh tree of every committed blob at the baseline HEAD (filters
+ *    off, export-ignore included) plus a clean toolchain install, not in
+ *    the lane-touched tree. Smudge filters, shadowed bins, and ignored
  *    package rewrites in the source cwd cannot be what executes.
  *  - When no baseline is given, suites still run in `cwd`.
  *  - Hard timeout, killed as a process group so runners cannot outlive it, and
@@ -640,7 +641,7 @@ const combineSuites = (ran: readonly RanSuite[], ctx: CombineCtx): ProveOutcome 
 };
 
 const INSTALL_TIMEOUT_MS = 5 * 60_000;
-const ARCHIVE_TIMEOUT_MS = 60_000;
+const CHECKOUT_TIMEOUT_MS = 60_000;
 
 interface ProveTree {
   readonly root: string;
@@ -692,29 +693,54 @@ const installCleanToolchain = async (root: string): Promise<void> => {
   });
 };
 
+/** Every blob at `headSha`, raw object bytes. `ls-tree` names committed
+    paths including export-ignore. `cat-file blob` does not smudge and
+    does not honor export-ignore. `git archive` does both of those and
+    is not used. */
+const writeCommittedTree = async (source: string, headSha: string, root: string): Promise<void> => {
+  const listed = spawnSync("git", ["-C", source, "ls-tree", "-r", "-z", headSha], {
+    encoding: "buffer",
+    timeout: CHECKOUT_TIMEOUT_MS,
+    maxBuffer: GIT_STATUS_BUFFER,
+  });
+  if (listed.status !== 0) {
+    throw new Error(listed.stderr.toString("utf8") || `ls-tree failed for ${headSha}`);
+  }
+  const entries = listed.stdout.toString("utf8").split("\0").filter(Boolean);
+  for (const entry of entries) {
+    const tab = entry.indexOf("\t");
+    if (tab === -1) continue;
+    const meta = entry.slice(0, tab);
+    const rel = entry.slice(tab + 1);
+    if (!meta.includes(" blob ") || rel === "" || rel.split("/").includes("..")) continue;
+    const dest = join(root, rel);
+    await mkdir(dirname(dest), { recursive: true });
+    const blob = spawnSync("git", ["-C", source, "cat-file", "blob", `${headSha}:${rel}`], {
+      encoding: "buffer",
+      timeout: 30_000,
+      maxBuffer: GIT_STATUS_BUFFER,
+    });
+    if (blob.status !== 0) {
+      throw new Error(blob.stderr.toString("utf8") || `cat-file failed for ${rel}`);
+    }
+    await writeFile(dest, blob.stdout);
+  }
+};
+
 /**
- * A disposable working tree of `headSha` taken through `git archive`, then a
- * clean toolchain install. Archive reads committed blobs. It does not share
- * `.git/info/attributes` or `filter.*` with the source, so a worktree-style
- * smudge cannot follow the suite here.
+ * A disposable working tree of every committed blob at `headSha`, then a
+ * clean toolchain install. Built from ls-tree + cat-file, not archive,
+ * so export-ignore paths and unfiltered blobs are what the suite sees.
  */
 const prepareProveTree = async (source: string, headSha: string): Promise<ProveTree> => {
   const base = await mkdtemp(join(tmpdir(), "verit-prove-"));
   const root = join(base, "tree");
-  const tar = join(base, "tree.tar");
   const wipe = (): void => {
     rmSync(base, { recursive: true, force: true });
   };
   try {
-    await exec("git", ["-C", source, "archive", "--format=tar", "-o", tar, headSha], {
-      timeout: ARCHIVE_TIMEOUT_MS,
-      maxBuffer: GIT_STATUS_BUFFER,
-    });
     await mkdir(root);
-    await exec("tar", ["-xf", tar, "-C", root], {
-      timeout: ARCHIVE_TIMEOUT_MS,
-      maxBuffer: GIT_STATUS_BUFFER,
-    });
+    await writeCommittedTree(source, headSha, root);
     await installCleanToolchain(root);
     return { root, cleanup: wipe };
   } catch (e) {
@@ -801,8 +827,9 @@ export const makeProveRunner = (): ProvePort => ({
         }
 
         // With a baseline, never execute in the source cwd. A lane can change
-        // ignored packages and still leave gitState matching. Archive the
-        // baseline HEAD and install a clean toolchain, then run there.
+        // ignored packages and still leave gitState matching. Materialize
+        // every committed blob at the baseline HEAD and install a clean
+        // toolchain, then run there.
         let runCwd = dir;
         let cleanup: (() => void) | null = null;
         if (baseline != null) {

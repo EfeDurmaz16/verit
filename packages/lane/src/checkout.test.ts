@@ -129,7 +129,7 @@ describe("openLaneCheckout", () => {
     expect(out.refused).toBeTruthy();
     expect(proofVerdict(out)).toBe("neutral");
     rmSync(src, { recursive: true, force: true });
-  });
+  }, 30_000);
 
   // Same fixture as the skip-worktree case, but the bytes change without
   // flipping HEAD, porcelain, or ls-files -v. A repo-local clean/smudge in
@@ -188,5 +188,5 @@ describe("openLaneCheckout", () => {
     expect(proofVerdict(out)).toBe("neutral");
     expect(out.log).toBe("");
     rmSync(src, { recursive: true, force: true });
-  });
+  }, 15_000);
 });

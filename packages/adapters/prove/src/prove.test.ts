@@ -429,6 +429,40 @@ describe("prove dirty-tree guard", () => {
     expect(out.refused != null || out.exitCode !== 0).toBe(true);
   }, 15_000);
 
+  it("does not go green when a committed export-ignore file is the failing suite input", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "verit-guard-"));
+    git(["init", "-q", "-b", "main"], dir);
+    git(["config", "user.email", "t@example.com"], dir);
+    git(["config", "user.name", "t"], dir);
+    git(["remote", "add", "origin", "https://github.com/EfeDurmaz16/verit.git"], dir);
+    // missing failing.js is a pass. git archive honors export-ignore and
+    // omits the committed failing file, so an archive-based prove tree
+    // would go green on a checkout GitHub would still merge.
+    await writeFile(join(dir, "package.json"), JSON.stringify({ scripts: { test: "node check.js" } }));
+    await writeFile(
+      join(dir, "check.js"),
+      'const fs=require("fs");process.exit(fs.existsSync("failing.js")?1:0);\n',
+    );
+    await writeFile(join(dir, "failing.js"), "throw new Error('must fail');\n");
+    await writeFile(join(dir, ".gitattributes"), "failing.js export-ignore\n");
+    git(["add", "-A"], dir);
+    git(["commit", "-qm", "seed"], dir);
+    expect(git(["show", "HEAD:failing.js"], dir).status).toBe(0);
+    const arch = spawnSync("git", ["archive", "--format=tar", "HEAD"], { cwd: dir, encoding: "buffer" });
+    expect(arch.status).toBe(0);
+    const names = spawnSync("tar", ["-tf", "-"], { input: arch.stdout, encoding: "utf8" }).stdout;
+    expect(names).toContain("check.js");
+    expect(names.split("\n")).not.toContain("failing.js");
+
+    const baseline = await gitState(dir);
+    expect(baseline).not.toBeNull();
+    const out = await Effect.runPromise(
+      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit", baseline }),
+    );
+    expect(proofVerdict(out)).not.toBe("success");
+    expect(out.refused != null || out.exitCode !== 0).toBe(true);
+  }, 15_000);
+
   it("runs and records head sha and the clean flag when the tree held still", async () => {
     const dir = await seedRepo();
     const baseline = await gitState(dir);
@@ -441,7 +475,7 @@ describe("prove dirty-tree guard", () => {
     expect(out.headSha).toBe(baseline?.headSha);
     expect(out.porcelainClean).toBe(true);
     expect(proofVerdict(out)).toBe("success");
-  });
+  }, 15_000);
 });
 
 describe("prove multi-suite and detection-driven runs", () => {
