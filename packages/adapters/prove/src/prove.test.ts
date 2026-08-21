@@ -727,4 +727,43 @@ describe("prove clean-tree install and collection refusal", () => {
     expect(out.refused).toBeUndefined();
     expect(proofVerdict(out)).toBe("failure");
   }, 60_000);
+
+  it("refuses clean-tree collection as neutral when addopts --tb=no drops the ERROR collecting banner", async () => {
+    // Pytest 9 + --tb=no: no ERROR collecting banner. Singular
+    // `Interrupted: 1 error during collection` and `ERROR tests/…`.
+    // On fae5631 both helpers were false, so this was a red Check.
+    putPytestOnPath();
+    expect(hasBin("pytest")).toBe(true);
+
+    const dir = await mkdtemp(join(tmpdir(), "verit-itsdangerous-tbno-"));
+    git(["init", "-q", "-b", "main"], dir);
+    git(["config", "user.email", "t@example.com"], dir);
+    git(["config", "user.name", "t"], dir);
+    git(["remote", "add", "origin", "https://github.com/EfeDurmaz16/verit.git"], dir);
+    await writeFile(
+      join(dir, "pyproject.toml"),
+      "[project]\nname = 'itsdangerous'\nversion = '2.2.0'\n\n[tool.pytest.ini_options]\naddopts = '--tb=no'\n",
+    );
+    await mkdir(join(dir, "tests"));
+    await writeFile(
+      join(dir, "tests", "test_signing.py"),
+      "import itsdangerous\nimport freezegun\n\ndef test_ok():\n    assert True\n",
+    );
+    git(["add", "-A"], dir);
+    git(["commit", "-qm", "seed"], dir);
+    expect(existsSync(join(dir, "package.json"))).toBe(false);
+    expect((await detectProveCommand(dir))?.command).toBe("pytest");
+
+    const baseline = await gitState(dir);
+    expect(baseline).not.toBeNull();
+    const out = await Effect.runPromise(
+      makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit", baseline }),
+    );
+    expect(out.log).not.toMatch(/ERROR collecting/);
+    expect(out.log).toMatch(/Interrupted:.*error during collection|ERROR tests\//);
+    expect(out.refused).toBeTruthy();
+    expect(proofVerdict(out)).toBe("neutral");
+    expect(proofVerdict(out)).not.toBe("success");
+    expect(proofVerdict(out)).not.toBe("failure");
+  }, 60_000);
 });

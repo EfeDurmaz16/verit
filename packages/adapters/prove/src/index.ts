@@ -31,7 +31,8 @@ import { StoreError } from "@verit/ports";
  *    package rewrites in the source cwd cannot be what executes.
  *  - A clean-tree suite that never collected tests is refused, not failed.
  *    installCleanToolchain throw, a missing interpreter, and pytest
- *    collection that never happened (ERROR collecting, no tests collected)
+ *    collection that never happened (ERROR collecting, singular or plural
+ *    error during collection, Interrupted, ERROR file, no tests collected)
  *    stay inconclusive. A suite that collected and ran tests still maps
  *    exit 0 to success and a real assertion failure to failure, even if
  *    the log mentions ModuleNotFoundError. pytest exit 2 alone is not
@@ -600,9 +601,16 @@ const runOneSuite = async (
 const pytestCollectedAndRan = (log: string): boolean =>
   /FAILED \S+::|PASSED \S+::|\b\d+ failed\b|\b\d+ passed\b/i.test(log);
 
-/** Collection never produced a runnable item. Not a substring in a failed test. */
+/**
+ * Collection never produced a runnable item. `--tb=no` drops the
+ * `ERROR collecting` banner. Pytest 9 then prints singular
+ * `Interrupted: 1 error during collection` and `ERROR path` with no `::`.
+ * A later FAILED/PASSED run is filtered out before this is consulted.
+ */
 const pytestCollectionDidNotHappen = (log: string): boolean =>
-  /ERROR collecting|errors during collection|no tests (were )?collected/i.test(log);
+  /ERROR collecting|errors? during collection|no tests (were )?collected|^Interrupted:|^ERROR \S+/im.test(
+    log,
+  );
 
 /**
  * A clean-tree result that never ran tests is inconclusive. Never paint that
