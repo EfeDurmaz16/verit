@@ -1,7 +1,17 @@
 import { encodeRunUpload, type RunUpload } from "@verit/domain";
-import { proveLogBody } from "@verit/application";
+import { proveLogBody, redactSecrets } from "@verit/application";
 import { Either } from "effect";
 import type { ProveOutcome } from "@verit/ports";
+
+/**
+ * Redacts every log copy that crosses the wire: the proof-ref logs carried on
+ * the Understanding, so a secret in the tail does not survive by riding a
+ * different field than the prove.logTail. Prose fields are left alone.
+ */
+const redactUnderstanding = (u: RunUpload["understanding"]): RunUpload["understanding"] => ({
+  ...u,
+  proof_refs: u.proof_refs.map((r) => (r.log ? { ...r, log: redactSecrets(r.log) } : r)),
+});
 
 /**
  * Where a run's proof page lives. The Check Run links here, so the shape is
@@ -40,7 +50,7 @@ export const buildUpload = (input: {
   return {
     repo: input.repo,
     run: input.run,
-    understanding: input.understanding,
+    understanding: redactUnderstanding(input.understanding),
     proofSpec: {
       root: typeof spec.root === "string" ? spec.root : "",
       elements: (spec.elements ?? {}) as Record<string, unknown>,
@@ -54,12 +64,12 @@ export const buildUpload = (input: {
           exitCode: input.outcome.exitCode,
           durationMs: input.outcome.durationMs,
           timedOut: input.outcome.timedOut,
-          logTail: input.outcome.logTail,
+          logTail: redactSecrets(input.outcome.logTail),
           startedAt: input.outcome.startedAt,
         }
       : undefined,
     logs: input.outcome ? [
-      { name: "prove.log", contentType: "text/plain", body: proveLogBody(input.outcome) },
+      { name: "prove.log", contentType: "text/plain", body: redactSecrets(proveLogBody(input.outcome)) },
     ] : undefined,
   };
 };

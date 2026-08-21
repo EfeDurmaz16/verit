@@ -73,6 +73,40 @@ describe("buildUpload", () => {
     expect(upload.logs?.[0]?.body).toContain("line one");
   });
 
+  it("redacts secrets from the tail, the log blob, and the proof-ref logs before upload", () => {
+    const secret = "ghp_0123456789abcdefghijklmnopqrstuvwxyzAB";
+    const upload = buildUpload({
+      repo: "acme/widgets",
+      run,
+      understanding: {
+        ...understanding,
+        proof_refs: [
+          { kind: "test" as const, label: "prove: pnpm test, passed", value: "exit 0", status: "pass" as const, log: `token=${secret}` },
+        ],
+      },
+      proofSpec: { root: "workspace", elements: {} },
+      outcome: {
+        command: "pnpm run test",
+        source: "package.json#scripts.test",
+        cwd: "/tmp/r",
+        repo: "acme/widgets",
+        exitCode: 0,
+        durationMs: 1200,
+        timedOut: false,
+        logTail: `leaking ${secret}\n`,
+        log: `line one\nleaking ${secret}\n`,
+        startedAt: "2026-08-09T10:00:00.000Z",
+        headSha: "abc1234",
+        porcelainClean: true,
+      },
+    });
+    expect(upload.prove?.logTail).not.toContain(secret);
+    expect(upload.logs?.[0]?.body).not.toContain(secret);
+    expect(upload.understanding.proof_refs[0]?.log).not.toContain(secret);
+    // Real output around the secret survives.
+    expect(upload.logs?.[0]?.body).toContain("line one");
+  });
+
   it("sends no prove block and no logs when nothing ran", () => {
     const upload = buildUpload({
       repo: "acme/widgets",

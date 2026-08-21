@@ -2,6 +2,7 @@ export * from "./check";
 export * from "./chunks";
 export * from "./compiler";
 export * from "./prove";
+export * from "./redact";
 export * from "./context";
 export * from "./edges";
 export * from "./hash";
