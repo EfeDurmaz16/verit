@@ -27,7 +27,7 @@ export const UNDERSTANDING_JSON_SHAPE = `{
   "how":   "<one paragraph: how it is implemented, naming the load-bearing files>",
   "proof_refs": [ {"kind":"test|command|url|image|video","label":"<what it proves>","value":"<verbatim test name, command, or URL>"} ],
   "out_of_scope": [ "<something a reviewer might expect that this PR does not do>" ],
-  "risks": [ {"area":"<short slug>","note":"<one sentence>","source":"reviewer|author"} ]
+  "risks": [ {"area":"<short slug>","note":"<one sentence>","source":"reviewer|author","file":"<path, or omit>","line":<new-file line number, or omit>,"severity":"info|warn|high"} ]
 }
 Rules:
 - what, why and how are required and must each be non-empty. The output is validated against a
@@ -36,6 +36,10 @@ Rules:
 - source:"author" is for risks the PR description itself admits. source:"reviewer" is for risks you
   found by reading the diff. The author's list is a hint, NEVER an allowlist. Review the whole diff
   whatever the description says, and expect to find risks the author did not mention.
+- file and line are optional and go together. Set them only when the risk points at one line you can
+  see changed in this PR, using the new-file line number. A reviewer risk with a file and line is
+  marked inline on that line in the Check. A risk about the change as a whole omits both.
+- severity is optional: info, warn, or high. It sets how loud the inline mark is. Omit it for warn.
 - Every string follows the OUTPUT STYLE above. No em dash anywhere.`;
 
 /** Closed review specialty enum, not technology stacks. */
@@ -69,10 +73,25 @@ export type ReviewDomain = S.Schema.Type<typeof ReviewDomain>;
 export const ProofRefKind = S.Literal("test", "command", "url", "image", "video");
 export type ProofRefKind = S.Schema.Type<typeof ProofRefKind>;
 
+/** True only for a URL with a scheme, e.g. https://x/y. A bare path is not. */
+const isAbsoluteUrl = (s: string): boolean => {
+  try {
+    // new URL throws on a relative reference, so parsing at all means absolute.
+    new URL(s);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 /**
  * A pointer to evidence. `status` and `log` are only set by refs that were
  * actually executed (see the prove verb): a ref carrying `status: "fail"`
  * renders as a failure everywhere, and nothing may drop it to dress a run up.
+ *
+ * A ref of kind `url` must carry an absolute URL. A relative value like
+ * `README.md` is not openable as written, so it fails decode: the run is then
+ * reported unverified rather than shipping a link that 404s in the Check.
  */
 export const ProofRef = S.Struct({
   kind: ProofRefKind,
@@ -80,13 +99,34 @@ export const ProofRef = S.Struct({
   value: S.String,
   status: S.optional(S.Literal("pass", "fail")),
   log: S.optional(S.String),
-});
+}).pipe(
+  S.filter(
+    (r) =>
+      r.kind !== "url" ||
+      isAbsoluteUrl(r.value) ||
+      `proof_ref of kind "url" must be an absolute URL, got: ${r.value}`,
+  ),
+);
 export type ProofRef = S.Schema.Type<typeof ProofRef>;
 
+/** How loud a risk is. Drives the Check Run annotation level for located risks. */
+export const RiskSeverity = S.Literal("info", "warn", "high");
+export type RiskSeverity = S.Schema.Type<typeof RiskSeverity>;
+
+/**
+ * One risk the review names. `file` and `line` anchor it to a spot in the PR
+ * head, when the reviewer found one, so the Check can render it as an inline
+ * annotation. Both stay optional and nullable: an older stored risk that
+ * predates locations decodes unchanged, and a risk about the change as a whole
+ * carries neither.
+ */
 export const RiskItem = S.Struct({
   area: S.String,
   note: S.String,
   source: S.optional(S.Literal("author", "reviewer", "classifier")),
+  file: S.optional(S.NullOr(S.String)),
+  line: S.optional(S.NullOr(S.Number)),
+  severity: S.optional(RiskSeverity),
 });
 export type RiskItem = S.Schema.Type<typeof RiskItem>;
 

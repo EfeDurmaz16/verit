@@ -1,22 +1,35 @@
 import { describe, expect, it } from "vitest";
 import { Effect } from "effect";
+import type { CheckAnnotation } from "@verit/ports";
 import { makeGithubChecks } from "./index";
 
-/* The transport seam: a fetch that records the one request Octokit makes and
-   answers as api.github.com would. Nothing leaves the process. */
-const fakeTransport = () => {
+const json = (status: number, body: unknown): Response =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+
+/* The transport seam: a fetch that records every request Octokit makes and
+   routes the three Check Runs calls (list, create, update) as GitHub would.
+   Nothing leaves the process. `existing` seeds a prior Check Run of the same
+   name so the re-run path can be exercised. */
+const fakeTransport = (existing: Array<{ id: number; name: string }> = []) => {
   const calls: Array<{ url: string; method: string; body: unknown }> = [];
   const fetchStub: typeof globalThis.fetch = async (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    calls.push({
-      url,
-      method: init?.method ?? "GET",
-      body: init?.body ? JSON.parse(String(init.body)) : null,
-    });
-    return new Response(
-      JSON.stringify({ id: 1, html_url: "https://github.com/o/r/runs/1" }),
-      { status: 201, headers: { "Content-Type": "application/json" } },
-    );
+    const method = init?.method ?? "GET";
+    calls.push({ url, method, body: init?.body ? JSON.parse(String(init.body)) : null });
+    if (method === "GET" && url.includes("/check-runs")) {
+      return json(200, { total_count: existing.length, check_runs: existing });
+    }
+    if (method === "POST" && url.endsWith("/check-runs")) {
+      return json(201, { id: 1, html_url: "https://github.com/o/r/runs/1" });
+    }
+    const m = /\/check-runs\/(\d+)$/.exec(url);
+    if (method === "PATCH" && m) {
+      return json(200, { id: Number(m[1]), html_url: `https://github.com/o/r/runs/${m[1]}` });
+    }
+    return json(404, { message: "unrouted" });
   };
   return { calls, fetchStub };
 };
@@ -30,21 +43,30 @@ const baseCheck = {
   summary: "**What changed:** w\n\n## Proof\n",
 };
 
+const annotations = (n: number): CheckAnnotation[] =>
+  Array.from({ length: n }, (_, i) => ({
+    path: "src/a.ts",
+    startLine: i + 1,
+    endLine: i + 1,
+    annotationLevel: "warning" as const,
+    message: `risk ${i}`,
+    title: "verit: area",
+  }));
+
 describe("makeGithubChecks", () => {
   it.each(["success", "failure", "neutral"] as const)(
-    "posts a completed %s check with name, conclusion and output",
+    "creates a completed %s check when none exists for the commit",
     async (conclusion) => {
       const { calls, fetchStub } = fakeTransport();
       const port = makeGithubChecks("token-x", { fetch: fetchStub });
-      const result = await Effect.runPromise(
-        port.postCheckRun({ ...baseCheck, conclusion }),
-      );
+      const result = await Effect.runPromise(port.postCheckRun({ ...baseCheck, conclusion }));
       expect(result).toEqual({ posted: true, url: "https://github.com/o/r/runs/1" });
-      expect(calls).toHaveLength(1);
-      const call = calls[0]!;
-      expect(call.method).toBe("POST");
-      expect(call.url).toContain("/repos/o/r/check-runs");
-      expect(call.body).toMatchObject({
+      // it lists first (dedupe), then creates
+      expect(calls.some((c) => c.method === "GET" && c.url.includes("/check-runs"))).toBe(true);
+      const create = calls.find((c) => c.method === "POST");
+      expect(create).toBeDefined();
+      expect(create!.url).toContain("/repos/o/r/check-runs");
+      expect(create!.body).toMatchObject({
         name: "verit / behavior-proof",
         head_sha: "abc123",
         status: "completed",
@@ -53,6 +75,65 @@ describe("makeGithubChecks", () => {
       });
     },
   );
+
+  it("re-runs update the same Check Run instead of creating a duplicate", async () => {
+    const { calls, fetchStub } = fakeTransport([{ id: 99, name: "verit / behavior-proof" }]);
+    const port = makeGithubChecks("token-x", { fetch: fetchStub });
+    const result = await Effect.runPromise(
+      port.postCheckRun({ ...baseCheck, conclusion: "success" }),
+    );
+    expect(result.url).toBe("https://github.com/o/r/runs/99");
+    // no create: the existing run is updated in place
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+    const update = calls.find((c) => c.method === "PATCH");
+    expect(update).toBeDefined();
+    expect(update!.url).toContain("/check-runs/99");
+    expect(update!.body).toMatchObject({ status: "completed", conclusion: "success" });
+  });
+
+  it("posts annotations in the create output and carries details_url", async () => {
+    const { calls, fetchStub } = fakeTransport();
+    const port = makeGithubChecks("token-x", { fetch: fetchStub });
+    await Effect.runPromise(
+      port.postCheckRun({
+        ...baseCheck,
+        conclusion: "failure",
+        annotations: annotations(2),
+        detailsUrl: "https://proof.example/r/o/r/runs/1",
+      }),
+    );
+    const create = calls.find((c) => c.method === "POST")!;
+    const body = create.body as {
+      details_url?: string;
+      output: { annotations?: Array<Record<string, unknown>> };
+    };
+    expect(body.details_url).toBe("https://proof.example/r/o/r/runs/1");
+    expect(body.output.annotations).toHaveLength(2);
+    // mapped to GitHub's snake_case shape, verbatim lines
+    expect(body.output.annotations![0]).toMatchObject({
+      path: "src/a.ts",
+      start_line: 1,
+      end_line: 1,
+      annotation_level: "warning",
+      message: "risk 0",
+    });
+  });
+
+  it("batches annotations to GitHub's 50-per-call limit", async () => {
+    const { calls, fetchStub } = fakeTransport();
+    const port = makeGithubChecks("token-x", { fetch: fetchStub });
+    // 60 annotations: 50 on the create, 10 on a follow-up update to the same run
+    await Effect.runPromise(
+      port.postCheckRun({ ...baseCheck, conclusion: "failure", annotations: annotations(60) }),
+    );
+    const create = calls.find((c) => c.method === "POST")!;
+    const createBody = create.body as { output: { annotations?: unknown[] } };
+    expect(createBody.output.annotations).toHaveLength(50);
+    const update = calls.find((c) => c.method === "PATCH")!;
+    const updateBody = update.body as { output: { annotations?: unknown[] } };
+    expect(updateBody.output.annotations).toHaveLength(10);
+    expect(update.url).toContain("/check-runs/1");
+  });
 
   it("is a dry run without a token: nothing posted, no request made", async () => {
     const { calls, fetchStub } = fakeTransport();
@@ -64,12 +145,10 @@ describe("makeGithubChecks", () => {
     expect(calls).toHaveLength(0);
   });
 
-  it("fails with a StoreError when GitHub rejects the check", async () => {
+  it("fails with a StoreError when GitHub rejects the write", async () => {
+    // list is refused too, so the adapter falls back to create, which 403s
     const rejecting: typeof globalThis.fetch = async () =>
-      new Response(JSON.stringify({ message: "Resource not accessible" }), {
-        status: 403,
-        headers: { "Content-Type": "application/json" },
-      });
+      json(403, { message: "Resource not accessible" });
     const port = makeGithubChecks("token-x", { fetch: rejecting });
     const exit = await Effect.runPromiseExit(
       port.postCheckRun({ ...baseCheck, conclusion: "success" }),

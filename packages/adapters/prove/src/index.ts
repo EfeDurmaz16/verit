@@ -1,11 +1,11 @@
 import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { Effect, Either, Schema as S } from "effect";
-import type { GitState, ProveCommand, ProveOutcome, ProvePort } from "@verit/ports";
+import type { GitState, ProveCommand, ProveOutcome, ProvePort, SuiteOutcome } from "@verit/ports";
 import { StoreError } from "@verit/ports";
 
 /*
@@ -68,46 +68,153 @@ const packageManager = (cwd: string): string => {
   return "npm";
 };
 
-/** Operator override: `VERIT_PROVE_CMD="cargo test --all"`, split into argv. */
+/**
+ * Operator override: `VERIT_PROVE_CMD`, one command, argv.
+ *
+ * Two forms. A JSON array is parsed as exact argv, so an argument with spaces
+ * survives: `VERIT_PROVE_CMD='["pnpm","test","--","my case"]'`. Any other
+ * value is split on whitespace, which is the old behavior and mangles quoted
+ * arguments: `pnpm test "my case"` splits into four tokens, `"my` and `case"`
+ * among them. Use the array form when an argument contains a space.
+ */
 const fromEnv = (): ProveCommand | null => {
   const raw = process.env.VERIT_PROVE_CMD?.trim();
   if (!raw) return null;
-  const parts = raw.split(/\s+/);
+  let parts: string[];
+  if (raw.startsWith("[")) {
+    try {
+      const arr: unknown = JSON.parse(raw);
+      if (!Array.isArray(arr) || arr.some((x) => typeof x !== "string")) return null;
+      parts = arr as string[];
+    } catch {
+      // malformed array: refuse rather than fall back to a mangling split
+      return null;
+    }
+  } else {
+    parts = raw.split(/\s+/);
+  }
   const [command, ...args] = parts;
   if (!command) return null;
   return { command, args, source: "VERIT_PROVE_CMD" };
 };
 
-export const detectProveCommand = async (cwd: string): Promise<ProveCommand | null> => {
-  const env = fromEnv();
-  if (env) return env;
-
-  const pkgRaw = await readJson(join(cwd, "package.json"));
-  if (pkgRaw !== null) {
-    const decoded = decodePackageJson(pkgRaw);
-    if (Either.isRight(decoded)) {
-      const scripts = decoded.right.scripts ?? {};
-      for (const name of ["test", "build"] as const) {
-        const script = scripts[name];
-        if (typeof script === "string" && script.trim() !== "") {
-          return {
-            command: packageManager(cwd),
-            args: ["run", name],
-            source: `package.json#scripts.${name}`,
-          };
-        }
-      }
-    }
-  }
-
-  if (existsSync(join(cwd, "Cargo.toml"))) {
-    return { command: "cargo", args: ["test"], source: "Cargo.toml" };
-  }
-  if (existsSync(join(cwd, "pyproject.toml"))) {
-    return { command: "pytest", args: ["-q"], source: "pyproject.toml" };
-  }
-  return null;
+/** A test script present and non-empty in a package.json-shaped manifest. */
+const testScript = async (path: string): Promise<boolean> => {
+  const raw = await readJson(path);
+  if (raw === null) return false;
+  const decoded = decodePackageJson(raw);
+  if (Either.isLeft(decoded)) return false;
+  const t = decoded.right.scripts?.["test"];
+  return typeof t === "string" && t.trim() !== "";
 };
+
+/** True when the Makefile declares a `test` target. */
+const makefileHasTestTarget = async (cwd: string): Promise<boolean> => {
+  try {
+    return /^test[ \t]*:/m.test(await readFile(join(cwd, "Makefile"), "utf8"));
+  } catch {
+    return false;
+  }
+};
+
+/** True when a top-level file matches any of the extensions. */
+const anyFileWithExt = async (cwd: string, exts: readonly string[]): Promise<boolean> => {
+  try {
+    return (await readdir(cwd)).some((f) => exts.some((e) => f.endsWith(e)));
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Every verification suite the checkout declares, plus a note per manifest
+ * probed. A polyglot repo (a Go module beside a Rust crate beside a
+ * package.json) yields one suite each. The build fallback is gone: a compile
+ * exit code is not a behavior proof, so a package.json with only a `build`
+ * script contributes no suite and is reported as probed with no test.
+ * `VERIT_PROVE_CMD` overrides everything with one explicit suite.
+ */
+export const detectProveCommands = async (
+  cwd: string,
+): Promise<{ suites: ProveCommand[]; probed: string[] }> => {
+  const env = fromEnv();
+  if (env) return { suites: [env], probed: ["VERIT_PROVE_CMD"] };
+
+  const suites: ProveCommand[] = [];
+  const probed: string[] = [];
+  const has = (f: string): boolean => existsSync(join(cwd, f));
+  /** Push a suite and note the manifest, or note it absent. */
+  const probe = (present: boolean, note: string, suite?: ProveCommand): void => {
+    probed.push(present ? note : `${note} (absent)`);
+    if (present && suite) suites.push(suite);
+  };
+
+  if (has("package.json")) {
+    const hasTest = await testScript(join(cwd, "package.json"));
+    probed.push(hasTest ? "package.json#scripts.test" : "package.json (no test script)");
+    if (hasTest) {
+      suites.push({ command: packageManager(cwd), args: ["run", "test"], source: "package.json#scripts.test" });
+    }
+  } else {
+    probed.push("package.json (absent)");
+  }
+
+  probe(has("Cargo.toml"), "Cargo.toml", { command: "cargo", args: ["test"], source: "Cargo.toml" });
+  probe(has("pyproject.toml"), "pyproject.toml", { command: "pytest", args: ["-q"], source: "pyproject.toml" });
+  probe(has("go.mod"), "go.mod", { command: "go", args: ["test", "./..."], source: "go.mod" });
+
+  if (has("Makefile")) {
+    const hasTarget = await makefileHasTestTarget(cwd);
+    probed.push(hasTarget ? "Makefile#test" : "Makefile (no test target)");
+    if (hasTarget) suites.push({ command: "make", args: ["test"], source: "Makefile" });
+  } else {
+    probed.push("Makefile (absent)");
+  }
+
+  // Java/Kotlin: the wrapper is preferred, then maven, then a bare gradle.
+  if (has("gradlew")) {
+    probe(true, "gradlew", { command: join(cwd, "gradlew"), args: ["test"], source: "gradlew" });
+  } else if (has("pom.xml")) {
+    probe(true, "pom.xml", { command: "mvn", args: ["test"], source: "pom.xml" });
+  } else if (has("build.gradle") || has("build.gradle.kts")) {
+    probe(true, "build.gradle", { command: "gradle", args: ["test"], source: "build.gradle" });
+  } else {
+    probed.push("gradlew/pom.xml (absent)");
+  }
+
+  // Ruby: rspec when the repo is set up for it, else a rake task.
+  if (has("Gemfile")) {
+    if (has(".rspec") || has("spec")) {
+      probed.push("Gemfile+rspec");
+      suites.push({ command: "bundle", args: ["exec", "rspec"], source: "Gemfile+rspec" });
+    } else if (has("Rakefile")) {
+      probed.push("Gemfile+Rakefile");
+      suites.push({ command: "bundle", args: ["exec", "rake"], source: "Gemfile+Rakefile" });
+    } else {
+      probed.push("Gemfile (no rspec or Rakefile)");
+    }
+  } else {
+    probed.push("Gemfile (absent)");
+  }
+
+  if (has("composer.json")) {
+    const hasTest = await testScript(join(cwd, "composer.json"));
+    probed.push(hasTest ? "composer.json#scripts.test" : "composer.json (no test script)");
+    if (hasTest) suites.push({ command: "composer", args: ["test"], source: "composer.json#scripts.test" });
+  } else {
+    probed.push("composer.json (absent)");
+  }
+
+  const dotnet = await anyFileWithExt(cwd, [".csproj", ".fsproj", ".sln"]);
+  probe(dotnet, "*.csproj/*.sln", { command: "dotnet", args: ["test"], source: "csproj" });
+
+  return { suites, probed };
+};
+
+/** The first detected suite, for a surface that shows a single command (the
+    workspace offer). Multi-suite runs use `detectProveCommands` directly. */
+export const detectProveCommand = async (cwd: string): Promise<ProveCommand | null> =>
+  (await detectProveCommands(cwd)).suites[0] ?? null;
 
 const GITHUB_REMOTE = /github\.com[:/]+([^/]+)\/([^/]+?)(?:\.git)?\/?$/i;
 
@@ -297,6 +404,104 @@ const spawnCaptured = (cmd: ProveCommand, cwd: string, timeoutMs: number): Promi
     });
   });
 
+/** One suite's outcome, plus its full captured log for the combined blob. */
+interface RanSuite extends SuiteOutcome {
+  readonly fullLog: string;
+}
+
+/**
+ * Run one suite and report it. A spawn that never starts (a missing runner
+ * binary raises ENOENT) is `skipped`, not failed: the suite did not run, so it
+ * is not the repo's test result. The combined conclusion states it and stays
+ * off green, but a missing toolchain is never dressed up as a failing suite.
+ */
+const runOneSuite = async (
+  cmd: ProveCommand,
+  cwd: string,
+  timeoutMs: number,
+): Promise<RanSuite> => {
+  const command = shellDisplay(cmd);
+  try {
+    const raw = await spawnCaptured(cmd, cwd, timeoutMs);
+    return {
+      command,
+      source: cmd.source,
+      exitCode: raw.exitCode,
+      durationMs: raw.durationMs,
+      timedOut: raw.timedOut,
+      logTail: tail(raw.output),
+      fullLog: raw.output.trimEnd(),
+    };
+  } catch (e) {
+    return {
+      command,
+      source: cmd.source,
+      exitCode: 127,
+      durationMs: 0,
+      timedOut: false,
+      logTail: "",
+      fullLog: "",
+      skipped: e instanceof Error ? e.message : String(e),
+    };
+  }
+};
+
+interface CombineCtx {
+  readonly cwd: string;
+  readonly repo: string;
+  readonly startedAt: string;
+  readonly headSha: string | null;
+  readonly porcelainClean: boolean;
+}
+
+/**
+ * Fold the per-suite outcomes into one ProveOutcome. A single suite that ran
+ * keeps the exact shape every surface rendered before: no `suites`, its own
+ * command, exit code and full log. Several suites, or any skipped suite, attach
+ * the per-suite breakdown so the Check derives its conclusion from the suites,
+ * not from the exit code alone. That matters because a lone suite whose runner
+ * is missing must not read as a pass: attaching `suites` makes the Check go
+ * neutral instead of green.
+ *
+ * The combined exit code stays honest for the dashboard, which reads it through
+ * proofVerdict: the first real failure, else non-zero when a suite was skipped
+ * (never green while a declared suite went unrun), else zero.
+ */
+const combineSuites = (ran: readonly RanSuite[], ctx: CombineCtx): ProveOutcome => {
+  const suites: SuiteOutcome[] = ran.map(({ fullLog: _f, ...s }) => s);
+  const failing = ran.find((s) => s.skipped == null && (s.timedOut || s.exitCode !== 0));
+  const anySkipped = ran.some((s) => s.skipped != null);
+  const single = ran.length === 1;
+  // one suite that actually ran renders as before; multi, or any skip, carries
+  // the per-suite breakdown so the conclusion is derived from it
+  const attachSuites = ran.length > 1 || anySkipped;
+  const first = ran[0]!;
+  const combinedLog = single
+    ? first.fullLog
+    : ran
+        .map(
+          (s) =>
+            `$ ${s.command}  (${s.source})\n${s.skipped != null ? `skipped: ${s.skipped}` : `exit ${s.exitCode}`}\n${s.fullLog}`,
+        )
+        .join("\n\n")
+        .slice(-CAPTURE_CHARS);
+  return {
+    command: single ? first.command : `${ran.length} suites: ${ran.map((s) => s.command).join(", ")}`,
+    source: single ? first.source : ran.map((s) => s.source).join(", "),
+    cwd: ctx.cwd,
+    repo: ctx.repo,
+    exitCode: failing ? failing.exitCode || 1 : anySkipped ? 1 : 0,
+    durationMs: ran.reduce((n, s) => n + s.durationMs, 0),
+    timedOut: ran.some((s) => s.timedOut),
+    logTail: single ? first.logTail : tail(combinedLog),
+    log: combinedLog,
+    startedAt: ctx.startedAt,
+    headSha: ctx.headSha,
+    porcelainClean: ctx.porcelainClean,
+    ...(attachSuites ? { suites } : {}),
+  };
+};
+
 export const makeProveRunner = (): ProvePort => ({
   detect: (cwd) =>
     Effect.tryPromise({
@@ -321,52 +526,65 @@ export const makeProveRunner = (): ProvePort => ({
             `refusing to prove: ${dir} is ${local ?? "not a GitHub checkout"}, expected ${expectRepo}`,
           );
         }
-        const cmd = await detectProveCommand(dir);
-        if (!cmd) {
-          throw new Error(
-            `no verification command found in ${dir} (set VERIT_PROVE_CMD to name one)`,
-          );
-        }
-        // Read the tree as late as possible, right before the command runs, and
-        // refuse if it moved since the analysis stage's snapshot.
+        const { suites: detected, probed } = await detectProveCommands(dir);
         const state = await gitState(dir);
         const startedAt = new Date().toISOString();
-        const moved =
-          baseline != null &&
-          (state === null ||
-            state.headSha !== baseline.headSha ||
-            state.porcelainHash !== baseline.porcelainHash);
-        const common = {
-          command: shellDisplay(cmd),
-          source: cmd.source,
-          cwd: dir,
-          repo: local,
-          headSha: state?.headSha ?? null,
-          porcelainClean: state?.clean ?? false,
-        };
-        if (moved) {
+        const headSha = state?.headSha ?? null;
+        const porcelainClean = state?.clean ?? false;
+
+        // No suite to run. This is inconclusive, never a failure: the Check
+        // names the manifests probed so the repo owner knows what to add.
+        if (detected.length === 0) {
           return {
-            ...common,
+            command: "(no test command)",
+            source: "detection",
+            cwd: dir,
+            repo: local,
             exitCode: 1,
             durationMs: 0,
             timedOut: false,
             logTail: "",
             log: "",
             startedAt,
+            headSha,
+            porcelainClean,
+            refused: `no test command found in ${dir}`,
+            probed,
+          };
+        }
+
+        // Read the tree as late as possible, right before the commands run, and
+        // refuse if it moved since the analysis stage's snapshot.
+        const moved =
+          baseline != null &&
+          (state === null ||
+            state.headSha !== baseline.headSha ||
+            state.porcelainHash !== baseline.porcelainHash);
+        if (moved) {
+          return {
+            command: detected.map(shellDisplay).join(" && "),
+            source: detected.map((c) => c.source).join(", "),
+            cwd: dir,
+            repo: local,
+            exitCode: 1,
+            durationMs: 0,
+            timedOut: false,
+            logTail: "",
+            log: "",
+            startedAt,
+            headSha,
+            porcelainClean,
             refused:
               "the working tree changed during analysis: HEAD or an uncommitted file differs from the snapshot taken before the analysis stage ran. prove will not measure a tree that moved under it, so this check stays neutral.",
           };
         }
-        const raw = await spawnCaptured(cmd, dir, timeoutMs ?? DEFAULT_TIMEOUT_MS);
-        return {
-          ...common,
-          exitCode: raw.exitCode,
-          durationMs: raw.durationMs,
-          timedOut: raw.timedOut,
-          logTail: tail(raw.output),
-          log: raw.output.trimEnd(),
-          startedAt,
-        };
+
+        // Run every detected suite, independent exit codes, one combined result.
+        const ran: RanSuite[] = [];
+        for (const cmd of detected) {
+          ran.push(await runOneSuite(cmd, dir, timeoutMs ?? DEFAULT_TIMEOUT_MS));
+        }
+        return combineSuites(ran, { cwd: dir, repo: local, startedAt, headSha, porcelainClean });
       },
       catch: fail("prove"),
     }),

@@ -47,7 +47,7 @@ export const makeStubHarness = (): HarnessPort => ({
         proof_refs: [
           { kind: "command", label: "diff-stats", value: `chars=${diff.length}; paths=${paths.length}` },
           ...(paths[0]
-            ? [{ kind: "url" as const, label: "first-path", value: paths[0] }]
+            ? [{ kind: "command" as const, label: "first-path", value: paths[0] }]
             : []),
         ],
         out_of_scope: ["Live model reasoning (Pi binary not invoked in this stub path)"],

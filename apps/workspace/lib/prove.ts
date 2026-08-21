@@ -49,7 +49,7 @@ export async function proveOffer(repo: string): Promise<ProveOffer> {
       allowed: false,
       command: null,
       cwd: PROVE_CWD,
-      reason: `No test or build command found in ${PROVE_CWD}. Set VERIT_PROVE_CMD to name one.`,
+      reason: `No test command found in ${PROVE_CWD}. Set VERIT_PROVE_CMD to name one.`,
     };
   }
   return {

@@ -39,9 +39,14 @@ Three states, and only three:
 
 | Check conclusion | What it means |
 |---|---|
-| `success` | The repository's own verification command ran and exited 0. |
-| `failure` | It ran and exited non-zero, or it timed out. |
-| `neutral` | Nothing ran. You have an Understanding and no proof. |
+| `success` | The repository's own verification command ran and exited 0. Every suite, when the repo has more than one. |
+| `failure` | It ran and exited non-zero, or it timed out. Any one suite failing fails the run. |
+| `neutral` | Nothing ran, or the analysis was partial. You have an Understanding and no full proof. |
+
+A required check counts `neutral` as a pass, so `neutral` alone does not block a
+merge. Set `fail-on: failure` to gate it: an inconclusive proof then maps to
+`failure`. A polyglot repo runs one suite per language (Go, Rust, Python, Node,
+and more) and folds them into one conclusion.
 
 ---
 
@@ -65,13 +70,25 @@ jobs:
       - uses: EfeDurmaz16/verit@v0
 ```
 
-verit detects the verification command from your repository. Override it when
-the guess is wrong:
+verit detects the verification command from your repository: `package.json`,
+`Cargo.toml`, `pyproject.toml`, `go.mod`, a `Makefile` with a `test` target,
+`gradlew` or `pom.xml`, a `Gemfile`, `composer.json`, or a `.csproj`. A repo
+with several of these runs one suite per language and reports one conclusion.
+It never runs a build as a stand-in for tests: a compile is not a behavior
+proof. Override the command when the guess is wrong:
 
 ```yaml
       - uses: EfeDurmaz16/verit@v0
         with:
           prove-command: cargo test --all
+```
+
+Make a required check block a merge unless the behavior is actually proven:
+
+```yaml
+      - uses: EfeDurmaz16/verit@v0
+        with:
+          fail-on: failure
 ```
 
 The Understanding is written by the analysis lane. Bring an API key, pin a
@@ -272,8 +289,9 @@ subject.
 |---|---|---|
 | `GITHUB_TOKEN` | unset | Optional for public PRs. Needs `checks:write` to post the Check |
 | `VERIT_PROVE_CWD` | `GITHUB_WORKSPACE` | Checkout prove runs in. Must be the reviewed repo |
-| `VERIT_PROVE_CMD` | detected | Override the command, e.g. `cargo test --all`. Argv, never a shell string |
+| `VERIT_PROVE_CMD` | detected | Override the command. A string splits on whitespace, e.g. `cargo test --all`; a JSON array is exact argv, e.g. `["pnpm","test","--","my case"]`, for an argument with spaces. Argv, never a shell string |
 | `VERIT_PROVE_TIMEOUT_MS` | `600000` | Hard timeout. The process group is killed |
+| `VERIT_FAIL_ON` | `never` | `failure` gates the Check: an inconclusive proof (nothing ran, refused, no command found, or partial coverage) maps to `failure` instead of `neutral`, since a required check counts `neutral` as a pass. `never` keeps today's behavior |
 | `VERIT_CHECK_DRY_RUN` | unset | `1` prints the Check body instead of posting it |
 | `VERIT_LANE_PROVIDER` | unset | `anthropic` or `openai-compat` turns on the built-in HTTP lane, the default path whenever it is set. An unknown value is an error, never a silent fallback |
 | `VERIT_LANE_MODEL` | unset | Model id for the lane. Required with `VERIT_LANE_PROVIDER`: the lane pins its model and never guesses one. Also the optional model override for the legacy CLI harnesses |

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   analyzeDiff,
+  changedHeadLines,
   computeNetDiff,
   describeMoves,
   detectMoves,
@@ -1283,6 +1284,54 @@ describe("netDiffChars", () => {
     expect(netDiffChars("x".repeat(1_000))).toBe(1_000);
     const headerOnly = "--- a/x.ts\n+++ b/x.ts\n+ not a real hunk\n";
     expect(netDiffChars(headerOnly)).toBe(headerOnly.length);
+  });
+});
+
+describe("changedHeadLines", () => {
+  it("returns only added lines, by new path, never context or deleted lines", () => {
+    const patch = [
+      "diff --git a/src/a.ts b/src/a.ts",
+      "--- a/src/a.ts",
+      "+++ b/src/a.ts",
+      "@@ -1,3 +1,4 @@",
+      " ctx one",
+      "+added at head line 2",
+      " ctx two",
+      "-removed from old",
+      "+added at head line 4",
+    ].join("\n");
+    const map = changedHeadLines(patch);
+    expect([...(map.get("src/a.ts") ?? [])].sort((x, y) => x - y)).toEqual([2, 4]);
+  });
+
+  it("omits a deleted file: its risk cannot anchor to a head line", () => {
+    const patch = [
+      "diff --git a/gone.ts b/gone.ts",
+      "--- a/gone.ts",
+      "+++ /dev/null",
+      "@@ -1,2 +0,0 @@",
+      "-line one",
+      "-line two",
+    ].join("\n");
+    expect(changedHeadLines(patch).has("gone.ts")).toBe(false);
+    expect(changedHeadLines(patch).size).toBe(0);
+  });
+
+  it("keys added lines under the new path of a renamed-and-edited file", () => {
+    const patch = [
+      "diff --git a/old.ts b/new.ts",
+      "rename from old.ts",
+      "rename to new.ts",
+      "--- a/old.ts",
+      "+++ b/new.ts",
+      "@@ -10,2 +10,3 @@",
+      " keep",
+      "+brand new line 11",
+      " keep two",
+    ].join("\n");
+    const map = changedHeadLines(patch);
+    expect(map.has("old.ts")).toBe(false);
+    expect([...(map.get("new.ts") ?? [])]).toEqual([11]);
   });
 });
 
