@@ -179,6 +179,14 @@ describe("s3 object store", () => {
     expect(await Effect.runPromise(makeS3ObjectStore(config).get("runs/run_1/gone.log"))).toBeNull();
   });
 
+  it("sends a DELETE and treats both 204 and 404 as success", async () => {
+    for (const status of [204, 404]) {
+      const seen = capture(() => new Response(null, { status }));
+      await Effect.runPromise(makeS3ObjectStore(config).delete("runs/run_1/prove.log"));
+      expect(seen.at(-1)?.init.method).toBe("DELETE");
+    }
+  });
+
   it("fails with the status and the S3 code, and quotes nothing else of the body", async () => {
     capture(
       () =>

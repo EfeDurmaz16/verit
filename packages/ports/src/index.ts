@@ -143,6 +143,8 @@ export interface ObjectStorePort {
     contentType: string,
   ) => Effect.Effect<void, StoreError>;
   readonly get: (key: string) => Effect.Effect<StoredObject | null, StoreError>;
+  /** Removes one object. Deleting a key that is already gone is a success. */
+  readonly delete: (key: string) => Effect.Effect<void, StoreError>;
 }
 
 /**
