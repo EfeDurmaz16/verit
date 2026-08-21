@@ -99,7 +99,7 @@ export default function Page() {
             <div className="flex min-h-0 flex-1">
               <Rail />
               <Workspace />
-              <aside className="w-[320px] shrink-0 border-l border-line bg-surface">
+              <aside className="hidden w-[320px] shrink-0 border-l border-line bg-surface lg:block">
                 <ContextPanel />
               </aside>
             </div>

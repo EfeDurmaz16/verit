@@ -13,7 +13,7 @@ export function Header() {
   const [url, setUrl] = useState("");
 
   return (
-    <header className="flex h-11 shrink-0 items-center gap-3 border-b border-line bg-surface px-4">
+    <header className="flex h-11 shrink-0 items-center gap-3 overflow-x-auto border-b border-line bg-surface px-4">
       <span className="flex items-center gap-1.5 text-[13px] font-semibold tracking-tight">
         <span className="inline-block size-[9px] rounded-[2px] bg-accent" />
         Verit
@@ -143,7 +143,7 @@ export function Rail() {
   }, [sections.length]);
 
   return (
-    <nav className="flex w-[168px] shrink-0 flex-col border-r border-line bg-surface pt-2">
+    <nav className="hidden w-[168px] shrink-0 flex-col border-r border-line bg-surface pt-2 md:flex">
       <div className="px-3 pb-1.5 text-[10px] font-medium uppercase tracking-[0.08em] text-ink-3">
         Task
       </div>
