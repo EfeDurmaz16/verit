@@ -239,4 +239,67 @@ describe("openLaneCheckout", () => {
     expect(out.refused != null || out.exitCode !== 0).toBe(true);
     rmSync(src, { recursive: true, force: true });
   }, 15_000);
+
+  it("does not expose a persisted http extraheader through lane bash", () => {
+    const src = mkdtempSync(join(tmpdir(), "verit-extraheader-src-"));
+    git(["init", "-q", "-b", "main"], src);
+    git(["config", "user.email", "t@example.com"], src);
+    git(["config", "user.name", "t"], src);
+    const token = "p02_extraheader_probe_token_7f3a";
+    git(["config", "http.https://github.com/.extraheader", `AUTHORIZATION: basic ${token}`], src);
+    writeFileSync(join(src, "README.md"), "seed\n");
+    git(["add", "-A"], src);
+    git(["commit", "-qm", "seed"], src);
+    expect(git(["config", "--get-regexp", "extraheader"], src).stdout).toContain(token);
+
+    const checkout = openLaneCheckout(src);
+    try {
+      expect(checkout.isolated).toBe(true);
+      const r = executeLaneTool(checkout.root, "bash", {
+        command: "git config --list --show-origin; git config --get-regexp extraheader || true",
+      });
+      expect(r.content).not.toContain(token);
+      expect(r.content).not.toContain("AUTHORIZATION: basic");
+    } finally {
+      checkout.cleanup();
+    }
+
+    expect(git(["config", "--get-regexp", "extraheader"], src).stdout).not.toContain(token);
+    rmSync(src, { recursive: true, force: true });
+  });
+
+  /*
+   * clone --shared does not copy extraheader. That path is already closed.
+   * This one plants extraheader on the source, puts VERIT_PROVE_CWD in the
+   * host exec environ, and reads it the way lane bash does.
+   */
+  it("does not expose source extraheader via VERIT_PROVE_CWD in the parent environ", () => {
+    const src = mkdtempSync(join(tmpdir(), "verit-prove-cwd-extraheader-"));
+    git(["init", "-q", "-b", "main"], src);
+    git(["config", "user.email", "t@example.com"], src);
+    git(["config", "user.name", "t"], src);
+    const token = "p02_source_extraheader_via_prove_cwd_7f3a";
+    git(["config", "http.https://github.com/.extraheader", `AUTHORIZATION: basic ${token}`], src);
+    writeFileSync(join(src, "README.md"), "seed\n");
+    git(["add", "-A"], src);
+    git(["commit", "-qm", "seed"], src);
+    expect(git(["config", "--get-regexp", "extraheader"], src).stdout).toContain(token);
+
+    const probe = join(dirname(fileURLToPath(import.meta.url)), "prove-cwd-extraheader-probe.ts");
+    const r = spawnSync(process.execPath, ["--import", "tsx", probe, src], {
+      cwd: repoRoot(),
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        VERIT_PROVE_CWD: src,
+        GITHUB_WORKSPACE: src,
+      },
+    });
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).not.toContain(token);
+    expect(r.stdout).not.toContain("AUTHORIZATION: basic");
+    const parsed: unknown = JSON.parse(r.stdout);
+    expect(parsed).toMatchObject({ isError: false });
+    rmSync(src, { recursive: true, force: true });
+  });
 });

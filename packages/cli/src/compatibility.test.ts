@@ -35,7 +35,7 @@ const actionInputs = (): string[] => {
 };
 
 /** VERIT_* vars the action establishes, minus the ones it sets for itself. */
-const ACTION_INTERNAL = new Set(["VERIT_CHECK_SHA"]);
+const ACTION_INTERNAL = new Set(["VERIT_CHECK_SHA", "VERIT_TOKEN_DIR"]);
 const actionConfigVars = (): string[] => {
   const set = new Set<string>();
   for (const m of actionYml.matchAll(/(?:^[ \t]*|export[ \t]+)(VERIT_[A-Z0-9_]+)[ \t]*[:=]/gm)) {

@@ -148,7 +148,34 @@ runs:
           echo "lane: provider set but no API key is available, lane disabled, the Check will be neutral"
           export VERIT_LANE_PROVIDER=""
         fi
-        pnpm exec tsx packages/cli/src/main.ts dogfood "$PR_SPEC"
+        # Drop persist-credentials extraheader from the prove checkout.
+        # Lane bash can read VERIT_PROVE_CWD from /proc/<ppid>/environ and
+        # git config that path. Hiding the path is not enough.
+        strip_git_credentials() {
+          local dir="$1"
+          [ -n "$dir" ] || return 0
+          [ -e "$dir/.git" ] || return 0
+          # grep exits 1 on no match. pipefail would fail the step. Keep going.
+          local keys
+          keys="$(git -C "$dir" config --local --name-only --list 2>/dev/null \
+            | grep -E '(^http\.extraheader$|\.extraheader$|^credential\.helper$|^credential\..*\.helper$)' || true)"
+          [ -n "$keys" ] || return 0
+          while IFS= read -r key; do
+            [ -n "$key" ] || continue
+            git -C "$dir" config --local --unset-all "$key" || true
+          done <<< "$keys"
+        }
+        strip_git_credentials "${VERIT_PROVE_CWD:-}"
+        strip_git_credentials "${GITHUB_WORKSPACE:-}"
+        # Persist tokens off this process, then replace the shell. Lane bash
+        # is the same user and can read /proc/<ppid>/environ; the lane host
+        # must not have these keys at exec time.
+        umask 077
+        export VERIT_TOKEN_DIR="$(mktemp -d "${RUNNER_TEMP:-/tmp}/verit-tok.XXXXXX")"
+        printf '%s' "${GITHUB_TOKEN:-}" > "$VERIT_TOKEN_DIR/github"
+        printf '%s' "${VERIT_INGEST_TOKEN:-}" > "$VERIT_TOKEN_DIR/ingest"
+        unset GITHUB_TOKEN VERIT_INGEST_TOKEN
+        exec pnpm exec tsx packages/cli/src/main.ts dogfood "$PR_SPEC"
 
 # Declared after runs: on purpose. The review step writes these to
 # $GITHUB_OUTPUT (see writeActionOutputs in packages/cli/src/main.ts), so a
