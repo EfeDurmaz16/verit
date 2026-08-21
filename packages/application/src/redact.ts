@@ -17,7 +17,7 @@ const REDACTED = "[REDACTED]";
 /** A PEM private key block, from the BEGIN line through the END line. */
 const PEM = /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g;
 
-/** `scheme://user:password@host` — mask only the password, keep the rest. */
+/** `scheme://user:password@host`: mask only the password, keep the rest. */
 const DSN_PASSWORD = /\b([a-zA-Z][a-zA-Z0-9+.-]*:\/\/[^\s:@/]+:)[^\s@/]+@/g;
 
 /** `Bearer <token>` in an Authorization header line. */
