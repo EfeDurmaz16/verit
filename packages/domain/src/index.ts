@@ -27,7 +27,7 @@ export const UNDERSTANDING_JSON_SHAPE = `{
   "how":   "<one paragraph: how it is implemented, naming the load-bearing files>",
   "proof_refs": [ {"kind":"test|command|url|image|video","label":"<what it proves>","value":"<verbatim test name, command, or URL>"} ],
   "out_of_scope": [ "<something a reviewer might expect that this PR does not do>" ],
-  "risks": [ {"area":"<short slug>","note":"<one sentence>","source":"reviewer|author"} ]
+  "risks": [ {"area":"<short slug>","note":"<one sentence>","source":"reviewer|author","file":"<path, or omit>","line":<new-file line number, or omit>,"severity":"info|warn|high"} ]
 }
 Rules:
 - what, why and how are required and must each be non-empty. The output is validated against a
@@ -36,6 +36,10 @@ Rules:
 - source:"author" is for risks the PR description itself admits. source:"reviewer" is for risks you
   found by reading the diff. The author's list is a hint, NEVER an allowlist. Review the whole diff
   whatever the description says, and expect to find risks the author did not mention.
+- file and line are optional and go together. Set them only when the risk points at one line you can
+  see changed in this PR, using the new-file line number. A reviewer risk with a file and line is
+  marked inline on that line in the Check. A risk about the change as a whole omits both.
+- severity is optional: info, warn, or high. It sets how loud the inline mark is. Omit it for warn.
 - Every string follows the OUTPUT STYLE above. No em dash anywhere.`;
 
 /** Closed review specialty enum, not technology stacks. */
