@@ -8,10 +8,19 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 every input and env var across versions lives in
 [`docs/compatibility.md`](docs/compatibility.md).
 
-## [0.3.0] - Unreleased
+## [0.3.1] - 2026-08-21
 
-The first release meant for use. Every `v0.x` tag before it is yanked, see the
-note at the bottom.
+### Fixed
+
+- The release workflow proves the action before it pushes the tag, so a failed
+  prove can no longer leave a tag on origin.
+- README and this changelog name the yanked tag honestly. `@v0` now tracks the
+  latest release.
+
+## [0.3.0] - 2026-08-21
+
+The first release meant for use. The one earlier tag, `v0.1.0`, is yanked, see
+the note at the bottom.
 
 ### Fixed
 
@@ -41,10 +50,9 @@ note at the bottom.
   conventional commits since the last tag. Rollback is documented in the
   workflow and below.
 
-## [0.2.0], [0.1.0], and earlier `v0.x` - YANKED
+## [0.1.0] - YANKED
 
-Do not use these tags. Do not use `@v0` while the `v0` alias still points into
-this range (it currently points at `7a18fff`).
+Do not use this tag.
 
 - The Understanding was a silent stub. The action posted a Check without the
   real analysis the Check implied.
@@ -52,6 +60,5 @@ this range (it currently points at `7a18fff`).
   repo's dependencies, so prove could not run in a repo that needed
   `node_modules`, and a healthy pull request failed for the wrong reason.
 
-Pin `0.3.0` or later once it is tagged. Moving the `v0` alias onto a proven
-`0.3.0` is the fix for `@v0` callers, and is a deliberate manual step in the
-release workflow.
+`@v0` now points at a proven release. Pin `@v0` for the latest, or an exact
+`vX.Y.Z` to hold a version.

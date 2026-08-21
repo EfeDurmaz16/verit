@@ -152,8 +152,9 @@ is never a failed job.
 Every input is listed in [`action.yml`](action.yml). The version each input and
 env var appeared in, and when it changes, is in
 [`docs/compatibility.md`](docs/compatibility.md). Released changes are in
-[`CHANGELOG.md`](CHANGELOG.md). Do not pin to `v0`, `v0.1.0`, or `v0.2.0`: those
-tags shipped a stub Understanding and a broken install and are yanked.
+[`CHANGELOG.md`](CHANGELOG.md). `@v0` tracks the latest release; pin an exact
+`vX.Y.Z` if you want to hold a version. Do not pin `v0.1.0`: it shipped a stub
+Understanding and a broken install and is yanked.
 
 ### Choosing models
 
