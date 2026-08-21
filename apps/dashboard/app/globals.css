@@ -64,6 +64,14 @@ body {
   min-width: 0;
 }
 
+/* A visible keyboard focus ring on every focusable control. Unlayered, so it
+   wins over Tailwind's outline-none utilities for keyboard users, while mouse
+   focus (:focus, not :focus-visible) stays quiet. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .tnum {
   font-variant-numeric: tabular-nums;
 }
