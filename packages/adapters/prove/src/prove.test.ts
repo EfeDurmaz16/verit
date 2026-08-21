@@ -409,6 +409,23 @@ describe("prove multi-suite and detection-driven runs", () => {
     expect(proofVerdict(out)).toBe("failure");
   }, 130_000);
 
+  it("a single suite whose runner is missing is skipped, never a pass", async () => {
+    // the command is found (an override), but the binary does not exist. The
+    // suite did not run, so the outcome must not read as green.
+    const dir = await seed({ "README.md": "x\n" });
+    process.env.VERIT_PROVE_CMD = "verit-nonexistent-runner-xyz test";
+    try {
+      const out = await Effect.runPromise(
+        makeProveRunner().run({ cwd: dir, expectRepo: "EfeDurmaz16/verit" }),
+      );
+      expect(out.suites).toBeDefined();
+      expect(out.suites?.[0]?.skipped).toBeTruthy();
+      expect(out.exitCode).not.toBe(0); // never green while the suite did not run
+    } finally {
+      delete process.env.VERIT_PROVE_CMD;
+    }
+  });
+
   it("returns a probed, neutral outcome when no test command is found", async () => {
     // a repo with a manifest but no test command: nothing runs, nothing green
     const dir = await seed({ "package.json": JSON.stringify({ scripts: { build: "tsc" } }) });

@@ -455,17 +455,26 @@ interface CombineCtx {
 }
 
 /**
- * Fold the per-suite outcomes into one ProveOutcome. A single suite keeps the
- * exact shape every surface rendered before: no `suites`, the suite's own
- * command, exit code and full log. Several suites attach the per-suite
- * breakdown and a combined view: the exit code is the first real failure (a
- * skipped suite never sets it), the duration is the sum, and the log is the
- * suites concatenated and capped.
+ * Fold the per-suite outcomes into one ProveOutcome. A single suite that ran
+ * keeps the exact shape every surface rendered before: no `suites`, its own
+ * command, exit code and full log. Several suites, or any skipped suite, attach
+ * the per-suite breakdown so the Check derives its conclusion from the suites,
+ * not from the exit code alone. That matters because a lone suite whose runner
+ * is missing must not read as a pass: attaching `suites` makes the Check go
+ * neutral instead of green.
+ *
+ * The combined exit code stays honest for the dashboard, which reads it through
+ * proofVerdict: the first real failure, else non-zero when a suite was skipped
+ * (never green while a declared suite went unrun), else zero.
  */
 const combineSuites = (ran: readonly RanSuite[], ctx: CombineCtx): ProveOutcome => {
   const suites: SuiteOutcome[] = ran.map(({ fullLog: _f, ...s }) => s);
   const failing = ran.find((s) => s.skipped == null && (s.timedOut || s.exitCode !== 0));
+  const anySkipped = ran.some((s) => s.skipped != null);
   const single = ran.length === 1;
+  // one suite that actually ran renders as before; multi, or any skip, carries
+  // the per-suite breakdown so the conclusion is derived from it
+  const attachSuites = ran.length > 1 || anySkipped;
   const first = ran[0]!;
   const combinedLog = single
     ? first.fullLog
@@ -481,7 +490,7 @@ const combineSuites = (ran: readonly RanSuite[], ctx: CombineCtx): ProveOutcome 
     source: single ? first.source : ran.map((s) => s.source).join(", "),
     cwd: ctx.cwd,
     repo: ctx.repo,
-    exitCode: failing ? failing.exitCode || 1 : 0,
+    exitCode: failing ? failing.exitCode || 1 : anySkipped ? 1 : 0,
     durationMs: ran.reduce((n, s) => n + s.durationMs, 0),
     timedOut: ran.some((s) => s.timedOut),
     logTail: single ? first.logTail : tail(combinedLog),
@@ -489,7 +498,7 @@ const combineSuites = (ran: readonly RanSuite[], ctx: CombineCtx): ProveOutcome 
     startedAt: ctx.startedAt,
     headSha: ctx.headSha,
     porcelainClean: ctx.porcelainClean,
-    ...(single ? {} : { suites }),
+    ...(attachSuites ? { suites } : {}),
   };
 };
 
