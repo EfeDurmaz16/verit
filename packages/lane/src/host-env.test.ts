@@ -17,17 +17,6 @@ const repoRoot = (): string => {
   throw new Error("repo root not found");
 };
 
-const tsxCli = (): string => {
-  const candidates = [
-    join(repoRoot(), "node_modules/tsx/dist/cli.mjs"),
-    join(srcDir, "../../node_modules/tsx/dist/cli.mjs"),
-  ];
-  for (const path of candidates) {
-    if (existsSync(path)) return path;
-  }
-  throw new Error("tsx cli not found");
-};
-
 describe("takeLaneHostSecrets", () => {
   it("reads VERIT_TOKEN_DIR and unlinks the files", () => {
     const dir = mkdtempSync(join(tmpdir(), "verit-token-dir-"));
@@ -55,14 +44,19 @@ describe.skipIf(process.platform === "win32")("lane host exec environ", () => {
   it("does not put host tokens in the bash tool result via /proc/ppid/environ", () => {
     const github = "ghp_p02_parent_environ_probe_7f3a";
     const ingest = "vit_p02_parent_environ_probe_7f3a";
-    const r = spawnSync(process.execPath, [tsxCli(), join(srcDir, "host-env-probe.ts")], {
-      encoding: "utf8",
-      env: {
-        ...process.env,
-        GITHUB_TOKEN: github,
-        VERIT_INGEST_TOKEN: ingest,
+    const r = spawnSync(
+      process.execPath,
+      ["--import", "tsx", join(srcDir, "host-env-probe.ts")],
+      {
+        cwd: repoRoot(),
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          GITHUB_TOKEN: github,
+          VERIT_INGEST_TOKEN: ingest,
+        },
       },
-    });
+    );
     expect(r.status, r.stderr).toBe(0);
     expect(r.stdout).not.toContain(github);
     expect(r.stdout).not.toContain(ingest);

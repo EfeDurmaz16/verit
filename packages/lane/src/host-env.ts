@@ -123,12 +123,22 @@ const envWithoutHostSecrets = (base: NodeJS.ProcessEnv): NodeJS.ProcessEnv => {
   return env as NodeJS.ProcessEnv;
 };
 
+/** Keep a TypeScript loader when argv[1] is the .ts entry (node --import tsx). */
+const reexecArgs = (): string[] => {
+  const rest = process.argv.slice(1);
+  const entry = rest[0] ?? "";
+  if (entry.endsWith(".ts") || entry.endsWith(".mts") || entry.endsWith(".cts")) {
+    return ["--import", "tsx", ...rest];
+  }
+  return rest;
+};
+
 const reexecWithoutHostSecrets = async (secrets: LaneHostSecrets): Promise<void> => {
   const dir = writeTokenDir(secrets);
   const env = envWithoutHostSecrets(process.env);
   env[TOKEN_DIR_VAR] = dir;
 
-  const child = spawn(process.execPath, process.argv.slice(1), {
+  const child = spawn(process.execPath, reexecArgs(), {
     env,
     stdio: "inherit",
   });
