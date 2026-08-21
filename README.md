@@ -75,7 +75,25 @@ verit detects the verification command from your repository: `package.json`,
 `gradlew` or `pom.xml`, a `Gemfile`, `composer.json`, or a `.csproj`. A repo
 with several of these runs one suite per language and reports one conclusion.
 It never runs a build as a stand-in for tests: a compile is not a behavior
-proof. Override the command when the guess is wrong:
+proof.
+
+Tests that need dependencies will not run against a fresh checkout. If your
+repository needs `node_modules` or any other install, run it before prove with
+`install-command`:
+
+```yaml
+      - uses: EfeDurmaz16/verit@v0
+        with:
+          install-command: pnpm install --frozen-lockfile
+```
+
+`install-command` runs in the checkout under review, the same place prove runs,
+so `npm ci`, `pip install -r requirements.txt`, or your own setup works here.
+Leave it empty and verit installs nothing for you: install in an earlier
+workflow step instead. Without either, a repository that needs dependencies
+gets a prove failure, not a real test result.
+
+Override the detected command when the guess is wrong:
 
 ```yaml
       - uses: EfeDurmaz16/verit@v0
@@ -90,6 +108,18 @@ Make a required check block a merge unless the behavior is actually proven:
         with:
           fail-on: failure
 ```
+
+Gate a later step on the result with the action's outputs:
+
+```yaml
+      - uses: EfeDurmaz16/verit@v0
+        id: verit
+      - if: steps.verit.outputs.conclusion == 'failure'
+        run: echo "behavior not proven, see ${{ steps.verit.outputs.proof-page-url }}"
+```
+
+The step exposes `conclusion` (`success`, `failure`, or `neutral`), `run-id`,
+and `proof-page-url`.
 
 The Understanding is written by the analysis lane. Bring an API key, pin a
 model, and the built-in lane talks straight to the model API. No coding CLI
@@ -119,7 +149,11 @@ Fork pull requests receive no secrets and a read-only token. verit degrades to
 a dry run and prints the Check instead of posting it. That is deliberate, and it
 is never a failed job.
 
-Every input is listed in [`action.yml`](action.yml).
+Every input is listed in [`action.yml`](action.yml). The version each input and
+env var appeared in, and when it changes, is in
+[`docs/compatibility.md`](docs/compatibility.md). Released changes are in
+[`CHANGELOG.md`](CHANGELOG.md). Do not pin to `v0`, `v0.1.0`, or `v0.2.0`: those
+tags shipped a stub Understanding and a broken install and are yanked.
 
 ### Choosing models
 
@@ -339,8 +373,13 @@ pnpm cli understand --dry-run           # stub Understanding into the store and 
 pnpm cli review --pr=owner/repo#123     # classify, understand, render the proof Spec
 pnpm cli compile-pack                   # emit the review skills.toml from presets
 pnpm cli dogfood owner/repo#123         # the full Action path, locally
+pnpm cli doctor                         # check gh auth, node/pnpm, lane config, prove cwd
 pnpm workspace                          # live review workspace on :3000
 ```
+
+`doctor` exits non-zero on a real problem: a lane you opted into but did not
+finish configuring, a prove cwd that does not exist, a node too old to run
+verit. It warns, and still exits zero, on the rest.
 
 Proof artifacts land in `.data/proofs/`, which is gitignored.
 
@@ -352,7 +391,7 @@ Proof artifacts land in `.data/proofs/`, which is gitignored.
 | `@verit/ports` | Interfaces |
 | `@verit/application` | Use cases |
 | `@verit/adapters-*` | SQLite, Neo4j, tree-sitter, GitHub, Pi, prove, S3, memory |
-| `@verit/cli` | `ingest`, `ingest-pr`, `understand`, `review`, `dogfood` |
+| `@verit/cli` | `ingest`, `ingest-pr`, `understand`, `review`, `dogfood`, `doctor` |
 | `@verit/workspace` | Live review workspace (Next.js, SSE, json-render) |
 | `@verit/dashboard` | Hosted run history and proof pages (Next.js, Postgres) |
 | `@verit/proof-ui` | The one component registry both surfaces render |

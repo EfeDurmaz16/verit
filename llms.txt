@@ -1,0 +1,27 @@
+# verit
+
+> Behavior-proof pull request review. verit runs a pull request's own tests, then posts the pass or fail as a GitHub Check with a structured Understanding. A proof, not an opinion.
+
+The Check never goes green on an unproven change. No test command found, a refused run, a tree that moved during analysis, or partial coverage all stay neutral, never success. `fail-on: failure` maps those inconclusive cases to a failing Check for a required gate.
+
+## Start here
+
+- [README](README.md): what verit does, the one-workflow quickstart, and the full configuration surface.
+- [action.yml](action.yml): every GitHub Action input, the composite steps, and the conclusion, run-id, and proof-page-url outputs.
+- [Compatibility](docs/compatibility.md): the version each input and env var appeared in, and when it changes.
+- [Changelog](CHANGELOG.md): released, user-visible changes. Tags v0, v0.1.0, and v0.2.0 are yanked, do not pin to them.
+
+## Operate
+
+- [Runbook](docs/runbook.md): incident levers, the neutral freeze, and recovery.
+- [How the Check is decided](docs/discussion-how-the-check-is-decided.md): success versus neutral versus failure.
+- `pnpm cli doctor`: validate gh auth, node and pnpm versions, lane provider and model and key coherence, and the prove cwd before a run.
+
+## Data and trust
+
+- [Data](docs/data.md): what verit stores, where, and for how long.
+- [Security](SECURITY.md): how to report, and the prove threat model.
+
+## Contribute
+
+- [Contributing](CONTRIBUTING.md) and [Style](STYLE.md): read STYLE.md before writing any string a human reads. No em dash, short sentences, active voice.
