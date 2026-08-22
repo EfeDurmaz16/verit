@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Effect } from "effect";
 import type { Understanding } from "@verit/domain";
 import { LaneError, type LaneClient, type LaneRequest, type LaneTurn } from "./client";
-import { SUBMIT_VERDICT_TOOL_NAME, verifyFindings } from "./review";
+import { DEFAULT_LANE_MODE, parseLaneMode, SUBMIT_VERDICT_TOOL_NAME, verifyFindings } from "./review";
 import { FOCUS_TOOL_NAME, runTieredLane } from "./pipeline";
 import { laneSystemPrompt, SUBMIT_TOOL_NAME } from "./prompt";
 import { submitTool } from "./index";
@@ -358,5 +358,27 @@ describe("runTieredLane review wiring", () => {
     const judge = clientByForce({ submit: { what: "", why: "y", how: "h" } });
     const out = await runTieredLane(judge, laneInput({ mode: "both" }));
     expect(out).toBeNull();
+  });
+});
+
+/*
+ * The mode default. action.yml exports VERIT_LANE_MODE="" when the input is
+ * unset, so the empty string is the real production default path: it must review
+ * by default, and a typo must never silently disable the reviewer.
+ */
+describe("parseLaneMode: the default reviews, a typo never disables review", () => {
+  it("unset, empty, and unknown all resolve to the reviewing default (both)", () => {
+    expect(DEFAULT_LANE_MODE).toBe("both");
+    expect(parseLaneMode(undefined)).toBe("both"); // env unset
+    expect(parseLaneMode("")).toBe("both"); // action.yml empty export
+    expect(parseLaneMode("REVIEW")).toBe("both"); // case-sensitive: softens to review, not off
+    expect(parseLaneMode("understand")).toBe("both"); // a typo never lands on understanding-only
+    expect(parseLaneMode("nonsense")).toBe("both");
+  });
+
+  it("each valid mode round-trips exactly", () => {
+    expect(parseLaneMode("understanding")).toBe("understanding");
+    expect(parseLaneMode("review")).toBe("review");
+    expect(parseLaneMode("both")).toBe("both");
   });
 });
