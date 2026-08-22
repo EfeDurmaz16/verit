@@ -1,13 +1,23 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Effect } from "effect";
 import { proofVerdict } from "@verit/domain";
 import { gitState, makeProveRunner } from "@verit/adapter-prove";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { openLaneCheckout } from "./checkout";
 import { executeLaneTool } from "./tools";
+
+const repoRoot = (): string => {
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (let i = 0; i < 8; i++) {
+    if (existsSync(join(dir, "pnpm-workspace.yaml"))) return dir;
+    dir = dirname(dir);
+  }
+  throw new Error("repo root not found");
+};
 
 /*
  * The blocker: lane tools ran in the very checkout prove was about to measure,
