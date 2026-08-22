@@ -8,6 +8,23 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 every input and env var across versions lives in
 [`docs/compatibility.md`](docs/compatibility.md).
 
+## [0.5.0] - 2026-08-23
+
+### Added
+
+- Review mode. `VERIT_LANE_MODE` and the `lane-mode` action input pick
+  `understanding`, `review`, or `both`, the default. `understanding` summarizes
+  only and is unchanged. `review` and `both` also hunt located findings: the
+  judge fills the same `risks[]` with reviewer findings, then a cheap skeptic
+  pass tries to refute each one from the net diff and drops the findings it
+  cannot confirm. A finding whose skeptic call errors, times out, or returns
+  junk is dropped, and a finding whose line the PR head does not change is
+  dropped as a guessed location. The skeptic reuses the tier's triage model when
+  it has one, else the judge. Findings are advisory: they render as inline
+  annotations but never change the Check conclusion. Only the proof result and
+  `fail-on` decide pass, fail, or neutral, and a run whose analysis fails stays
+  neutral with zero findings.
+
 ## [0.4.0] - 2026-08-22
 
 ### Added
