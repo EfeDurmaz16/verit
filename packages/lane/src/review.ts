@@ -231,6 +231,9 @@ export const verifyFindings = async (
   const { understanding, netDiff, changedLines, proofStatus } = options;
   const timeoutMs = options.timeoutMs ?? DEFAULT_SKEPTIC_TIMEOUT_MS;
 
+  // ponytail: one concurrent refute call per located finding, unbounded. The
+  // judge's own token cap bounds how many findings it can emit, so the fan-out
+  // is small in practice. Add a concurrency limit if a run ever floods the API.
   const kept = await Promise.all(
     understanding.risks.map(async (risk): Promise<RiskItem | null> => {
       // Not a located finding: an author hint or a whole-change risk. Untouched.
