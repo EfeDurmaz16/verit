@@ -33,8 +33,12 @@ inputs:
     description: "Model API behind the analysis lane: anthropic or openai-compat. Empty disables the lane and the Check is neutral."
     required: false
     default: ""
+  lane-tier:
+    description: "Review quality tier: fast, balanced, or max. Empty means balanced. fast is a single judge call; balanced and max add a cheap triage map pass first. The tier maps to models in the README matrix, all swappable."
+    required: false
+    default: ""
   lane-model:
-    description: "Model the lane pins, e.g. claude-opus-5. Required when lane-provider is set. Never guessed."
+    description: "Optional judge override, e.g. anthropic/claude-opus-5. Set it to pin one exact model regardless of tier. Empty lets the tier pick the judge."
     required: false
     default: ""
   lane-api-key:
@@ -126,6 +130,7 @@ runs:
         # caller's step is not clobbered by this env block. The run step below
         # resolves each one: a non-empty input wins, else the caller's env.
         IN_LANE_PROVIDER: ${{ inputs.lane-provider }}
+        IN_LANE_TIER: ${{ inputs.lane-tier }}
         IN_LANE_MODEL: ${{ inputs.lane-model }}
         IN_LANE_API_KEY: ${{ inputs.lane-api-key }}
         IN_LANE_BASE_URL: ${{ inputs.lane-base-url }}
@@ -138,6 +143,7 @@ runs:
         VERIT_INGEST_TOKEN: ${{ inputs.ingest-token }}
       run: |
         export VERIT_LANE_PROVIDER="${IN_LANE_PROVIDER:-${VERIT_LANE_PROVIDER:-}}"
+        export VERIT_LANE_TIER="${IN_LANE_TIER:-${VERIT_LANE_TIER:-}}"
         export VERIT_LANE_MODEL="${IN_LANE_MODEL:-${VERIT_LANE_MODEL:-}}"
         export VERIT_LANE_API_KEY="${IN_LANE_API_KEY:-${VERIT_LANE_API_KEY:-}}"
         export VERIT_LANE_BASE_URL="${IN_LANE_BASE_URL:-${VERIT_LANE_BASE_URL:-}}"
