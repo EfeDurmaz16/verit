@@ -67,9 +67,13 @@ Env:
   VERIT_SQLITE_PATH   default .data/verit.db (set empty to use memory)
   VERIT_LANE_PROVIDER anthropic | openai-compat runs the built-in HTTP lane, the
                         default whenever it is set. No coding CLI is involved
-  VERIT_LANE_MODEL    model id for the lane. Required with VERIT_LANE_PROVIDER:
-                        the lane pins its model and never guesses one.
-                        Optional model override for the CLI harnesses below
+  VERIT_LANE_TIER     fast | balanced | max (default balanced). The one quality
+                        knob: fast is a single judge call, balanced and max add a
+                        cheap triage map pass first. Tier maps to models in the
+                        README matrix; slugs are swappable per var
+  VERIT_LANE_MODEL    legacy single pin: one model, one pass. Pins the judge for
+                        any tier and drops the triage pass. Unset, the tier picks
+                        the judge. Also the model override for the CLI harnesses
   VERIT_LANE_BASE_URL API base URL override. openai-compat covers OpenAI, Grok
                         (https://api.x.ai/v1), DeepSeek, GLM, and local vLLM
   VERIT_LANE_API_KEY  lane API key. Falls back to ANTHROPIC_API_KEY or

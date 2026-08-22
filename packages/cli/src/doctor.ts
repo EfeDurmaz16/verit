@@ -172,7 +172,11 @@ const laneFacts = (env: NodeJS.ProcessEnv): DoctorFacts["lane"] => {
   }
   try {
     const cfg = laneConfigFromEnv(env);
-    return { state: "ok", detail: `provider ${cfg.provider}, model ${cfg.model}, key present` };
+    const triage = cfg.triage !== undefined ? `, triage ${cfg.triage}` : "";
+    return {
+      state: "ok",
+      detail: `provider ${cfg.provider}, tier ${cfg.tier}, judge ${cfg.judge}${triage}, key present`,
+    };
   } catch (e) {
     return { state: "error", detail: e instanceof Error ? e.message : String(e) };
   }
