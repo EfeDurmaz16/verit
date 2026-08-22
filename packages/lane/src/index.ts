@@ -1,5 +1,6 @@
 import { Effect, JSONSchema } from "effect";
 import { Understanding } from "@verit/domain";
+import { changedHeadLines } from "@verit/netdiff";
 import type { HarnessPort } from "@verit/ports";
 import { StoreError } from "@verit/ports";
 import { anthropicClient } from "./anthropic";
@@ -10,6 +11,7 @@ import { DEFAULT_CAPS, type LaneCaps } from "./loop";
 import { openaiCompatClient } from "./openai";
 import { runTieredLane } from "./pipeline";
 import { laneSystemPrompt, laneUserPrompt, SUBMIT_TOOL_NAME } from "./prompt";
+import { type LaneMode, type ProofStatus, parseLaneMode } from "./review";
 import { type LaneTier, parseLaneTier, resolveLaneTier } from "./tiers";
 import { executeLaneTool, LANE_TOOLS } from "./tools";
 
@@ -31,6 +33,8 @@ export type LaneProvider = "anthropic" | "openai-compat";
 export interface LaneConfig {
   readonly provider: LaneProvider;
   readonly tier: LaneTier;
+  /** What the run asks of the lane: understanding, review, or both. */
+  readonly mode: LaneMode;
   /** The judge slug that produces the Understanding. */
   readonly judge: string;
   /** The optional triage slug for the map pass. Absent means a single call. */
@@ -67,6 +71,7 @@ export const laneConfigFromEnv = (env: NodeJS.ProcessEnv = process.env): LaneCon
     );
   }
   const tier = parseLaneTier(env.VERIT_LANE_TIER);
+  const mode = parseLaneMode(env.VERIT_LANE_MODE);
   const resolved = resolveLaneTier(tier, env);
   // A legacy single pin is one model, one pass: it moves the judge and drops
   // triage, so an existing single-model setup never fires a second (and, on a
@@ -85,6 +90,7 @@ export const laneConfigFromEnv = (env: NodeJS.ProcessEnv = process.env): LaneCon
   return {
     provider,
     tier,
+    mode,
     judge,
     ...(triage !== undefined ? { triage } : {}),
     apiKey,
@@ -148,6 +154,12 @@ export const makeLaneHarness = (config?: LaneConfig): HarnessPort => ({
         const cfg = config ?? laneConfigFromEnv();
         const judge = clientForModel(cfg, cfg.judge);
         const triageClient = cfg.triage !== undefined ? clientForModel(cfg, cfg.triage) : null;
+        // ponytail: prove runs AFTER understand (see runUnderstandPipeline in
+        // packages/cli/src/main.ts), so the run has no proof result at lane
+        // time: it is neutral here. The prompt and skeptic already take a
+        // ProofStatus, so a later reordering or a proof-vs-finding cross-check
+        // can pass the real result without touching this plumbing.
+        const proofStatus: ProofStatus = "neutral";
         // Drop host tokens from process.env for the tool window. The CLI also
         // re-execs without them so /proc/self/environ is already clean.
         dropLaneHostSecrets();
@@ -161,13 +173,18 @@ export const makeLaneHarness = (config?: LaneConfig): HarnessPort => ({
           const checkout = openLaneCheckout(cfg.root);
           try {
             return await runTieredLane(judge, {
-              system: laneSystemPrompt(input.role),
+              system: laneSystemPrompt(input.role, cfg.mode, proofStatus),
               user: laneUserPrompt(input),
               tools: LANE_TOOLS,
               submitTool: submitTool(),
               executeTool: (name, toolInput) => executeLaneTool(checkout.root, name, toolInput),
               caps: cfg.caps,
               triageClient,
+              mode: cfg.mode,
+              proofStatus,
+              // A located finding must cite a line this PR head changes. The
+              // Check anchors annotations to the same set (changedHeadLines).
+              changedLines: changedHeadLines(input.diff),
             });
           } finally {
             checkout.cleanup();
@@ -199,6 +216,18 @@ export {
   runTriage,
 } from "./pipeline";
 export type { TieredLaneInput } from "./pipeline";
+export {
+  DEFAULT_LANE_MODE,
+  DEFAULT_SKEPTIC_TIMEOUT_MS,
+  modeReviews,
+  parseLaneMode,
+  reviewInstructions,
+  SUBMIT_VERDICT_TOOL_NAME,
+  Verdict,
+  verdictJsonSchema,
+  verifyFindings,
+} from "./review";
+export type { LaneMode, ProofStatus, VerifyFindingsOptions } from "./review";
 export { laneSystemPrompt, laneUserPrompt, SUBMIT_TOOL_NAME } from "./prompt";
 export { openLaneCheckout, stripCheckoutCredentialConfig, stripProveWorkspaceCredentials } from "./checkout";
 export type { LaneCheckout } from "./checkout";

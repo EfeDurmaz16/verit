@@ -1,6 +1,7 @@
 import { OUTPUT_STYLE, UNDERSTANDING_JSON_SHAPE } from "@verit/domain";
 import { diffSection } from "@verit/netdiff";
 import type { HarnessPort } from "@verit/ports";
+import { modeReviews, reviewInstructions, type LaneMode, type ProofStatus } from "./review";
 
 export type UnderstandInput = Parameters<HarnessPort["runUnderstand"]>[0];
 
@@ -13,9 +14,18 @@ export const SUBMIT_TOOL_NAME = "submit_understanding";
 /**
  * The one system prompt of the thin lane. Everything harness-shaped lives
  * here; the user message carries only the PR itself.
+ *
+ * Mode drives what gets appended. "understanding" (the default) returns the
+ * summarize-only prompt byte for byte as it was before review existed. "review"
+ * and "both" append the finding-hunting block, so the judge fills the same
+ * risks[] with located reviewer findings the skeptic then verifies.
  */
-export const laneSystemPrompt = (role: UnderstandInput["role"]): string =>
-  `You are the ${role} lane behind verit, a behaviour proof review tool.
+export const laneSystemPrompt = (
+  role: UnderstandInput["role"],
+  mode: LaneMode = "understanding",
+  proofStatus: ProofStatus = "neutral",
+): string => {
+  const base = `You are the ${role} lane behind verit, a behaviour proof review tool.
 
 Produce the Understanding of one pull request: what it changes, why, how a human can verify the behaviour, and where the risk is. The user message carries the PR. The diff is the ground truth.
 
@@ -26,6 +36,8 @@ ${OUTPUT_STYLE}
 When your analysis is complete, call ${SUBMIT_TOOL_NAME} exactly once with the final Understanding. The shape, for reference:
 ${UNDERSTANDING_JSON_SHAPE}
 - Every file path and code excerpt must come verbatim from the diff or from tool output. Never invent one.`;
+  return modeReviews(mode) ? `${base}\n\n${reviewInstructions(mode, proofStatus)}` : base;
+};
 
 const list = (items: readonly string[], max: number, empty: string): string =>
   items.length === 0 ? empty : items.slice(0, max).join("\n");
