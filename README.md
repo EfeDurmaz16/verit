@@ -189,8 +189,9 @@ pnpm install
 pnpm workspace          # http://localhost:3000
 ```
 
-Node 22 and pnpm 11. Needs `gh` authenticated, plus `VERIT_LANE_PROVIDER`,
-`VERIT_LANE_MODEL` and an API key for live analysis. On that provider path the
+Node 22 and pnpm 11. Needs `gh` authenticated, plus `VERIT_LANE_PROVIDER` and an
+API key for live analysis. The tier picks the model, see [Choosing a
+tier](#choosing-a-tier). On that provider path the
 review is the same built-in HTTP lane the Action runs, straight against the
 model API: no coding CLI, no Docker, no database, no account. The graph store
 falls back to memory and runs land in `.data/`.
@@ -334,6 +335,62 @@ Full field-by-field detail, retention windows, and who can read what:
 
 ---
 
+## Choosing a tier
+
+The lane has one quality knob, `VERIT_LANE_TIER`. You pick a tier, not a model.
+Set it on the Action with `lane-tier`, or as an env var. The default is
+`balanced`.
+
+- `fast`: one judge call on the full net diff. Lowest cost and latency. Good
+  for large or low-risk pull requests where you want a quick read.
+- `balanced`: a cheap triage pass reads the whole diff and ranks the risky
+  regions first, then a mid-tier judge writes the Understanding with that focus.
+  The default. Best cost-to-signal for most reviews.
+- `max`: the same triage pass, then the strongest judge. Use it on money paths,
+  auth, or anywhere a missed risk is expensive.
+
+The triage pass is an optimization, never a gate. If it fails, times out, or
+returns junk, the judge still runs on the full net diff. Triage can sharpen the
+review, never block it or skew it.
+
+### Tier to model
+
+This table is the only place model names appear. Every slug is a default you can
+swap without a code change, using the override var in the last column. The
+defaults are current OpenRouter slugs.
+
+| Tier | Triage map pass | Judge | Override vars |
+|---|---|---|---|
+| fast | none | `openai/gpt-5.6-luna` | `VERIT_LANE_TIER_FAST_JUDGE` |
+| balanced | `openai/gpt-5.6-luna` | `anthropic/claude-sonnet-5` | `VERIT_LANE_TIER_BALANCED_TRIAGE`, `VERIT_LANE_TIER_BALANCED_JUDGE` |
+| max | `openai/gpt-5.6-luna` | `anthropic/claude-opus-5` | `VERIT_LANE_TIER_MAX_TRIAGE`, `VERIT_LANE_TIER_MAX_JUDGE` |
+
+`VERIT_LANE_MODEL` is the legacy single pin: set it and the run is one model,
+one pass, whatever the tier. It moves the judge and drops the triage pass, so an
+existing single-model setup makes the exact same one call it always did, never a
+second cross-provider triage call it never asked for. To keep a tier's triage
+with a different judge, override the per-tier judge slug instead (the last column
+above).
+
+### OpenRouter is the recommended path
+
+The default slugs assume [OpenRouter](https://openrouter.ai): one API key reaches
+every model behind one `openai-compat` base URL, so a tier can mix an OpenAI
+triage model with an Anthropic judge on a single key. Point the lane at it:
+
+```bash
+export VERIT_LANE_PROVIDER=openai-compat
+export VERIT_LANE_BASE_URL=https://openrouter.ai/api/v1
+export VERIT_LANE_API_KEY=sk-or-...
+export VERIT_LANE_TIER=balanced
+```
+
+Any other openai-compatible endpoint works too. To pin one native provider
+instead, set `VERIT_LANE_PROVIDER=anthropic` and override the tier slugs, or set
+`VERIT_LANE_MODEL`, to that provider's own model ids.
+
+---
+
 ## Configuration
 
 | Variable | Default | Purpose |
@@ -346,7 +403,8 @@ Full field-by-field detail, retention windows, and who can read what:
 | `VERIT_CHECK_DRY_RUN` | unset | `1` prints the Check body instead of posting it |
 | `VERIT_FORCE_NEUTRAL` | unset | Incident freeze. Any non-empty reason forces every Check to `neutral`, whatever the proof said. Only downgrades a claim, never invents one. See [`docs/runbook.md`](docs/runbook.md) |
 | `VERIT_LANE_PROVIDER` | unset | `anthropic` or `openai-compat` turns on the built-in HTTP lane, the default path whenever it is set. An unknown value is an error, never a silent fallback |
-| `VERIT_LANE_MODEL` | unset | Model id for the lane. Required with `VERIT_LANE_PROVIDER`: the lane pins its model and never guesses one. Also the optional model override for the legacy CLI harnesses |
+| `VERIT_LANE_TIER` | `balanced` | The one quality knob: `fast`, `balanced`, or `max`. `fast` is a single judge call; `balanced` and `max` add a cheap triage map pass first. Maps to models in [Choosing a tier](#choosing-a-tier); every slug is swappable per var. An unknown value falls back to `balanced`, never an error, so a tier typo softens the review, it never fails the run |
+| `VERIT_LANE_MODEL` | unset | Legacy single pin: one model, one pass. Overrides the judge for any tier and drops the triage pass, so an existing single-model setup makes the same one call it always did. Unset, the tier picks the judge. To keep triage with a custom judge, use the per-tier judge override. Also the model override for the legacy CLI harnesses |
 | `VERIT_LANE_BASE_URL` | provider default | API base URL override. `openai-compat` covers OpenAI, Grok (`https://api.x.ai/v1`), DeepSeek, GLM, and local vLLM |
 | `VERIT_LANE_API_KEY` | unset | Lane API key. Falls back to `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` to match the provider |
 | `VERIT_LANE_MAX_TURNS` | `40` | Lane model-call cap |

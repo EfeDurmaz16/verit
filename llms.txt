@@ -15,7 +15,7 @@ The Check never goes green on an unproven change. No test command found, a refus
 
 - [Runbook](docs/runbook.md): incident levers, the neutral freeze, and recovery.
 - [How the Check is decided](docs/discussion-how-the-check-is-decided.md): success versus neutral versus failure.
-- `pnpm cli doctor`: validate gh auth, node and pnpm versions, lane provider and model and key coherence, and the prove cwd before a run.
+- `pnpm cli doctor`: validate gh auth, node and pnpm versions, lane provider, tier, judge, and key coherence, and the prove cwd before a run.
 
 ## Data and trust
 

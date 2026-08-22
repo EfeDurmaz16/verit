@@ -8,6 +8,27 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 every input and env var across versions lives in
 [`docs/compatibility.md`](docs/compatibility.md).
 
+## [0.4.0] - 2026-08-22
+
+### Added
+
+- Lane quality tiers. `VERIT_LANE_TIER` and the `lane-tier` action input pick
+  `fast`, `balanced`, or `max`. You choose a tier, not a model. `balanced` and
+  `max` run a cheap triage map pass that ranks the risky regions of the net
+  diff, then the judge writes the Understanding with that focus. `fast` is a
+  single judge call. Each tier maps to swappable model slugs, overridable per
+  `VERIT_LANE_TIER_<TIER>_JUDGE` and `VERIT_LANE_TIER_<TIER>_TRIAGE`. OpenRouter
+  is the recommended path: one key, any model.
+
+### Changed
+
+- `VERIT_LANE_MODEL` and `lane-model` are now an optional judge override, not
+  required. Set either as a legacy single pin: one model, one pass, whatever the
+  tier. It moves the judge and drops the triage pass, so an existing single-model
+  setup makes the exact same one call it always did. Unset, the tier picks the
+  judge. To keep a tier's triage with a custom judge, override the per-tier judge
+  slug instead.
+
 ## [0.3.1] - 2026-08-21
 
 ### Fixed
