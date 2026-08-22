@@ -4,26 +4,37 @@ import type { HarnessPort } from "@verit/ports";
 import { StoreError } from "@verit/ports";
 import { anthropicClient } from "./anthropic";
 import { openLaneCheckout, stripProveWorkspaceCredentials } from "./checkout";
-import type { LaneClient, LaneTool } from "./client";
+import type { LaneClient, LaneClientOptions, LaneTool } from "./client";
 import { dropLaneHostSecrets, restoreLaneHostSecrets } from "./host-env";
-import { DEFAULT_CAPS, runLane, type LaneCaps } from "./loop";
+import { DEFAULT_CAPS, type LaneCaps } from "./loop";
 import { openaiCompatClient } from "./openai";
+import { runTieredLane } from "./pipeline";
 import { laneSystemPrompt, laneUserPrompt, SUBMIT_TOOL_NAME } from "./prompt";
+import { type LaneTier, parseLaneTier, resolveLaneTier } from "./tiers";
 import { executeLaneTool, LANE_TOOLS } from "./tools";
 
 /*
  * The harness-independent analysis lane: a thin agent loop over plain HTTP
- * model APIs. No codex, claude, or cursor CLI on this path. The model is
- * always pinned by the operator (VERIT_LANE_MODEL); there is no silent
- * fallback, because a lane that silently switches models cannot be trusted to
- * review security-relevant diffs.
+ * model APIs. No codex, claude, or cursor CLI on this path.
+ *
+ * The operator picks a quality tier (fast, balanced, max), not a model. The
+ * tier resolves to slugs in ./tiers, the one place a model id is written. A
+ * tier may add a cheap triage map pass in front of the judge; ./pipeline runs
+ * it as an optimization that can never change or block the result. A legacy
+ * single pin (VERIT_LANE_MODEL) means one model, one pass: it moves the judge
+ * and suppresses triage, so an existing single-model setup keeps making the
+ * exact same one call it always did.
  */
 
 export type LaneProvider = "anthropic" | "openai-compat";
 
 export interface LaneConfig {
   readonly provider: LaneProvider;
-  readonly model: string;
+  readonly tier: LaneTier;
+  /** The judge slug that produces the Understanding. */
+  readonly judge: string;
+  /** The optional triage slug for the map pass. Absent means a single call. */
+  readonly triage?: string;
   readonly apiKey: string;
   readonly baseUrl?: string;
   readonly caps: LaneCaps;
@@ -42,7 +53,11 @@ const intFromEnv = (raw: string | undefined, fallback: number): number => {
 
 /**
  * Resolve the lane config. Misconfiguration throws: an operator who opted in
- * by naming a provider gets a loud error, never a silent neutral run.
+ * by naming a provider gets a loud error, never a silent neutral run. The judge
+ * slug comes from the tier. VERIT_LANE_MODEL, when set, is a legacy single pin:
+ * it overrides the judge AND suppresses triage, so the run is one model and one
+ * pass, exactly what a pre-tier single-model setup did. To keep a tier's triage
+ * with a custom judge, override the per-tier judge slug instead.
  */
 export const laneConfigFromEnv = (env: NodeJS.ProcessEnv = process.env): LaneConfig => {
   const provider = env.VERIT_LANE_PROVIDER;
@@ -51,12 +66,15 @@ export const laneConfigFromEnv = (env: NodeJS.ProcessEnv = process.env): LaneCon
       `VERIT_LANE_PROVIDER must be "anthropic" or "openai-compat", got "${provider ?? ""}"`,
     );
   }
-  const model = env.VERIT_LANE_MODEL;
-  if (model === undefined || model === "") {
-    throw new Error(
-      "VERIT_LANE_MODEL is required: the lane always pins its model, it never guesses one",
-    );
-  }
+  const tier = parseLaneTier(env.VERIT_LANE_TIER);
+  const resolved = resolveLaneTier(tier, env);
+  // A legacy single pin is one model, one pass: it moves the judge and drops
+  // triage, so an existing single-model setup never fires a second (and, on a
+  // native provider, cross-provider and doomed) triage call it never asked for.
+  const pin = env.VERIT_LANE_MODEL;
+  const pinned = pin !== undefined && pin !== "";
+  const judge = pinned ? pin : resolved.judge;
+  const triage = pinned ? undefined : resolved.triage;
   const apiKey =
     env.VERIT_LANE_API_KEY ??
     (provider === "anthropic" ? env.ANTHROPIC_API_KEY : env.OPENAI_API_KEY);
@@ -66,7 +84,9 @@ export const laneConfigFromEnv = (env: NodeJS.ProcessEnv = process.env): LaneCon
   }
   return {
     provider,
-    model,
+    tier,
+    judge,
+    ...(triage !== undefined ? { triage } : {}),
     apiKey,
     baseUrl: env.VERIT_LANE_BASE_URL || undefined,
     caps: {
@@ -99,16 +119,22 @@ export const submitTool = (): LaneTool => ({
   inputSchema: understandingJsonSchema(),
 });
 
-export const laneClientFor = (config: LaneConfig): LaneClient => {
-  const options = {
+/** Build a client for one slug on the configured provider. Every model call in
+    a run, judge or triage, goes through here. */
+export const clientForModel = (config: LaneConfig, model: string): LaneClient => {
+  const options: LaneClientOptions = {
     apiKey: config.apiKey,
-    model: config.model,
+    model,
     baseUrl: config.baseUrl,
     // One request can never outlive the whole lane.
     requestTimeoutMs: config.caps.timeoutMs,
   };
   return config.provider === "anthropic" ? anthropicClient(options) : openaiCompatClient(options);
 };
+
+/** The judge client for this config. Kept as the single-client entry point. */
+export const laneClientFor = (config: LaneConfig): LaneClient =>
+  clientForModel(config, config.judge);
 
 /**
  * HarnessPort over the thin lane. Config errors fail the effect loudly;
@@ -120,7 +146,8 @@ export const makeLaneHarness = (config?: LaneConfig): HarnessPort => ({
     Effect.tryPromise({
       try: async () => {
         const cfg = config ?? laneConfigFromEnv();
-        const client = laneClientFor(cfg);
+        const judge = clientForModel(cfg, cfg.judge);
+        const triageClient = cfg.triage !== undefined ? clientForModel(cfg, cfg.triage) : null;
         // Drop host tokens from process.env for the tool window. The CLI also
         // re-execs without them so /proc/self/environ is already clean.
         dropLaneHostSecrets();
@@ -133,13 +160,14 @@ export const makeLaneHarness = (config?: LaneConfig): HarnessPort => ({
           // measures, so the lane cannot mutate its way to a green check.
           const checkout = openLaneCheckout(cfg.root);
           try {
-            return await runLane(client, {
+            return await runTieredLane(judge, {
               system: laneSystemPrompt(input.role),
               user: laneUserPrompt(input),
               tools: LANE_TOOLS,
               submitTool: submitTool(),
               executeTool: (name, toolInput) => executeLaneTool(checkout.root, name, toolInput),
               caps: cfg.caps,
+              triageClient,
             });
           } finally {
             checkout.cleanup();
@@ -156,6 +184,21 @@ export { anthropicClient } from "./anthropic";
 export { openaiCompatClient } from "./openai";
 export { runLane, DEFAULT_CAPS } from "./loop";
 export type { LaneCaps, RunLaneInput } from "./loop";
+export {
+  DEFAULT_LANE_TIER,
+  LANE_TIERS,
+  parseLaneTier,
+  resolveLaneTier,
+} from "./tiers";
+export type { LaneTier, LaneTierModels } from "./tiers";
+export {
+  FocusPlan,
+  FOCUS_TOOL_NAME,
+  renderFocusPlan,
+  runTieredLane,
+  runTriage,
+} from "./pipeline";
+export type { TieredLaneInput } from "./pipeline";
 export { laneSystemPrompt, laneUserPrompt, SUBMIT_TOOL_NAME } from "./prompt";
 export { openLaneCheckout, stripCheckoutCredentialConfig, stripProveWorkspaceCredentials } from "./checkout";
 export type { LaneCheckout } from "./checkout";
