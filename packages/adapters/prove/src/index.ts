@@ -499,7 +499,14 @@ export interface RawRun {
   durationMs: number;
 }
 
-export const spawnCaptured = (cmd: ProveCommand, cwd: string, timeoutMs: number): Promise<RawRun> =>
+export const spawnCaptured = (
+  cmd: ProveCommand,
+  cwd: string,
+  timeoutMs: number,
+  /** The child's environment. Defaults to prove's own allowlist. A probe
+      passes runnerChildEnv here, which has no CI escape hatch. */
+  env: NodeJS.ProcessEnv = proveChildEnv(),
+): Promise<RawRun> =>
   new Promise((resolvePromise, rejectPromise) => {
     const started = Date.now();
     const child = spawn(cmd.command, [...cmd.args], {
@@ -507,7 +514,9 @@ export const spawnCaptured = (cmd: ProveCommand, cwd: string, timeoutMs: number)
       shell: false,
       // own process group, so the timeout kills the whole runner tree
       detached: process.platform !== "win32",
-      env: proveChildEnv(),
+      env,
+      // No inherited descriptors: a probe gets a closed stdin and two pipes,
+      // never a handle the parent happened to be holding.
       stdio: ["ignore", "pipe", "pipe"],
     });
 
@@ -1015,3 +1024,10 @@ export {
   runDifferential,
 } from "./differential";
 export type { DifferentialInput, DifferentialRun, ProbeSpec } from "./differential";
+
+export { runnerChildEnv, secretsIn, VERIT_SECRET_KEYS } from "./runner-env";
+
+export { runDifferentialIsolated } from "./isolated";
+export type { IsolatedRun } from "./isolated";
+export { runJob, verifyJob } from "./runner-main";
+export type { RunnerJob, RunnerResult } from "./runner-main";

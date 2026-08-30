@@ -1,17 +1,16 @@
 import { execFile } from "node:child_process";
+import { createPublicKey } from "node:crypto";
 import { promisify } from "node:util";
 import type { Claim, ClaimSources } from "@verit/domain";
-import type { DifferentialReviewDeps, ProbeExecution } from "@verit/application";
-import { PROBE_PATH_TOKEN, runDifferential } from "@verit/adapter-prove";
-import type { CorpusStore } from "@verit/ports";
 import {
-  clientForModel,
-  laneClientFor,
-  laneConfigFromEnv,
-  runClaimPass,
-  runProbePass,
-  toProbeSpec,
-} from "@verit/lane";
+  generateJobSpecKeypair,
+  probeSourceHash,
+  signJobSpecAsymmetric,
+} from "@verit/application";
+import type { DifferentialReviewDeps, ProbeExecution } from "@verit/application";
+import { runDifferentialIsolated } from "@verit/adapter-prove";
+import type { CorpusStore } from "@verit/ports";
+import { laneClientFor, laneConfigFromEnv, runClaimPass, runProbePass, toProbeSpec } from "@verit/lane";
 
 /*
  * The real dependencies of a differential review, on one machine.
@@ -44,8 +43,35 @@ export interface DifferentialCliDeps {
   readonly repoDir: string;
   readonly baseSha: string;
   readonly headSha: string;
+  readonly jobId: string;
+  readonly repo: string;
+  readonly pullRequest: string;
+  /** The planner's private key. Never leaves this process. */
+  readonly privateKey: string;
+  /** The public half, handed to the runner. Not a secret. */
+  readonly publicKey: string;
   readonly corpus?: CorpusStore | null;
 }
+
+/**
+ * The planner's signing keypair.
+ *
+ * A configured key makes a spec portable: a sink or a second machine can check
+ * it later. Without one an ephemeral pair is generated per run, which still
+ * binds the spec to this run and this probe, and simply cannot be verified
+ * anywhere else. That is the honest local default, and it is why the key is an
+ * input rather than something invented and stored.
+ */
+export const jobSpecKeys = (env: NodeJS.ProcessEnv = process.env) => {
+  const configured = env.VERIT_JOB_SPEC_PRIVATE_KEY;
+  if (configured !== undefined && configured !== "") {
+    return {
+      privateKey: configured,
+      publicKey: createPublicKey(configured).export({ type: "spki", format: "pem" }).toString(),
+    };
+  }
+  return generateJobSpecKeypair();
+};
 
 /**
  * Whether a differential review can run at all here.
@@ -76,25 +102,13 @@ export const differentialAvailable = (input: {
 
 export const makeDifferentialDeps = (input: DifferentialCliDeps): DifferentialReviewDeps => {
   const config = laneConfigFromEnv();
-  // Both passes here are map work, not judgement. Naming the claims a change
-  // makes and writing a probe for one are reading tasks over material that is
-  // already in front of the model, and the tier already keeps a cheap
-  // big-context model for exactly that. The judge is reserved for the call
-  // whose output is an opinion. On the balanced tier this is most of the cost
-  // of a review: the same run drops from about 22 cents to 12 on a mid sized
-  // pull request, and from 67 to 37 on a large one.
-  //
-  // A tier with no triage model, `fast`, has nothing cheaper to fall back to,
-  // so it uses its judge, which is already the cheap model there.
-  const mapClient = config.triage !== undefined
-    ? clientForModel(config, config.triage)
-    : laneClientFor(config);
+  const client = laneClientFor(config);
 
   return {
-    claimPass: (sources: ClaimSources) => runClaimPass(mapClient, sources),
+    claimPass: (sources: ClaimSources) => runClaimPass(client, sources),
 
     probePass: async ({ claim, netDiff, repoContext, existingTests }) => {
-      const generated = await runProbePass(mapClient, {
+      const generated = await runProbePass(client, {
         claim,
         netDiff,
         ...(repoContext !== undefined ? { repoContext } : {}),
@@ -119,30 +133,54 @@ export const makeDifferentialDeps = (input: DifferentialCliDeps): DifferentialRe
     },
 
     execute: async ({ probe, policy, runsPerSide, prepare }): Promise<ProbeExecution> => {
-      const run = await runDifferential({
-        repoDir: input.repoDir,
+      // Never runDifferential from here. This process holds the model key and
+      // the GitHub token, and a probe reads its parent's environment, so the
+      // run has to start one process further down where there is nothing to
+      // read. runDifferential itself refuses if called from here, which is how
+      // that stays true rather than being a convention.
+      const spec = {
+        id: probe.id,
+        source: probe.source,
+        origin: probe.origin,
+        kind: probe.kind,
+        fileName: probe.fileName,
+        ...(probe.installPath !== undefined ? { installPath: probe.installPath } : {}),
+        command: probe.command,
+        args: [...probe.args],
+      };
+      const probeHashes = [probeSourceHash(probe.source)];
+      const binding = {
+        jobId: input.jobId,
+        repo: input.repo,
+        pullRequest: input.pullRequest,
         baseSha: input.baseSha,
         headSha: input.headSha,
-        probe: {
-          id: probe.id,
-          source: probe.source,
-          origin: probe.origin,
-          kind: probe.kind,
-          fileName: probe.fileName,
-          ...(probe.installPath !== undefined ? { installPath: probe.installPath } : {}),
-          command: probe.command,
-          args: probe.args.map((a) => (a === PROBE_PATH_TOKEN ? PROBE_PATH_TOKEN : a)),
+        policyDigest: policy.digest,
+        probeHashes,
+      };
+      const out = await runDifferentialIsolated({
+        job: {
+          repoDir: input.repoDir,
+          baseSha: input.baseSha,
+          headSha: input.headSha,
+          probe: spec,
+          policy,
+          runsPerSide,
+          prepare,
+          jobSpec: signJobSpecAsymmetric(binding, input.privateKey),
+          publicKey: input.publicKey,
+          binding,
         },
-        policy,
-        runsPerSide,
-        prepare,
       });
+      if (out.run === undefined) {
+        throw new Error(`the isolated runner produced no result: ${out.problems.join("; ")}`);
+      }
       return {
-        base: run.base,
-        head: run.head,
-        sides: run.sides,
-        probeHeldOutside: run.probeHeldOutside,
-        observedProbeHashes: run.observedProbeHashes,
+        base: out.run.base,
+        head: out.run.head,
+        sides: out.run.sides,
+        probeHeldOutside: out.run.probeHeldOutside,
+        observedProbeHashes: out.run.observedProbeHashes,
       };
     },
 

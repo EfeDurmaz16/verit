@@ -69,6 +69,8 @@ inputs onto these. A non-empty input wins over the matching env var.
 | `VERIT_CORPUS_OPT_OUT` | 0.7.0 | - | `1` keeps this repository's normalized run metadata out of the corpus |
 | `VERIT_CORPUS_OPT_IN` | 0.7.0 | - | `1` lets a private repository's normalized run metadata join the corpus |
 | `VERIT_JOB_SPEC_SECRET` | 0.7.0 | - | Secret the execution job spec is signed with |
+| `VERIT_JOB_SPEC_PRIVATE_KEY` | 0.7.0 | - | Ed25519 private key the planner signs the job spec with. Without one an ephemeral pair is used per run |
+| `VERIT_PROBE_ENV` | 0.7.0 | - | Extra environment keys a probe may see, comma separated. Secret-shaped names are refused |
 | `VERIT_LANE_PROVIDER` | 0.1.0 | - | `anthropic` or `openai-compat` turns on the built-in HTTP lane |
 | `VERIT_LANE_TIER` | 0.4.0 | - | Quality tier: `fast`, `balanced`, or `max`. Default `balanced`. Maps to models, all swappable per tier |
 | `VERIT_LANE_MODE` | 0.5.0 | - | What the lane produces: `understanding`, `review`, or `both`. Default `both`. `review` and `both` add a skeptic-verified finding pass. Findings never change the Check conclusion |
