@@ -329,3 +329,69 @@ describe("runDifferential", () => {
     expect(classifyResult({ base: run.base, head: run.head }).classification).toBe("inconclusive");
   }, 60_000);
 });
+
+describe("a probe runs where its package lives", () => {
+  it("starts the runner in the package directory, not the repository root", async () => {
+    // A workspace: the probe belongs to packages/app, and a runner started at
+    // the root would not find it. The probe reports its own cwd so the test can
+    // see where it actually ran.
+    const repo = seedRepo({
+      base: { "package.json": '{"name":"root"}\n', "marker.txt": "root\n" },
+      head: { "marker.txt": "root changed\n" },
+    });
+    const git = (args: readonly string[]) =>
+      execFileSync("git", [...args], { cwd: repo.dir, encoding: "utf8" });
+    // add a workspace member on the head side only is not needed: the probe's
+    // cwd is what is under test, and both sides get the same tree here.
+    execFileSync("mkdir", ["-p", join(repo.dir, "packages", "app")]);
+    writeFileSync(join(repo.dir, "packages", "app", "package.json"), '{"name":"app"}\n');
+    writeFileSync(join(repo.dir, "packages", "app", "marker.txt"), "app\n");
+    git(["add", "-A"]);
+    git(["commit", "-qm", "workspace"]);
+    const head = git(["rev-parse", "HEAD"]).trim();
+
+    const probe = nodeProbe(
+      'import {readFileSync} from "node:fs";' +
+        // passes only when it is running inside packages/app
+        'process.exit(readFileSync("marker.txt","utf8").trim()==="app"?0:1);',
+      { id: "p-cwd", cwd: "packages/app" },
+    );
+
+    const run = await withCleanEnv(() =>
+      runDifferential({
+        repoDir: repo.dir,
+        baseSha: head,
+        headSha: head,
+        probe,
+        policy,
+        runsPerSide: 1,
+      }),
+    );
+
+    expect(run.base.state).toBe("pass");
+    expect(run.head.state).toBe("pass");
+  }, 60_000);
+
+  it("stays at the root when no cwd is set", async () => {
+    const repo = seedRepo({
+      base: { "marker.txt": "root\n" },
+      head: { "marker.txt": "root\n", "other.txt": "x\n" },
+    });
+    const probe = nodeProbe(
+      'import {readFileSync} from "node:fs";' +
+        'process.exit(readFileSync("marker.txt","utf8").trim()==="root"?0:1);',
+      { id: "p-root" },
+    );
+    const run = await withCleanEnv(() =>
+      runDifferential({
+        repoDir: repo.dir,
+        baseSha: repo.baseSha,
+        headSha: repo.headSha,
+        probe,
+        policy,
+        runsPerSide: 1,
+      }),
+    );
+    expect(run.base.state).toBe("pass");
+  }, 60_000);
+});

@@ -145,6 +145,7 @@ export const makeDifferentialDeps = (input: DifferentialCliDeps): DifferentialRe
         kind: probe.kind,
         fileName: probe.fileName,
         ...(probe.installPath !== undefined ? { installPath: probe.installPath } : {}),
+        ...(probe.cwd !== undefined ? { cwd: probe.cwd } : {}),
         command: probe.command,
         args: [...probe.args],
       };

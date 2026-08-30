@@ -49,6 +49,8 @@ export interface RunnableProbe {
   readonly kind: Probe["kind"];
   readonly fileName: string;
   readonly installPath?: string;
+  /** Repo-relative directory the runner starts in. Empty means the root. */
+  readonly cwd?: string;
   readonly command: string;
   readonly args: readonly string[];
   /** Why this probe exists, for the evidence body. */
@@ -248,7 +250,9 @@ export const runDifferentialReview =
       if (source === null || source === "") continue;
       const suite = input.detectedSuites[0];
       if (suite === undefined) continue;
-      const scoped = scopeRunnerToFile(suite, candidate.path) ?? suite;
+      // A runner that cannot be narrowed runs the whole suite from the root:
+      // coarser, still honest.
+      const scoped = scopeRunnerToFile(suite, candidate.path, repoFiles);
       n += 1;
       const id = `probe:${n}`;
       probes.push({
@@ -258,8 +262,9 @@ export const runDifferentialReview =
         kind: "behavioral",
         fileName: candidate.path.split("/").pop() ?? "probe",
         installPath: candidate.path,
-        command: scoped.command,
-        args: scoped.args,
+        ...(scoped !== null && scoped.cwd !== "" ? { cwd: scoped.cwd } : {}),
+        command: scoped?.command.command ?? suite.command,
+        args: scoped?.command.args ?? suite.args,
         reason: candidate.reason,
       });
       for (const claimId of candidate.claimIds) {
