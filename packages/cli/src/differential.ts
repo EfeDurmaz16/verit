@@ -7,10 +7,17 @@ import {
   probeSourceHash,
   signJobSpecAsymmetric,
 } from "@verit/application";
-import type { DifferentialReviewDeps, ProbeExecution } from "@verit/application";
+import type {
+  DifferentialReviewDeps,
+  ProbeExecution,
+  RunnableProbe,
+} from "@verit/application";
 import { runDifferentialIsolated } from "@verit/adapter-prove";
+import { makeTreeSitterParser } from "@verit/adapter-treesitter";
+import { Effect } from "effect";
 import type { CorpusStore } from "@verit/ports";
-import { laneClientFor, laneConfigFromEnv, runClaimPass, runProbePass, toProbeSpec } from "@verit/lane";
+import { laneClientFor, laneConfigFromEnv, runClaimPass, runProbeBatch,
+  runProbePass, toProbeSpec } from "@verit/lane";
 
 /*
  * The real dependencies of a differential review, on one machine.
@@ -25,6 +32,9 @@ import { laneClientFor, laneConfigFromEnv, runClaimPass, runProbePass, toProbeSp
 const exec = promisify(execFile);
 const GIT_TIMEOUT_MS = 60_000;
 const GIT_BUFFER = 16 * 1024 * 1024;
+/** Ceilings on the index. A slice is context, not a reason to read the repo. */
+const MAX_INDEXED_FILES = 400;
+const MAX_INDEXED_BYTES = 400_000;
 
 const git = async (args: readonly string[], cwd: string): Promise<string | null> => {
   try {
@@ -100,6 +110,14 @@ export const differentialAvailable = (input: {
   );
 };
 
+/** The runnable shape, minus the fields the orchestrator assigns itself. */
+const stripSpec = (
+  spec: ReturnType<typeof toProbeSpec>,
+): Omit<RunnableProbe, "id" | "reason"> => {
+  const { id: _id, asserts: _asserts, ...rest } = spec;
+  return rest;
+};
+
 export const makeDifferentialDeps = (input: DifferentialCliDeps): DifferentialReviewDeps => {
   const config = laneConfigFromEnv();
   const client = laneClientFor(config);
@@ -107,19 +125,42 @@ export const makeDifferentialDeps = (input: DifferentialCliDeps): DifferentialRe
   return {
     claimPass: (sources: ClaimSources) => runClaimPass(client, sources),
 
-    probePass: async ({ claim, netDiff, repoContext, existingTests }) => {
+    probePass: async ({ claim, netDiff, repoContext, existingTests, runtime, kind }) => {
       const generated = await runProbePass(client, {
         claim,
         netDiff,
         ...(repoContext !== undefined ? { repoContext } : {}),
         existingTests,
+        ...(runtime !== undefined ? { runtime } : {}),
       });
-      return generated.map((g) => {
-        const spec = toProbeSpec(g, "pending");
-        const { id: _id, asserts: _asserts, ...rest } = spec;
-        return rest;
-      });
+      return generated.map((g) => stripSpec(toProbeSpec(g, "pending", kind)));
     },
+
+    // Present only when the operator asked for it, so the default stays the
+    // per-claim path the measurements were taken on.
+    ...(process.env.VERIT_PROBE_BATCH === "1"
+      ? {
+          probeBatch: async (inputs) => {
+            const byId = new Map(inputs.map((i) => [i.claim.id, i]));
+            const batched = await runProbeBatch(
+              client,
+              inputs.map((i) => ({
+                claim: i.claim,
+                netDiff: i.netDiff,
+                ...(i.repoContext !== undefined ? { repoContext: i.repoContext } : {}),
+                existingTests: i.existingTests,
+                ...(i.runtime !== undefined ? { runtime: i.runtime } : {}),
+              })),
+            );
+            const out = new Map<string, readonly Omit<RunnableProbe, "id" | "reason">[]>();
+            for (const [claimId, probes] of batched) {
+              const kind = byId.get(claimId)?.kind ?? "behavioral";
+              out.set(claimId, probes.map((g) => stripSpec(toProbeSpec(g, "pending", kind))));
+            }
+            return out;
+          },
+        }
+      : {}),
 
     listRepoFiles: async () => {
       const out = await git(["ls-tree", "-r", "--name-only", input.headSha], input.repoDir);
@@ -130,6 +171,49 @@ export const makeDifferentialDeps = (input: DifferentialCliDeps): DifferentialRe
       // `git show` rather than the working tree: the bytes that belong to the
       // head commit, not whatever a previous step left on disk.
       return git(["show", `${input.headSha}:${path}`], input.repoDir);
+    },
+
+    /**
+     * Symbols and imports for the files a slice can reach.
+     *
+     * Two phases, because parsing a repository to answer a question about six
+     * files is the wrong trade. First the files the claims name. Then the ones
+     * that mention them, found with a literal search rather than a parse, and
+     * only those get parsed.
+     */
+    buildIndex: async ({ focusPaths }) => {
+      const parser = makeTreeSitterParser();
+      const stems = [
+        ...new Set(
+          focusPaths
+            .map((p) => (p.split("/").pop() ?? p).replace(/\.[^.]+$/, ""))
+            .filter((x) => x !== ""),
+        ),
+      ];
+      const candidates = new Set<string>(focusPaths);
+      for (const stem of stems) {
+        // -F: the stem is a literal, not a pattern. A file name with a dot or a
+        // dash would otherwise quietly become a wildcard.
+        const hits = await git(["grep", "-l", "-F", "--", stem, input.headSha], input.repoDir);
+        if (hits === null) continue;
+        for (const line of hits.split("\n")) {
+          // `git grep <rev>` prefixes each path with the revision.
+          const path = line.includes(":") ? line.slice(line.indexOf(":") + 1) : line;
+          if (path !== "" && candidates.size < MAX_INDEXED_FILES) candidates.add(path);
+        }
+      }
+
+      const files = [];
+      for (const path of candidates) {
+        const source = await git(["show", `${input.headSha}:${path}`], input.repoDir);
+        if (source === null || source.length > MAX_INDEXED_BYTES) continue;
+        const symbols = await Effect.runPromise(
+          Effect.either(parser.extractSymbols(path, source)),
+        );
+        if (symbols._tag === "Left") continue;
+        files.push({ path, symbols: [...symbols.right] });
+      }
+      return { files };
     },
 
     execute: async ({ probe, policy, runsPerSide, prepare }): Promise<ProbeExecution> => {
