@@ -15,3 +15,4 @@ export * from "./run-review";
 export * from "./evidence-check";
 export * from "./probe-select";
 export * from "./jobspec";
+export * from "./claim-graph";
