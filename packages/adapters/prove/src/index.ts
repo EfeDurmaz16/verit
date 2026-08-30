@@ -827,6 +827,37 @@ const prepareProveTree = async (source: string, headSha: string): Promise<ProveT
   }
 };
 
+/**
+ * Events that hand a workflow a token with write access to the repository.
+ * Running a pull request's own code under one of these is the pwn request
+ * GitHub documents: the code being reviewed inherits the privileges of the
+ * repository reviewing it.
+ *
+ * https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/
+ */
+const PRIVILEGED_EVENTS = new Set(["pull_request_target", "workflow_run", "issue_comment"]);
+
+/**
+ * Refuse to execute repository code from a privileged workflow.
+ *
+ * prove runs the target repository's own test command, which on a fork pull
+ * request is attacker-authored. Under `pull_request_target` that command would
+ * run beside a write-scoped token and the repository's secrets, so the answer
+ * is not to sandbox harder but to decline: verit never needs that context, and
+ * SECURITY.md tells installers to use `on: pull_request` instead.
+ *
+ * Returns the reason to refuse, or null when the context is safe to run in.
+ * A refusal is a neutral Check, never a failure: nothing was proven, and
+ * nothing was falsely blamed on the change.
+ */
+export const privilegedEventRefusal = (
+  env: NodeJS.ProcessEnv = process.env,
+): string | null => {
+  const event = env.GITHUB_EVENT_NAME;
+  if (event === undefined || !PRIVILEGED_EVENTS.has(event)) return null;
+  return `refusing to run repository code under ${event}: that context carries a write-scoped token and the repository's secrets. Trigger verit with "on: pull_request" instead.`;
+};
+
 export const makeProveRunner = (): ProvePort => ({
   detect: (cwd) =>
     Effect.tryPromise({
@@ -844,6 +875,26 @@ export const makeProveRunner = (): ProvePort => ({
     Effect.tryPromise({
       try: async (): Promise<ProveOutcome> => {
         const dir = resolve(cwd);
+        // Before anything is executed: a privileged workflow is the one place
+        // where running this repository's own command is never worth it.
+        const privileged = privilegedEventRefusal();
+        if (privileged !== null) {
+          return {
+            command: "(refused)",
+            source: "privileged event guard",
+            cwd: dir,
+            repo: expectRepo,
+            exitCode: 1,
+            durationMs: 0,
+            timedOut: false,
+            logTail: "",
+            log: "",
+            startedAt: new Date().toISOString(),
+            headSha: null,
+            porcelainClean: false,
+            refused: privileged,
+          };
+        }
         const local = await repoSlugAt(dir);
         // fail closed: prove only ever runs in the repo the caller pointed at
         if (local === null || local.toLowerCase() !== expectRepo.toLowerCase()) {

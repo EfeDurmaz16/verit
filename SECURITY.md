@@ -60,7 +60,10 @@ verit runs code, so the sharp edges are worth naming.
   `pull_request_target` workflow that checks out the pull request head hands
   attacker-controlled code a token with write access. verit never needs that:
   on a fork pull request it expects the read-only token and degrades to a dry
-  run on purpose.
+  run on purpose. This is enforced, not only advised: `prove` refuses to run a
+  repository's command at all under `pull_request_target`, `workflow_run` or
+  `issue_comment`, and the Check goes neutral with the reason. Nothing ran, so
+  nothing is claimed.
 - Pass the lane key through `lane-api-key` from a repository secret. GitHub
   withholds secrets from fork pull requests, the lane disables itself, and the
   Check is `neutral`. That is the designed behavior, not a failure to fix.
