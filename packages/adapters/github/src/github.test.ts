@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Effect } from "effect";
 import type { CheckAnnotation } from "@verit/ports";
-import { makeGithubChecks } from "./index";
+import { makeGithubChecks, syncVeritLabel } from "./index";
 
 const json = (status: number, body: unknown): Response =>
   new Response(JSON.stringify(body), {
@@ -154,5 +154,95 @@ describe("makeGithubChecks", () => {
       port.postCheckRun({ ...baseCheck, conclusion: "success" }),
     );
     expect(exit._tag).toBe("Failure");
+  });
+});
+
+describe("syncVeritLabel keeps exactly one label", () => {
+  const managed = [
+    "verit:proof-ready",
+    "verit:needs-claim",
+    "verit:needs-evidence",
+    "verit:needs-corroboration",
+    "verit:inconclusive",
+  ];
+
+  /** A fetch that records every call and answers the three label endpoints. */
+  const stub = (present: string[]) => {
+    const calls: Array<{ method: string; url: string; body?: unknown }> = [];
+    const fetchImpl: typeof globalThis.fetch = async (url, init) => {
+      const method = (init?.method ?? "GET").toUpperCase();
+      const href = String(url);
+      calls.push({
+        method,
+        url: href,
+        ...(typeof init?.body === "string" ? { body: JSON.parse(init.body) } : {}),
+      });
+      const body = method === "GET" ? present.map((name) => ({ name })) : [];
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+    return { calls, fetchImpl };
+  };
+
+  const run = async (present: string[], desired: string | null) => {
+    const { calls, fetchImpl } = stub(present);
+    const out = await syncVeritLabel({
+      token: "t",
+      owner: "EfeDurmaz16",
+      repo: "verit",
+      issueNumber: 10,
+      desired,
+      managed,
+      fetch: fetchImpl,
+    });
+    return { out, calls };
+  };
+
+  it("adds the label when the pull request has none of ours", async () => {
+    const { out, calls } = await run(["bug"], "verit:proof-ready");
+    expect(out.added).toBe("verit:proof-ready");
+    expect(out.removed).toEqual([]);
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+  });
+
+  it("replaces the stale one instead of accumulating", async () => {
+    const { out } = await run(["verit:needs-claim", "bug"], "verit:proof-ready");
+    expect(out.removed).toEqual(["verit:needs-claim"]);
+    expect(out.added).toBe("verit:proof-ready");
+  });
+
+  it("does nothing when the right label is already there", async () => {
+    const { out, calls } = await run(["verit:proof-ready"], "verit:proof-ready");
+    expect(out.added).toBeNull();
+    expect(out.removed).toEqual([]);
+    expect(calls.filter((c) => c.method !== "GET")).toEqual([]);
+  });
+
+  it("never touches a label that is not ours", async () => {
+    const { out, calls } = await run(["bug", "needs-triage"], "verit:inconclusive");
+    expect(out.removed).toEqual([]);
+    const deleted = calls.filter((c) => c.method === "DELETE").map((c) => c.url);
+    expect(deleted).toEqual([]);
+  });
+
+  it("closes, rejects and drafts nothing", async () => {
+    const { calls } = await run(["verit:needs-claim"], "verit:proof-ready");
+    const touched = calls.map((c) => c.url).join(" ");
+    expect(touched).not.toContain("/merge");
+    expect(touched).not.toContain("state");
+  });
+
+  it("reports a token that cannot write labels rather than failing the run", async () => {
+    const out = await syncVeritLabel({
+      owner: "EfeDurmaz16",
+      repo: "verit",
+      issueNumber: 10,
+      desired: "verit:proof-ready",
+      managed,
+    });
+    expect(out.error).toBe("no token");
+    expect(out.added).toBeNull();
   });
 });

@@ -25,6 +25,9 @@ Set under `with:` on the `EfeDurmaz16/verit` step.
 | `prove-timeout-ms` | 0.1.0 | - | Hard timeout for the verification command. The process group is killed |
 | `install-command` | 0.3.0 | - | Install the reviewed repo's dependencies in `GITHUB_WORKSPACE` before prove, e.g. `pnpm install --frozen-lockfile` or `npm ci`. Empty installs nothing |
 | `fail-on` | 0.1.0 | - | `failure` or `never`. `failure` maps an inconclusive proof to a failed Check |
+| `corpus-opt-out` | 0.7.0 | `""` | `1` keeps this repository out of verit's shared execution memory |
+| `corpus-opt-in` | 0.7.0 | `""` | `1` lets a private repository's normalized run metadata join it |
+| `job-spec-secret` | 0.7.0 | `""` | Signs the execution job spec so it is bound to this run |
 | `lane-provider` | 0.1.0 | - | `anthropic` or `openai-compat`. Empty disables the lane and the Check is neutral |
 | `lane-tier` | 0.4.0 | - | Review quality tier: `fast`, `balanced`, or `max`. Empty means `balanced` |
 | `lane-mode` | 0.5.0 | - | What the lane produces: `understanding`, `review`, or `both`. Empty means `both`. `review` and `both` add a skeptic-verified finding pass. Findings are advisory |
@@ -61,6 +64,11 @@ inputs onto these. A non-empty input wins over the matching env var.
 | `VERIT_CHECK_DRY_RUN` | 0.1.0 | - | `1` prints the Check body instead of posting it |
 | `VERIT_FORCE_NEUTRAL` | 0.1.0 | - | Incident freeze. Any non-empty reason forces every Check to neutral |
 | `VERIT_REFUSAL_REASON` | 0.6.0 | - | Why verit declined a privileged event. Set by the action gate, rendered in the neutral Check |
+| `VERIT_BASE_SHA` | 0.7.0 | - | The pull request's base commit. The differential review compares against it |
+| `VERIT_REPO_VISIBILITY` | 0.7.0 | - | `public` or `private`. Decides the default for the shared execution memory |
+| `VERIT_CORPUS_OPT_OUT` | 0.7.0 | - | `1` keeps this repository's normalized run metadata out of the corpus |
+| `VERIT_CORPUS_OPT_IN` | 0.7.0 | - | `1` lets a private repository's normalized run metadata join the corpus |
+| `VERIT_JOB_SPEC_SECRET` | 0.7.0 | - | Secret the execution job spec is signed with |
 | `VERIT_LANE_PROVIDER` | 0.1.0 | - | `anthropic` or `openai-compat` turns on the built-in HTTP lane |
 | `VERIT_LANE_TIER` | 0.4.0 | - | Quality tier: `fast`, `balanced`, or `max`. Default `balanced`. Maps to models, all swappable per tier |
 | `VERIT_LANE_MODE` | 0.5.0 | - | What the lane produces: `understanding`, `review`, or `both`. Default `both`. `review` and `both` add a skeptic-verified finding pass. Findings never change the Check conclusion |

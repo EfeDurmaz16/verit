@@ -11,10 +11,14 @@ import {
   inferSameAuthorPathEdges,
   runProve,
   runReviewUnderstand,
+  READINESS_LABELS,
+  readinessLabel,
+  renderEvidenceSection,
+  runDifferentialReview,
 } from "@verit/application";
 import { ingestRepoPath } from "@verit/adapter-fs-ingest";
-import { makeGithubChecks, makeGithubVcs } from "@verit/adapter-github";
-import { gitState, makeProveRunner } from "@verit/adapter-prove";
+import { makeGithubChecks, makeGithubVcs, syncVeritLabel } from "@verit/adapter-github";
+import { detectProveCommands, gitState, makeProveRunner } from "@verit/adapter-prove";
 import { makeLocalBlob } from "@verit/adapter-local-blob";
 import {
   makeHeuristicClassifier,
@@ -26,10 +30,15 @@ import { makeAgentHarness } from "@verit/adapter-pi";
 import { ensureLaneHostScrubbed, laneEnabled, makeLaneHarness } from "@verit/lane";
 import { makeSqliteDocumentStore } from "@verit/adapter-sqlite";
 import { makeTreeSitterParser } from "@verit/adapter-treesitter";
-import type { PullRequest, ReviewPresets, ReviewRun, Understanding } from "@verit/domain";
+import type { PullRequest, Readiness, ReviewPresets, ReviewRun, Understanding } from "@verit/domain";
 import type { DocumentStore, GitState, ProveOutcome } from "@verit/ports";
 import { buildUpload, dashboardTarget, proofPageUrl, uploadRun } from "./upload";
 import { runDoctor } from "./doctor";
+import {
+  claimSourcesFrom,
+  differentialAvailable,
+  makeDifferentialDeps,
+} from "./differential";
 
 /**
  * Expose results as GitHub Action outputs. Writes key=value lines to the file
@@ -284,6 +293,62 @@ const runUnderstandPipeline = async (input: {
       : null,
     outcome,
   };
+};
+
+/**
+ * The differential review, when this run can do one.
+ *
+ * It is additive on purpose. Everything it produces is body text and one
+ * label, so a run where the lane is off, the base commit is unknown or the
+ * model says nothing behaves exactly as it did before this existed. The Check
+ * conclusion is computed from the proof and is not reachable from here.
+ */
+const differentialSection = async (input: {
+  repoSlug: string;
+  prNumber: number;
+  title: string;
+  body: string;
+  diff: string;
+  paths: readonly string[];
+  outcome: ProveOutcome | null;
+}): Promise<{ section: string; readiness: string } | null> => {
+  const proveCwd = process.env.VERIT_PROVE_CWD || process.env.GITHUB_WORKSPACE;
+  const baseSha = process.env.VERIT_BASE_SHA || process.env.GITHUB_BASE_SHA || "";
+  const headSha = process.env.VERIT_CHECK_SHA || process.env.GITHUB_SHA || "";
+  if (!proveCwd) return null;
+  if (!differentialAvailable({ baseSha, headSha })) return null;
+
+  try {
+    const detected = await detectProveCommands(resolve(proveCwd));
+    const deps = makeDifferentialDeps({ repoDir: resolve(proveCwd), baseSha, headSha });
+    const out = await runDifferentialReview(deps)({
+      repoId: input.repoSlug,
+      repo: input.repoSlug,
+      pullRequest: `${input.repoSlug}#${input.prNumber}`,
+      jobId: process.env.GITHUB_RUN_ID ?? "local",
+      baseSha,
+      headSha,
+      sources: claimSourcesFrom({ title: input.title, body: input.body, diff: input.diff }),
+      detectedSuites: detected.suites,
+      changedRegions: input.paths,
+      changedFiles: input.paths.length,
+      changedLines: input.diff.split("\n").length,
+      visibility: process.env.VERIT_REPO_VISIBILITY === "private" ? "private" : "public",
+      corpusOptOut: process.env.VERIT_CORPUS_OPT_OUT === "1",
+      corpusOptIn: process.env.VERIT_CORPUS_OPT_IN === "1",
+      signingSecret: process.env.VERIT_JOB_SPEC_SECRET ?? "",
+    });
+    console.error(
+      `differential: ${out.bundle.claims.length} claim(s), ${out.bundle.results.length} probe(s), readiness ${out.bundle.readiness}` +
+        (out.stoppedEarly === null ? "" : ` (stopped: ${out.stoppedEarly})`),
+    );
+    return { section: renderEvidenceSection(out.bundle), readiness: out.bundle.readiness };
+  } catch (e) {
+    // Additive means additive: a differential that fell over leaves the proof
+    // Check exactly as it was.
+    console.error(`differential skipped: ${e instanceof Error ? e.message : String(e)}`);
+    return null;
+  }
 };
 
 /**
@@ -646,6 +711,18 @@ const main = async () => {
       console.error("dogfood: no Understanding, nothing to upload");
     }
 
+    // The differential review, when this run can do one. Additive: it produces
+    // body text and one label, and the conclusion below is computed without it.
+    const differential = await differentialSection({
+      repoSlug: out.repoSlug,
+      prNumber: out.pr.number,
+      title: ingested.pr.title,
+      body: ingested.pr.body ?? "",
+      diff: ingested.patch,
+      paths: ingested.changedPaths,
+      outcome: out.outcome,
+    });
+
     console.error(`dogfood: post check`);
     const check = await postBehaviorProofCheck({
       understanding: out.understanding,
@@ -654,7 +731,26 @@ const main = async () => {
       runId: out.runId,
       proofPageUrl: pageUrl,
       changedLines: out.changedLines,
+      ...(differential !== null ? { evidenceSection: differential.section } : {}),
     });
+
+    // One label, replaced in place. It never closes or rejects anything, and a
+    // token that cannot write labels is reported rather than failing the run.
+    if (differential !== null) {
+      const [owner, repoName] = out.repoSlug.split("/");
+      if (owner && repoName) {
+        const label = await syncVeritLabel({
+          token: process.env.GITHUB_TOKEN,
+          owner,
+          repo: repoName,
+          issueNumber: out.pr.number,
+          desired: readinessLabel(differential.readiness as Readiness),
+          managed: READINESS_LABELS,
+        });
+        if (label.error !== undefined) console.error(`label skipped: ${label.error}`);
+        else console.error(`label: ${label.added ?? "unchanged"}`);
+      }
+    }
     // Publish the run's headline results as Action outputs so a caller can gate
     // later workflow steps on the Check without re-parsing this stdout.
     await writeActionOutputs({

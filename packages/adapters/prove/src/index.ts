@@ -1006,3 +1006,12 @@ export const makeProveRunner = (): ProvePort => ({
       catch: fail("prove"),
     }),
 });
+
+export {
+  DEFAULT_PROBE_TIMEOUT_MS,
+  DEFAULT_RUNS_PER_SIDE,
+  PROBE_PATH_TOKEN,
+  probeHash,
+  runDifferential,
+} from "./differential";
+export type { DifferentialInput, DifferentialRun, ProbeSpec } from "./differential";

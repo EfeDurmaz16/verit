@@ -25,6 +25,18 @@ inputs:
     description: "Install the reviewed repo's own dependencies before prove, in GITHUB_WORKSPACE, e.g. 'pnpm install --frozen-lockfile' or 'npm ci'. Empty means verit installs nothing for you: a repo whose tests need node_modules must install them in an earlier workflow step, or prove cannot run its command."
     required: false
     default: ""
+  corpus-opt-out:
+    description: "Set to 1 to keep this repository's runs out of verit's shared execution memory. Public repositories are included by default, private ones never are unless corpus-opt-in is set."
+    required: false
+    default: ""
+  corpus-opt-in:
+    description: "Set to 1 to let a private repository's normalized run metadata join verit's execution memory. No code, logs or artifacts are ever stored."
+    required: false
+    default: ""
+  job-spec-secret:
+    description: "Secret the planning side signs the execution job spec with. Without it a run is signed locally and its spec is not portable."
+    required: false
+    default: ""
   fail-on:
     description: "failure or never. Default never keeps neutral neutral. failure gates the Check: an inconclusive proof (nothing ran, refused, no command found, or partial coverage) fails instead of passing, since a required check counts neutral as a pass."
     required: false
@@ -157,6 +169,16 @@ runs:
         # prove runs in the caller's checkout, and the ProveRunner refuses any
         # checkout that is not the repo under review.
         VERIT_PROVE_CWD: ${{ github.workspace }}
+        # The base commit of the pull request. The differential review compares
+        # against it; without one there is nothing to compare and the review
+        # reports only what the proof said.
+        VERIT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        # Consent for the shared execution memory, decided before anything is
+        # recorded. Private repositories are out unless corpus-opt-in says so.
+        VERIT_REPO_VISIBILITY: ${{ github.event.repository.private && 'private' || 'public' }}
+        VERIT_CORPUS_OPT_OUT: ${{ inputs.corpus-opt-out }}
+        VERIT_CORPUS_OPT_IN: ${{ inputs.corpus-opt-in }}
+        VERIT_JOB_SPEC_SECRET: ${{ inputs.job-spec-secret }}
         VERIT_PROVE_CMD: ${{ inputs.prove-command }}
         VERIT_PROVE_TIMEOUT_MS: ${{ inputs.prove-timeout-ms }}
         VERIT_FAIL_ON: ${{ inputs.fail-on }}

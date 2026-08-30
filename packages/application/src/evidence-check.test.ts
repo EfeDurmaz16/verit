@@ -241,3 +241,47 @@ describe("the rendered section is readable and honest", () => {
     expect(renderEvidenceSection(bundle)).toContain("Why not settled:");
   });
 });
+
+describe("the evidence section is body text and nothing more", () => {
+  const passingProof = {
+    command: "pnpm test",
+    source: "package.json#scripts.test",
+    cwd: "/repo",
+    repo: "EfeDurmaz16/verit",
+    exitCode: 0,
+    durationMs: 10,
+    timedOut: false,
+    logTail: "ok",
+    log: "ok",
+    startedAt: new Date(0).toISOString(),
+    headSha: "bbbbbbbbbbbb",
+    porcelainClean: true,
+  };
+  const understanding = {
+    what: "Adds one retry to the upload path.",
+    why: "Uploads failed on transient 503s.",
+    how: "Wraps uploadRun in a single retry.",
+    proof_refs: [],
+    risks: [],
+  };
+
+  it("appears in the body and leaves the conclusion alone", () => {
+    const section = renderEvidenceSection(assemble({ runs: [run({ corroboratedBy: ["p2"] })] }));
+    const withEvidence = behaviorProofCheck({
+      understanding,
+      outcome: passingProof,
+      evidenceSection: section,
+    });
+    const without = behaviorProofCheck({ understanding, outcome: passingProof });
+    expect(withEvidence.summary).toContain("Behavioral evidence");
+    expect(withEvidence.summary).toContain("regression");
+    expect(withEvidence.conclusion).toBe(without.conclusion);
+    expect(withEvidence.conclusion).toBe("success");
+  });
+
+  it("changes nothing when it is absent", () => {
+    const a = behaviorProofCheck({ understanding, outcome: passingProof, evidenceSection: "" });
+    const b = behaviorProofCheck({ understanding, outcome: passingProof });
+    expect(a.summary).toBe(b.summary);
+  });
+});

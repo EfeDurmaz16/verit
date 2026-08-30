@@ -187,3 +187,69 @@ export const makeGithubVcs = (token?: string): VcsPort => {
       }),
   };
 };
+
+/**
+ * Keep exactly one verit label on a pull request.
+ *
+ * The whole surface is one label, replaced in place. It never accumulates,
+ * because a pull request wearing four stale verit labels tells a maintainer
+ * less than one current one does. And it never closes, rejects, or drafts
+ * anything: the label is a place to look, not a decision.
+ *
+ * A token that cannot write labels is the ordinary case on a fork pull
+ * request. That is reported and swallowed: the Check body already carries the
+ * readiness, and failing a run over the announcement of it helps nobody.
+ */
+export const syncVeritLabel = async (input: {
+  token?: string;
+  owner: string;
+  repo: string;
+  issueNumber: number;
+  /** The label to end up with, or null to remove ours and add none. */
+  desired: string | null;
+  /** Every label verit may own, so the stale one goes when the state changes. */
+  managed: readonly string[];
+  fetch?: typeof globalThis.fetch;
+}): Promise<{ added: string | null; removed: readonly string[]; error?: string }> => {
+  if (!input.token) return { added: null, removed: [], error: "no token" };
+  try {
+    const octokit = new Octokit({
+      auth: input.token,
+      ...(input.fetch ? { request: { fetch: input.fetch } } : {}),
+    });
+    const { data } = await octokit.issues.listLabelsOnIssue({
+      owner: input.owner,
+      repo: input.repo,
+      issue_number: input.issueNumber,
+    });
+    const present = data.map((l) => l.name);
+    const ours = present.filter((n) => input.managed.includes(n));
+    const removed: string[] = [];
+    for (const name of ours) {
+      if (name === input.desired) continue;
+      await octokit.issues.removeLabel({
+        owner: input.owner,
+        repo: input.repo,
+        issue_number: input.issueNumber,
+        name,
+      });
+      removed.push(name);
+    }
+    if (input.desired !== null && !present.includes(input.desired)) {
+      await octokit.issues.addLabels({
+        owner: input.owner,
+        repo: input.repo,
+        issue_number: input.issueNumber,
+        labels: [input.desired],
+      });
+      return { added: input.desired, removed };
+    }
+    return { added: null, removed };
+  } catch (e) {
+    return {
+      added: null,
+      removed: [],
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+};

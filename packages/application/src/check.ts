@@ -163,6 +163,15 @@ export const behaviorProofCheck = (input: {
    * one, so it is always safe to leave on.
    */
   forceNeutral?: string;
+  /**
+   * The behavioral evidence section, rendered elsewhere and appended verbatim.
+   *
+   * It is body text and nothing else. The conclusion above is computed before
+   * this is read and cannot be reached from here, which is the whole point: a
+   * regression the evidence found is something a maintainer sees, not something
+   * verit decides the merge on.
+   */
+  evidenceSection?: string;
 }): Omit<CheckRunInput, "owner" | "repo" | "headSha"> => {
   const {
     understanding: u,
@@ -174,6 +183,7 @@ export const behaviorProofCheck = (input: {
     failOn = "never",
     runId,
     forceNeutral,
+    evidenceSection,
   } = input;
   const frozen = forceNeutral !== undefined && forceNeutral.trim() !== "";
   const coverage = diffChars === undefined ? 100 : diffCoveragePercent(diffChars);
@@ -369,6 +379,10 @@ export const behaviorProofCheck = (input: {
     for (const r of otherRefs) {
       lines.push(`- \`${r.kind}\` ${r.label}: ${condense(r.value, 200)}`);
     }
+  }
+
+  if (evidenceSection !== undefined && evidenceSection !== "") {
+    lines.push("", evidenceSection);
   }
 
   const detailsUrl = proofPageUrl ?? workflowRunUrl;
