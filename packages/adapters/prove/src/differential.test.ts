@@ -160,6 +160,41 @@ describe("runDifferential", () => {
     expect(run.observedProbeHashes.base).not.toBe(probeHash(probe));
   }, 60_000);
 
+  it("runs the canonical probe on both sides even when the repo ships its own differing version", async () => {
+    // The classic way a change makes itself look good: it edits the test. Base
+    // and head each carry their own check.js, and neither is what runs. The
+    // probe installed from custody is identical on both sides, so the
+    // comparison is about the code, not about the test the branch shipped.
+    const repo = seedRepo({
+      base: { "check.js": "process.exit(0);\n", "answer.txt": "42\n" },
+      head: { "check.js": "process.exit(0);\n", "answer.txt": "43\n" },
+    });
+    const canonical =
+      'import {readFileSync} from "node:fs";' +
+      'process.exit(readFileSync("answer.txt","utf8").trim()==="42"?0:1);';
+    const probe = nodeProbe(canonical, {
+      id: "p-install",
+      fileName: "check.js",
+      installPath: "check.js",
+    });
+
+    const run = await runDifferential({
+      repoDir: repo.dir,
+      baseSha: repo.baseSha,
+      headSha: repo.headSha,
+      probe,
+      policy,
+      runsPerSide: 1,
+    });
+
+    // The repo's own check.js would have exited 0 on both sides. The canonical
+    // probe does not, which is how we know ours ran.
+    expect(run.base.state).toBe("pass");
+    expect(run.head.state).toBe("fail");
+    expect(classifyResult({ base: run.base, head: run.head }).classification).toBe("regression");
+    expect(run.probeHeldOutside).toBe(true);
+  }, 60_000);
+
   it("calls a missing runner incompatible, never a behavioral failure", async () => {
     const repo = seedRepo({ base: { "a.txt": "1\n" }, head: { "a.txt": "2\n" } });
     const probe = nodeProbe("process.exit(0);", {

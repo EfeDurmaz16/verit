@@ -1,8 +1,8 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import type {
   ExecutionPolicy,
@@ -58,6 +58,16 @@ export interface ProbeSpec {
   readonly kind: "behavioral" | "precondition";
   /** File name the probe is written as inside the custody directory. */
   readonly fileName: string;
+  /**
+   * Repo-relative path the probe is copied to inside each side's worktree
+   * before that side runs, for a runner that will only load a file from inside
+   * the project. Custody stays the canonical copy: both sides get the same
+   * bytes written in from it, so a repository whose own version of this file
+   * differs between base and head still runs one identical probe.
+   *
+   * Leave unset for a probe the runner can load from custody directly.
+   */
+  readonly installPath?: string;
   readonly command: string;
   readonly args: readonly string[];
 }
@@ -224,9 +234,25 @@ const runSide = async (input: {
     }
   }
 
+  // When the runner can only load the probe from inside the project, copy it
+  // in from custody. Doing it per side, from the canonical copy, is what makes
+  // the two runs the same experiment even when the repository ships its own
+  // differing version of that path.
+  if (probe.installPath !== undefined) {
+    const installed = join(dir, probe.installPath);
+    await mkdir(dirname(installed), { recursive: true });
+    await copyFile(probePath, installed);
+  }
+
   const cmd: ProveCommand = {
     command: probe.command,
-    args: probe.args.map((a) => (a === PROBE_PATH_TOKEN ? probePath : a)),
+    args: probe.args.map((a) =>
+      a === PROBE_PATH_TOKEN
+        ? probe.installPath !== undefined
+          ? join(dir, probe.installPath)
+          : probePath
+        : a,
+    ),
     source: `probe:${probe.id}`,
   };
 
