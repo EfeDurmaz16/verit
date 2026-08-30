@@ -256,5 +256,20 @@ export type {
 } from "./client";
 export { CLAIMS_TOOL_NAME, claimsJsonSchema, needsAuthorClaim, renderClaimSources, runClaimPass } from "./claims";
 export type { ClaimSubmission } from "./claims";
-export { PROBE_TOOL_NAME, probeJsonSchema, renderProbeContext, runProbePass, toProbeSpec } from "./probes";
-export type { GeneratedProbe, ProbeContext, ProbeSubmission } from "./probes";
+export {
+  PROBE_BATCH_TOOL_NAME,
+  PROBE_TOOL_NAME,
+  probeBatchJsonSchema,
+  probeJsonSchema,
+  renderProbeContext,
+  runProbeBatch,
+  runProbePass,
+  toProbeSpec,
+} from "./probes";
+export type {
+  GeneratedProbe,
+  ProbeBatchSubmission,
+  ProbeContext,
+  ProbeSubmission,
+  RuntimeFacts,
+} from "./probes";

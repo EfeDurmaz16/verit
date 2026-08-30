@@ -15,7 +15,14 @@ import {
 } from "@verit/domain";
 import type { CorpusStore, ProveCommand } from "@verit/ports";
 import { type ProbeRun, assembleEvidence } from "./evidence-check";
-import { type RepoIndex, buildSlice, importsFile, renderSlice } from "./code-slice";
+import {
+  type RepoIndex,
+  addedPaths,
+  buildSlice,
+  importsFile,
+  isAboutNewBehavior,
+  renderSlice,
+} from "./code-slice";
 import { changedHeadLines } from "@verit/netdiff";
 import { type ClaimGraph, buildClaimGraph, measureCoverage } from "./claim-graph";
 import type { CoverageMeasurement } from "./claim-graph";
@@ -77,7 +84,25 @@ export interface DifferentialReviewDeps {
     netDiff: string;
     repoContext?: string;
     existingTests: readonly string[];
+    runtime?: { suites: readonly string[]; invocation: string; cwd: string };
+    /** Derived from the diff, never asked of the model. */
+    kind: "behavioral" | "precondition";
   }) => Promise<readonly Omit<RunnableProbe, "id" | "reason">[]>;
+  /**
+   * One call for every claim instead of one each. Present means the operator
+   * asked to trade the writer's attention for the bill; absent keeps the
+   * per-claim path, which is what the measured runs used.
+   */
+  readonly probeBatch?: (
+    inputs: readonly {
+      claim: Claim;
+      netDiff: string;
+      repoContext?: string;
+      existingTests: readonly string[];
+      runtime?: { suites: readonly string[]; invocation: string; cwd: string };
+      kind: "behavioral" | "precondition";
+    }[],
+  ) => Promise<ReadonlyMap<string, readonly Omit<RunnableProbe, "id" | "reason">[]>>;
   /** Every path the repository ships at head. */
   readonly listRepoFiles: () => Promise<readonly string[]>;
   /** A file's bytes at the head commit, or null when it is not there. */
@@ -124,6 +149,8 @@ export interface DifferentialReviewInput {
   readonly requiredGrade?: EvidenceGrade;
   readonly imageDigest?: string;
   readonly overrideInstall?: ProveCommand | null;
+  /** How a probe is launched here, for the writer to reason about its footing. */
+  readonly probeInvocation?: string;
 }
 
 export interface DifferentialReviewResult {
@@ -345,7 +372,16 @@ export const runDifferentialReview =
       return lines.slice(Math.max(0, start - 1), end).join("\n");
     };
 
-    for (const claim of uncovered) {
+    // Whether a claim is about behavior the base commit lacks is read off the
+    // diff. Asked, the model said yes eleven times out of eleven.
+    const created = addedPaths(input.sources.diff);
+    const runtime = {
+      suites: input.detectedSuites.map((s) => [s.command, ...s.args].join(" ")),
+      invocation: input.probeInvocation ?? "the command and args you give, argv, no shell",
+      cwd: "",
+    };
+
+    const askFor = (claim: Claim) => {
       const slice =
         index === null
           ? null
@@ -356,7 +392,7 @@ export const runDifferentialReview =
               readSpan: (path, start, end) => readSpanCache(path, start, end),
             });
       const sliceText = slice === null ? "" : renderSlice(slice);
-      const generated = await deps.probePass({
+      return {
         claim,
         // Only the part of the diff this claim speaks for. The rest is another
         // claim's problem and was most of what every call carried before.
@@ -365,7 +401,28 @@ export const runDifferentialReview =
           ? { repoContext: [input.repoContext, sliceText].filter((x) => x).join("\n\n") }
           : {}),
         existingTests: candidates.map((c) => c.path),
-      });
+        runtime,
+        kind: isAboutNewBehavior(claim.regions, created)
+          ? ("precondition" as const)
+          : ("behavioral" as const),
+      };
+    };
+
+    const asks = uncovered.map(askFor);
+    const answers: Array<{ claim: Claim; generated: readonly Omit<RunnableProbe, "id" | "reason">[] }> =
+      [];
+    if (deps.probeBatch !== undefined && asks.length > 0) {
+      const batched = await deps.probeBatch(asks);
+      for (const ask of asks) {
+        answers.push({ claim: ask.claim, generated: batched.get(ask.claim.id) ?? [] });
+      }
+    } else {
+      for (const ask of asks) {
+        answers.push({ claim: ask.claim, generated: await deps.probePass(ask) });
+      }
+    }
+
+    for (const { claim, generated } of answers) {
       for (const g of generated) {
         n += 1;
         const id = `probe:${n}`;

@@ -7,12 +7,17 @@ import {
   probeSourceHash,
   signJobSpecAsymmetric,
 } from "@verit/application";
-import type { DifferentialReviewDeps, ProbeExecution } from "@verit/application";
+import type {
+  DifferentialReviewDeps,
+  ProbeExecution,
+  RunnableProbe,
+} from "@verit/application";
 import { runDifferentialIsolated } from "@verit/adapter-prove";
 import { makeTreeSitterParser } from "@verit/adapter-treesitter";
 import { Effect } from "effect";
 import type { CorpusStore } from "@verit/ports";
-import { laneClientFor, laneConfigFromEnv, runClaimPass, runProbePass, toProbeSpec } from "@verit/lane";
+import { laneClientFor, laneConfigFromEnv, runClaimPass, runProbeBatch,
+  runProbePass, toProbeSpec } from "@verit/lane";
 
 /*
  * The real dependencies of a differential review, on one machine.
@@ -105,6 +110,14 @@ export const differentialAvailable = (input: {
   );
 };
 
+/** The runnable shape, minus the fields the orchestrator assigns itself. */
+const stripSpec = (
+  spec: ReturnType<typeof toProbeSpec>,
+): Omit<RunnableProbe, "id" | "reason"> => {
+  const { id: _id, asserts: _asserts, ...rest } = spec;
+  return rest;
+};
+
 export const makeDifferentialDeps = (input: DifferentialCliDeps): DifferentialReviewDeps => {
   const config = laneConfigFromEnv();
   const client = laneClientFor(config);
@@ -112,19 +125,42 @@ export const makeDifferentialDeps = (input: DifferentialCliDeps): DifferentialRe
   return {
     claimPass: (sources: ClaimSources) => runClaimPass(client, sources),
 
-    probePass: async ({ claim, netDiff, repoContext, existingTests }) => {
+    probePass: async ({ claim, netDiff, repoContext, existingTests, runtime, kind }) => {
       const generated = await runProbePass(client, {
         claim,
         netDiff,
         ...(repoContext !== undefined ? { repoContext } : {}),
         existingTests,
+        ...(runtime !== undefined ? { runtime } : {}),
       });
-      return generated.map((g) => {
-        const spec = toProbeSpec(g, "pending");
-        const { id: _id, asserts: _asserts, ...rest } = spec;
-        return rest;
-      });
+      return generated.map((g) => stripSpec(toProbeSpec(g, "pending", kind)));
     },
+
+    // Present only when the operator asked for it, so the default stays the
+    // per-claim path the measurements were taken on.
+    ...(process.env.VERIT_PROBE_BATCH === "1"
+      ? {
+          probeBatch: async (inputs) => {
+            const byId = new Map(inputs.map((i) => [i.claim.id, i]));
+            const batched = await runProbeBatch(
+              client,
+              inputs.map((i) => ({
+                claim: i.claim,
+                netDiff: i.netDiff,
+                ...(i.repoContext !== undefined ? { repoContext: i.repoContext } : {}),
+                existingTests: i.existingTests,
+                ...(i.runtime !== undefined ? { runtime: i.runtime } : {}),
+              })),
+            );
+            const out = new Map<string, readonly Omit<RunnableProbe, "id" | "reason">[]>();
+            for (const [claimId, probes] of batched) {
+              const kind = byId.get(claimId)?.kind ?? "behavioral";
+              out.set(claimId, probes.map((g) => stripSpec(toProbeSpec(g, "pending", kind))));
+            }
+            return out;
+          },
+        }
+      : {}),
 
     listRepoFiles: async () => {
       const out = await git(["ls-tree", "-r", "--name-only", input.headSha], input.repoDir);

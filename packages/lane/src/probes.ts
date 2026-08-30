@@ -41,8 +41,6 @@ const GeneratedProbe = S.Struct({
    * measures the claim without reading the source.
    */
   asserts: S.String.pipe(S.minLength(1)),
-  /** True when the probe targets behavior the base commit does not have. */
-  targetsNewBehavior: S.Boolean,
 });
 export type GeneratedProbe = S.Schema.Type<typeof GeneratedProbe>;
 
@@ -78,10 +76,10 @@ Rules that make a probe usable:
 - It must exit non-zero when the behavior is wrong and zero when it is right. That exit code is the entire result.
 - It must be one self-contained file, runnable by the command and args you give.
 - It must not reach the network, and it must not depend on anything outside the repository it runs in.
+- It MAY start processes. A claim about what a command does is proved by running that command and reading its exit code and output, not by reading the source that implements it. Reading source proves the code says something; running it proves the code does something, and only the second one differs between two commits in a way worth reporting.
 - It must not write anywhere except a temporary path. The same probe file runs on both sides; if it edits itself the run is void.
 - Use the token {probe} in args where the probe's own file path belongs.
 - Set installPath only when the runner cannot load a file from outside the project.
-- Set targetsNewBehavior when the claim is about something the base commit does not have at all, so the base side is expected to report the behavior missing rather than failing.
 
 If you cannot write a probe that would actually distinguish the two commits, submit an empty list. That is a real answer and it is reported honestly. A probe that passes on both sides regardless of the change is worse than no probe, because it looks like evidence.
 
@@ -91,6 +89,24 @@ const PROBE_MAX_TOKENS = 8_000;
 
 const log = (message: string): void => console.error(`[verit-lane] ${message}`);
 
+/**
+ * How this repository runs things.
+ *
+ * Measured: five of twelve generated probes failed on both sides, and every one
+ * of them was about behavior at run time rather than file contents. The writer
+ * could describe what a command should do and had never been told the command
+ * exists, so it asserted about the source of a CLI instead of running it. What
+ * follows is the missing half.
+ */
+export interface RuntimeFacts {
+  /** The repository's own verification commands, as it runs them. */
+  readonly suites: readonly string[];
+  /** How the probe itself is launched, so the writer knows its own footing. */
+  readonly invocation: string;
+  /** Directory the probe starts in, relative to the repository root. */
+  readonly cwd: string;
+}
+
 /** The material the probe writer sees. Kept narrow on purpose. */
 export interface ProbeContext {
   readonly claim: Claim;
@@ -99,6 +115,7 @@ export interface ProbeContext {
   readonly repoContext?: string;
   /** Tests the repository already has for this area, so it does not repeat one. */
   readonly existingTests?: readonly string[];
+  readonly runtime?: RuntimeFacts;
 }
 
 export const renderProbeContext = (ctx: ProbeContext): string => {
@@ -112,6 +129,17 @@ export const renderProbeContext = (ctx: ProbeContext): string => {
   if (ctx.existingTests !== undefined && ctx.existingTests.length > 0) {
     parts.push(
       `THE REPOSITORY ALREADY TESTS THESE, do not rewrite them:\n${ctx.existingTests.join("\n")}`,
+    );
+  }
+  if (ctx.runtime !== undefined) {
+    parts.push(
+      [
+        "HOW THIS REPOSITORY RUNS:",
+        `  its own test commands: ${ctx.runtime.suites.join(" | ") || "(none detected)"}`,
+        `  your probe is launched as: ${ctx.runtime.invocation}`,
+        `  your working directory: ${ctx.runtime.cwd === "" ? "the repository root" : ctx.runtime.cwd}`,
+        "  You may start processes. To check what a command does, run it and read its exit code and output, rather than asserting about the source that implements it.",
+      ].join("\n"),
     );
   }
   parts.push(`NET DIFF:\n${ctx.netDiff}`);
@@ -168,6 +196,12 @@ export const runProbePass = async (
 export const toProbeSpec = (
   p: GeneratedProbe,
   id: string,
+  /**
+   * Whether the behavior is absent on the base commit. Derived from the diff by
+   * the caller, never asked of the model: asked, it answered yes eleven times
+   * out of eleven, which is not a judgement.
+   */
+  kind: "behavioral" | "precondition" = "behavioral",
 ): {
   id: string;
   source: string;
@@ -182,10 +216,116 @@ export const toProbeSpec = (
   id,
   source: p.source,
   origin: "generated",
-  kind: p.targetsNewBehavior ? "precondition" : "behavioral",
+  kind,
   fileName: p.fileName,
   ...(p.installPath !== undefined && p.installPath !== "" ? { installPath: p.installPath } : {}),
   command: p.command,
   args: p.args,
   asserts: p.asserts,
 });
+
+/* -------------------------------------------------------------------------- */
+/* One call for every claim, when the operator wants to trade attention for    */
+/* cost.                                                                        */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * Measured: twelve claims meant twelve calls, each carrying its own slice. The
+ * obvious saving is to ask once. The obvious risk is that a writer holding
+ * twelve problems writes twelve worse probes than a writer holding one.
+ *
+ * Neither is worth arguing about, so both exist and the run reports which it
+ * used. The batch keeps the claim id on every probe, because a probe that
+ * cannot be attributed back to a claim is a probe nobody can act on.
+ */
+
+export const PROBE_BATCH_TOOL_NAME = "submit_probes_for_claims";
+
+const BatchEntry = S.Struct({
+  /** The claim id, copied exactly from the material. */
+  claimId: S.String.pipe(S.minLength(1)),
+  probes: S.Array(GeneratedProbe),
+});
+
+export const ProbeBatchSubmission = S.Struct({
+  entries: S.Array(BatchEntry),
+});
+export type ProbeBatchSubmission = S.Schema.Type<typeof ProbeBatchSubmission>;
+
+const decodeProbeBatch = S.decodeUnknownEither(ProbeBatchSubmission);
+
+export const probeBatchJsonSchema = (): Record<string, unknown> => {
+  const schema = JSON.parse(JSON.stringify(JSONSchema.make(ProbeBatchSubmission))) as Record<
+    string,
+    unknown
+  >;
+  delete schema["$schema"];
+  return schema;
+};
+
+const probeBatchTool = (): LaneTool => ({
+  name: PROBE_BATCH_TOOL_NAME,
+  description:
+    "Submit probes for every claim below, keyed by claim id. Call exactly once, then stop.",
+  inputSchema: probeBatchJsonSchema(),
+});
+
+const BATCH_MAX_TOKENS = 24_000;
+
+/**
+ * One call, many claims.
+ *
+ * Failure is the same shape as the single path: no probes rather than invented
+ * ones. A claim the model skips simply has none, which readiness reports as
+ * needs-evidence, and that is a true statement about the run.
+ */
+export const runProbeBatch = async (
+  client: LaneClient,
+  contexts: readonly ProbeContext[],
+): Promise<ReadonlyMap<string, readonly GeneratedProbe[]>> => {
+  const empty = new Map<string, readonly GeneratedProbe[]>();
+  if (contexts.length === 0) return empty;
+
+  const user = contexts
+    .map((ctx) => `===== CLAIM ${ctx.claim.id} =====\n${renderProbeContext(ctx)}`)
+    .join("\n\n");
+
+  try {
+    const request: LaneRequest = {
+      system: `${PROBE_SYSTEM}\n\nYou are given several claims at once, each under a "===== CLAIM <id> =====" header. Answer every one of them, and put each probe under the claim id it belongs to, copied exactly. A claim you cannot write a probe for gets an empty list, which is a real answer.`,
+      messages: [{ role: "user", content: user }],
+      tools: [probeBatchTool()],
+      maxTokens: BATCH_MAX_TOKENS,
+      forceTool: PROBE_BATCH_TOOL_NAME,
+    };
+    const outcome = await Effect.runPromise(Effect.either(client.complete(request)));
+    if (Either.isLeft(outcome)) {
+      log(`probe batch failed, this run has no generated probes: ${outcome.left.message}`);
+      return empty;
+    }
+    const call = outcome.right.toolCalls.find((c) => c.name === PROBE_BATCH_TOOL_NAME);
+    if (call === undefined) {
+      log("probe batch submitted nothing");
+      return empty;
+    }
+    const decoded = decodeProbeBatch(call.input);
+    if (Either.isLeft(decoded)) {
+      log("probe batch output was invalid, this run has no generated probes");
+      return empty;
+    }
+    const known = new Set(contexts.map((c) => c.claim.id));
+    const out = new Map<string, readonly GeneratedProbe[]>();
+    for (const e of decoded.right.entries) {
+      // A probe attributed to a claim nobody asked about belongs to nothing.
+      if (!known.has(e.claimId)) {
+        log(`probe batch named an unknown claim ${e.claimId}, dropped`);
+        continue;
+      }
+      out.set(e.claimId, e.probes);
+    }
+    return out;
+  } catch (error) {
+    log(`probe batch errored: ${error instanceof Error ? error.message : String(error)}`);
+    return empty;
+  }
+};

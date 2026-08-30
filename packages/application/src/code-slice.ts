@@ -237,3 +237,49 @@ export const renderSlice = (slice: CodeSlice): string => {
   }
   return parts.join("\n\n");
 };
+
+/*
+ * Whether a claim is about behavior the base commit does not have.
+ *
+ * This was a question put to the model, and it answered yes every time: on the
+ * measured run all eleven generated probes came back marked as preconditions,
+ * which is not a judgement so much as a coin that only has one side. It is also
+ * a question the diff already answers. A file the diff creates did not exist
+ * before, and a claim that only speaks about such files is about new behavior.
+ *
+ * Deriving it costs nothing and cannot drift, which is the general rule here:
+ * ask the model for the things only a reader can supply, and compute the rest.
+ */
+
+/** Paths this diff creates. `new file mode` is git's own marker for it. */
+export const addedPaths = (diff: string): ReadonlySet<string> => {
+  const added = new Set<string>();
+  const lines = diff.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    if (!lines[i]?.startsWith("new file mode")) continue;
+    // walk back to the `diff --git a/x b/x` header this belongs to
+    for (let j = i; j >= 0; j--) {
+      const header = lines[j];
+      if (header === undefined || !header.startsWith("diff --git ")) continue;
+      const path = header.split(" b/")[1];
+      if (path !== undefined && path !== "") added.add(path);
+      break;
+    }
+  }
+  return added;
+};
+
+/**
+ * True when every file this claim speaks for is one the change created.
+ *
+ * Deliberately strict. A claim that touches one new file and one existing file
+ * is about a change to something that already ran, and calling it new would
+ * send it down the precondition path where an absent base side is expected.
+ */
+export const isAboutNewBehavior = (
+  regions: readonly string[],
+  added: ReadonlySet<string>,
+): boolean => {
+  const paths = regions.map((r) => r.replace(/\\/g, "/")).filter((r) => r !== "");
+  return paths.length > 0 && paths.every((p) => added.has(p));
+};

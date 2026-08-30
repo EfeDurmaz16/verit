@@ -1,6 +1,13 @@
 import type { Claim } from "@verit/domain";
 import { describe, expect, it } from "vitest";
-import { type RepoIndex, buildSlice, importsFile, renderSlice } from "./code-slice";
+import {
+  type RepoIndex,
+  addedPaths,
+  buildSlice,
+  importsFile,
+  isAboutNewBehavior,
+  renderSlice,
+} from "./code-slice";
 
 /*
  * The thing being tested is what a probe writer gets to read. Everything in a
@@ -162,5 +169,50 @@ describe("the rendered slice is repository text, not a summary", () => {
       readSpan,
     });
     expect(renderSlice(empty)).toBe("");
+  });
+});
+
+describe("whether a claim is about new behavior comes from the diff", () => {
+  const diff = [
+    "diff --git a/src/old.ts b/src/old.ts",
+    "index 111..222 100644",
+    "--- a/src/old.ts",
+    "+++ b/src/old.ts",
+    "@@ -1 +1,2 @@",
+    "+const x = 1;",
+    "diff --git a/src/brand-new.ts b/src/brand-new.ts",
+    "new file mode 100644",
+    "index 000..333",
+    "--- /dev/null",
+    "+++ b/src/brand-new.ts",
+    "@@ -0,0 +1 @@",
+    "+export const y = 2;",
+  ].join("\n");
+
+  const added = addedPaths(diff);
+
+  it("reads the files the change created", () => {
+    expect([...added]).toEqual(["src/brand-new.ts"]);
+  });
+
+  it("calls a claim about only new files new behavior", () => {
+    expect(isAboutNewBehavior(["src/brand-new.ts"], added)).toBe(true);
+  });
+
+  it("does not call a claim about an existing file new behavior", () => {
+    expect(isAboutNewBehavior(["src/old.ts"], added)).toBe(false);
+  });
+
+  it("is strict about a claim spanning both", () => {
+    // one foot in code that already ran means the base side is not absent
+    expect(isAboutNewBehavior(["src/brand-new.ts", "src/old.ts"], added)).toBe(false);
+  });
+
+  it("says no when a claim names nothing", () => {
+    expect(isAboutNewBehavior([], added)).toBe(false);
+  });
+
+  it("finds nothing in a diff that creates nothing", () => {
+    expect([...addedPaths("diff --git a/x b/x\n--- a/x\n+++ b/x\n+one")].length).toBe(0);
   });
 });
