@@ -492,14 +492,14 @@ const tail = (text: string): string => {
 
 const shellDisplay = (c: ProveCommand): string => [c.command, ...c.args].join(" ");
 
-interface RawRun {
+export interface RawRun {
   exitCode: number;
   timedOut: boolean;
   output: string;
   durationMs: number;
 }
 
-const spawnCaptured = (cmd: ProveCommand, cwd: string, timeoutMs: number): Promise<RawRun> =>
+export const spawnCaptured = (cmd: ProveCommand, cwd: string, timeoutMs: number): Promise<RawRun> =>
   new Promise((resolvePromise, rejectPromise) => {
     const started = Date.now();
     const child = spawn(cmd.command, [...cmd.args], {
