@@ -13,3 +13,4 @@ export * from "./proof-spec";
 export * from "./ingest-wiki";
 export * from "./run-review";
 export * from "./evidence-check";
+export * from "./probe-select";
