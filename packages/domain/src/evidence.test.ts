@@ -10,6 +10,8 @@ import {
   coverageForClaim,
   decodeEvidenceBundle,
   gradeResult,
+  groundClaim,
+  groundClaims,
   isStable,
   readinessOf,
 } from "./evidence";
@@ -447,5 +449,82 @@ describe("stability", () => {
 
   it("calls a side unstable when its repeats disagree", () => {
     expect(isStable(side("head", "fail", ["fail", "pass", "fail"]))).toBe(false);
+  });
+});
+
+describe("claim grounding is what decides the state, not the model", () => {
+  const sources = {
+    issue: "The parser drops trailing commas in nested objects.",
+    prDescription: "Fixes the trailing comma case.",
+    diff: "--- a/src/parse.ts\n+++ b/src/parse.ts\n+  if (token === ',') continue;\n",
+    repoContext: "src/parse.ts exports parse().",
+  };
+
+  it("grounds a claim whose every anchor resolves in the material", () => {
+    const c = claim("c1", {
+      state: "proposed",
+      anchors: [
+        { kind: "issue", ref: "#12", span: "drops trailing commas" },
+        { kind: "diff", ref: "src/parse.ts", span: "if (token === ',') continue;" },
+      ],
+    });
+    expect(groundClaim(c, sources).state).toBe("source-grounded");
+  });
+
+  it("marks a claim ambiguous when an anchor quotes something nobody wrote", () => {
+    const c = claim("c1", {
+      state: "proposed",
+      modelConfidence: 0.99,
+      anchors: [{ kind: "issue", ref: "#12", span: "rewrites the scheduler" }],
+    });
+    expect(groundClaim(c, sources).state).toBe("ambiguous");
+  });
+
+  it("marks a claim with no anchors ambiguous, however sure the model was", () => {
+    const c = claim("c1", { state: "proposed", modelConfidence: 1, anchors: [] });
+    expect(groundClaim(c, sources).state).toBe("ambiguous");
+  });
+
+  it("marks a claim ambiguous when it cites material that was not supplied", () => {
+    const c = claim("c1", {
+      state: "proposed",
+      anchors: [{ kind: "repo-context", ref: "x", span: "anything" }],
+    });
+    expect(groundClaim(c, { diff: sources.diff }).state).toBe("ambiguous");
+  });
+
+  it("leaves an author-confirmed claim confirmed", () => {
+    const c = claim("c1", { state: "author-confirmed", anchors: [] });
+    expect(groundClaim(c, sources).state).toBe("author-confirmed");
+  });
+
+  it("tolerates a reflowed quote but not an invented one", () => {
+    const reflowed = claim("c1", {
+      state: "proposed",
+      anchors: [{ kind: "issue", ref: "#12", span: "drops   trailing\n  commas" }],
+    });
+    expect(groundClaim(reflowed, sources).state).toBe("source-grounded");
+    const invented = claim("c2", {
+      state: "proposed",
+      anchors: [{ kind: "issue", ref: "#12", span: "drops trailing semicolons" }],
+    });
+    expect(groundClaim(invented, sources).state).toBe("ambiguous");
+  });
+
+  it("keeps an ungroundable claim out of proof-ready end to end", () => {
+    const grounded = groundClaims(
+      [claim("c1", { state: "proposed", modelConfidence: 1, anchors: [] })],
+      sources,
+    );
+    expect(
+      readinessOf({
+        claims: grounded,
+        coverage: [{ claimId: "c1", status: "supported", supportingResults: ["p1"] }],
+        results: [result("p1", { classification: "fix-confirmed" })],
+        outcomesStable: true,
+        reproductionComplete: true,
+        executionIntegrityClean: true,
+      }),
+    ).toBe("needs-claim");
   });
 });

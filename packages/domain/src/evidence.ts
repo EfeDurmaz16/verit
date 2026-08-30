@@ -510,3 +510,62 @@ export const readinessOf = (input: ReadinessInput): Readiness => {
 
   return "proof-ready";
 };
+
+/* -------------------------------------------------------------------------- */
+/* Claim grounding. The gate that keeps invented quotes out of the run.        */
+/* -------------------------------------------------------------------------- */
+
+/** The material a claim may be drawn from. Whatever is absent cannot ground. */
+export interface ClaimSources {
+  readonly issue?: string;
+  readonly prDescription?: string;
+  readonly diff: string;
+  readonly repoContext?: string;
+}
+
+const sourceText = (kind: SourceAnchor["kind"], sources: ClaimSources): string | undefined => {
+  switch (kind) {
+    case "issue":
+      return sources.issue;
+    case "pr-description":
+      return sources.prDescription;
+    case "diff":
+      return sources.diff;
+    case "repo-context":
+      return sources.repoContext;
+  }
+};
+
+// ponytail: whitespace-normalized substring match. It tolerates a model
+// reflowing a quote while still refusing one it invented. Upgrade to a token
+// alignment if reflowing turns out to hide real fabrication.
+const normalizeForMatch = (s: string): string => s.replace(/\s+/g, " ").trim().toLowerCase();
+
+/** True when the anchor's span really appears in the material it names. */
+export const anchorResolves = (anchor: SourceAnchor, sources: ClaimSources): boolean => {
+  const text = sourceText(anchor.kind, sources);
+  if (text === undefined || text === "") return false;
+  const span = normalizeForMatch(anchor.span);
+  if (span === "") return false;
+  return normalizeForMatch(text).includes(span);
+};
+
+/**
+ * Decide a claim's state from its anchors, not from the model's confidence.
+ *
+ * A claim whose every anchor resolves in the material is source-grounded. A
+ * claim with no anchors, or with one that quotes something nobody wrote, is
+ * ambiguous, which is what asks the author for a sentence. An author-confirmed
+ * claim stays confirmed: a human already said what the change does.
+ */
+export const groundClaim = (claim: Claim, sources: ClaimSources): Claim => {
+  if (claim.state === "author-confirmed") return claim;
+  const grounded =
+    claim.anchors.length > 0 && claim.anchors.every((a) => anchorResolves(a, sources));
+  return { ...claim, state: grounded ? "source-grounded" : "ambiguous" };
+};
+
+export const groundClaims = (
+  claims: readonly Claim[],
+  sources: ClaimSources,
+): readonly Claim[] => claims.map((c) => groundClaim(c, sources));
