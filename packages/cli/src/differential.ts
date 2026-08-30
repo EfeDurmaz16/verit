@@ -4,14 +4,7 @@ import type { Claim, ClaimSources } from "@verit/domain";
 import type { DifferentialReviewDeps, ProbeExecution } from "@verit/application";
 import { PROBE_PATH_TOKEN, runDifferential } from "@verit/adapter-prove";
 import type { CorpusStore } from "@verit/ports";
-import {
-  clientForModel,
-  laneClientFor,
-  laneConfigFromEnv,
-  runClaimPass,
-  runProbePass,
-  toProbeSpec,
-} from "@verit/lane";
+import { laneClientFor, laneConfigFromEnv, runClaimPass, runProbePass, toProbeSpec } from "@verit/lane";
 
 /*
  * The real dependencies of a differential review, on one machine.
@@ -76,25 +69,13 @@ export const differentialAvailable = (input: {
 
 export const makeDifferentialDeps = (input: DifferentialCliDeps): DifferentialReviewDeps => {
   const config = laneConfigFromEnv();
-  // Both passes here are map work, not judgement. Naming the claims a change
-  // makes and writing a probe for one are reading tasks over material that is
-  // already in front of the model, and the tier already keeps a cheap
-  // big-context model for exactly that. The judge is reserved for the call
-  // whose output is an opinion. On the balanced tier this is most of the cost
-  // of a review: the same run drops from about 22 cents to 12 on a mid sized
-  // pull request, and from 67 to 37 on a large one.
-  //
-  // A tier with no triage model, `fast`, has nothing cheaper to fall back to,
-  // so it uses its judge, which is already the cheap model there.
-  const mapClient = config.triage !== undefined
-    ? clientForModel(config, config.triage)
-    : laneClientFor(config);
+  const client = laneClientFor(config);
 
   return {
-    claimPass: (sources: ClaimSources) => runClaimPass(mapClient, sources),
+    claimPass: (sources: ClaimSources) => runClaimPass(client, sources),
 
     probePass: async ({ claim, netDiff, repoContext, existingTests }) => {
-      const generated = await runProbePass(mapClient, {
+      const generated = await runProbePass(client, {
         claim,
         netDiff,
         ...(repoContext !== undefined ? { repoContext } : {}),
