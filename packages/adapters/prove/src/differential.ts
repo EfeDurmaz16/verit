@@ -69,6 +69,13 @@ export interface ProbeSpec {
    * Leave unset for a probe the runner can load from custody directly.
    */
   readonly installPath?: string;
+  /**
+   * Repo-relative directory the runner starts in, empty or absent for the
+   * repository root. In a workspace this is the package that owns the test:
+   * a runner started at the root does not see a member's test files, and
+   * reports finding none rather than failing, which reads as a result.
+   */
+  readonly cwd?: string;
   readonly command: string;
   readonly args: readonly string[];
 }
@@ -245,6 +252,11 @@ const runSide = async (input: {
     await copyFile(probePath, installed);
   }
 
+  // Where the runner starts. The probe is installed at a repo-relative path,
+  // so it is written from the worktree root either way; only the process's
+  // working directory moves.
+  const runDir = probe.cwd !== undefined && probe.cwd !== "" ? join(dir, probe.cwd) : dir;
+
   const cmd: ProveCommand = {
     command: probe.command,
     args: probe.args.map((a) =>
@@ -262,7 +274,7 @@ const runSide = async (input: {
   let log = "";
   for (let i = 0; i < runs; i++) {
     try {
-      const raw = await spawnCaptured(cmd, dir, timeoutMs, runnerChildEnv());
+      const raw = await spawnCaptured(cmd, runDir, timeoutMs, runnerChildEnv());
       observed.push(stateOf(raw));
       lastExit = raw.exitCode;
       log = raw.output;

@@ -1,7 +1,12 @@
 import type { Claim } from "@verit/domain";
 import type { ProveCommand } from "@verit/ports";
 import { describe, expect, it } from "vitest";
-import { looksLikeTest, scopeRunnerToFile, selectRepoNativeProbes } from "./probe-select";
+import {
+  looksLikeTest,
+  packageDirFor,
+  scopeRunnerToFile,
+  selectRepoNativeProbes,
+} from "./probe-select";
 
 const claim = (id: string, regions: readonly string[]): Claim => ({
   id,
@@ -97,6 +102,58 @@ describe("selectRepoNativeProbes asks the repository before generating anything"
   });
 });
 
+describe("the working directory is the package that owns the file", () => {
+  const monorepo = [
+    "package.json",
+    "pnpm-workspace.yaml",
+    "packages/cli/package.json",
+    "packages/cli/src/main.test.ts",
+    "packages/domain/package.json",
+    "packages/domain/src/x.test.ts",
+  ];
+
+  it("runs from the workspace member, not the repository root", () => {
+    const out = scopeRunnerToFile(
+      { command: "npx", args: ["vitest", "run"], source: "t" },
+      "packages/cli/src/main.test.ts",
+      monorepo,
+    );
+    expect(out?.cwd).toBe("packages/cli");
+    // and the path the runner sees is relative to that directory, which is what
+    // "No test files found" was about
+    expect(out?.argPath).toBe("src/main.test.ts");
+    expect(out?.command.args).toEqual(["vitest", "run", "src/main.test.ts"]);
+  });
+
+  it("stays at the root in a single package repository", () => {
+    const out = scopeRunnerToFile(
+      { command: "npx", args: ["vitest", "run"], source: "t" },
+      "src/x.test.ts",
+      ["package.json", "src/x.test.ts"],
+    );
+    expect(out?.cwd).toBe("");
+    expect(out?.argPath).toBe("src/x.test.ts");
+  });
+
+  it("finds the nearest manifest, not the outermost", () => {
+    expect(packageDirFor("packages/domain/src/x.test.ts", monorepo)).toBe("packages/domain");
+  });
+
+  it("falls back to the root when nothing owns the file", () => {
+    expect(packageDirFor("scripts/x.test.ts", ["package.json"])).toBe("");
+  });
+
+  it("scopes a go module from its own directory", () => {
+    const out = scopeRunnerToFile(
+      { command: "go", args: ["test", "./..."], source: "t" },
+      "services/api/handler_test.go",
+      ["go.mod", "services/api/go.mod", "services/api/handler_test.go"],
+    );
+    expect(out?.cwd).toBe("services/api");
+    expect(out?.command.args).toEqual(["test", "./..."]);
+  });
+});
+
 describe("scopeRunnerToFile narrows a suite, or admits it cannot", () => {
   const cmd = (command: string, args: readonly string[]): ProveCommand => ({
     command,
@@ -106,22 +163,22 @@ describe("scopeRunnerToFile narrows a suite, or admits it cannot", () => {
 
   it("appends the path for a runner that takes one positionally", () => {
     const out = scopeRunnerToFile(cmd("npx", ["vitest", "run"]), "src/parse.test.ts");
-    expect(out?.args).toEqual(["vitest", "run", "src/parse.test.ts"]);
+    expect(out?.command.args).toEqual(["vitest", "run", "src/parse.test.ts"]);
   });
 
   it("passes the path through the separator for a package script", () => {
     const out = scopeRunnerToFile(cmd("pnpm", ["test"]), "src/parse.test.ts");
-    expect(out?.args).toEqual(["test", "--", "src/parse.test.ts"]);
+    expect(out?.command.args).toEqual(["test", "--", "src/parse.test.ts"]);
   });
 
   it("does not add a separator for yarn, which does not want one", () => {
     const out = scopeRunnerToFile(cmd("yarn", ["test"]), "src/parse.test.ts");
-    expect(out?.args).toEqual(["test", "src/parse.test.ts"]);
+    expect(out?.command.args).toEqual(["test", "src/parse.test.ts"]);
   });
 
   it("scopes go to the package, because go test does not take a file", () => {
     const out = scopeRunnerToFile(cmd("go", ["test", "./..."]), "pkg/parse_test.go");
-    expect(out?.args).toEqual(["test", "./pkg/..."]);
+    expect(out?.command.args).toEqual(["test", "./pkg/..."]);
   });
 
   it("returns null rather than guessing a flag it does not know", () => {

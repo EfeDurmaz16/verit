@@ -139,42 +139,88 @@ export const selectRepoNativeProbes = (input: SelectInput): readonly ProbeCandid
 
 /* --------------------------------- scoping --------------------------------- */
 
+/** Manifests that mark a directory as the thing a runner should be run from. */
+const PACKAGE_MANIFESTS = [
+  "package.json",
+  "Cargo.toml",
+  "go.mod",
+  "pyproject.toml",
+  "Gemfile",
+  "composer.json",
+];
+
 /**
- * Narrow a suite command to one test file.
+ * The directory a runner should be started in for this file.
+ *
+ * In a single package repository this is the root and nothing changes. In a
+ * workspace it is the package that owns the file, which is the whole point:
+ * running `vitest run packages/cli/src/x.test.ts` from the repository root
+ * reports "No test files found", because the root config's include patterns do
+ * not reach into a workspace member. Measured on verit itself, and it reported
+ * unresolved on both sides, which was honest and useless.
+ */
+export const packageDirFor = (testPath: string, repoFiles: readonly string[]): string => {
+  const files = new Set(repoFiles.map((f) => f.replace(/\\/g, "/")));
+  let dir = dirOf(testPath.replace(/\\/g, "/"));
+  while (dir !== "") {
+    if (PACKAGE_MANIFESTS.some((m) => files.has(`${dir}/${m}`))) return dir;
+    dir = dirOf(dir);
+  }
+  return "";
+};
+
+/** A command, and where to run it. An empty cwd means the repository root. */
+export interface ScopedRunner {
+  readonly command: ProveCommand;
+  /** Repo-relative directory the runner starts in. */
+  readonly cwd: string;
+  /** The test path as the runner will see it, relative to that directory. */
+  readonly argPath: string;
+}
+
+const relativeTo = (dir: string, path: string): string =>
+  dir === "" ? path : path.startsWith(`${dir}/`) ? path.slice(dir.length + 1) : path;
+
+/**
+ * Narrow a suite command to one test file, and say where to run it.
  *
  * Returns null when the runner cannot be narrowed safely. Null is a real
  * answer: the caller falls back to the whole suite, which is a coarser probe
  * but an honest one. Guessing a flag that a runner would reinterpret is how a
  * probe silently stops measuring what it claims to.
  */
-export const scopeRunnerToFile = (cmd: ProveCommand, testPath: string): ProveCommand | null => {
-  // ponytail: this narrows the command but not the working directory, which is
-  // wrong in a workspace. Measured on verit itself: the probe was
-  // packages/cli/src/action-privileged-gate.test.ts, the command ran from the
-  // repository root, and vitest reported "No test files found" on both sides.
-  // The run classified honestly as unresolved, so nothing was invented, but the
-  // probe measured nothing. Fixing it means returning a cwd alongside the argv
-  // and running the probe in the package that owns the file. Until then a
-  // monorepo falls back to the whole suite, which is coarse but true.
+export const scopeRunnerToFile = (
+  cmd: ProveCommand,
+  testPath: string,
+  repoFiles: readonly string[] = [],
+): ScopedRunner | null => {
   const argv = [cmd.command, ...cmd.args].join(" ");
+  const cwd = packageDirFor(testPath, repoFiles);
+  const argPath = relativeTo(cwd, testPath);
+  const scoped = (command: ProveCommand): ScopedRunner => ({ command, cwd, argPath });
 
   // Runners that take a path positionally and run only what they are given.
   const positional = ["vitest", "jest", "pytest", "mocha", "ava", "bun test", "deno test"];
   if (positional.some((r) => argv.includes(r))) {
-    return { ...cmd, args: [...cmd.args, testPath] };
+    return scoped({ ...cmd, args: [...cmd.args, argPath] });
   }
 
   // A package-manager script needs the separator or the path lands on the
   // script runner instead of the test runner.
   if (/^(npm|pnpm|yarn|bun)$/.test(cmd.command) && cmd.args.includes("test")) {
-    if (cmd.command === "yarn") return { ...cmd, args: [...cmd.args, testPath] };
-    return { ...cmd, args: [...cmd.args, "--", testPath] };
+    if (cmd.command === "yarn") return scoped({ ...cmd, args: [...cmd.args, argPath] });
+    return scoped({ ...cmd, args: [...cmd.args, "--", argPath] });
   }
 
-  // go test takes a package, not a file, so a file path would not run.
+  // go test takes a package, not a file, so a file path would not run. The
+  // package is already the directory, so it runs from the module root.
   if (cmd.command === "go") {
-    const pkg = dirOf(testPath);
-    return { ...cmd, args: ["test", `./${pkg === "" ? "" : `${pkg}/`}...`] };
+    const pkg = dirOf(relativeTo(cwd, testPath));
+    return {
+      command: { ...cmd, args: ["test", `./${pkg === "" ? "" : `${pkg}/`}...`] },
+      cwd,
+      argPath,
+    };
   }
 
   return null;
