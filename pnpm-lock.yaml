@@ -426,6 +426,9 @@ importers:
         specifier: ^3.14.14
         version: 3.22.1
     devDependencies:
+      '@verit/adapter-sqlite':
+        specifier: workspace:*
+        version: link:../adapters/sqlite
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
