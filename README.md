@@ -391,6 +391,31 @@ instead, set `VERIT_LANE_PROVIDER=anthropic` and override the tier slugs, or set
 
 ---
 
+## Review mode
+
+Besides the Understanding, verit can act as a co-equal reviewer. `VERIT_LANE_MODE`
+(or the `lane-mode` Action input) picks what the lane produces:
+
+- `understanding`: summarize only. What the change does, why, how to verify it,
+  and where the risk is. This is the pre-review behavior, unchanged.
+- `review`: lean on finding real problems. The judge still writes a valid
+  Understanding, but the emphasis is on located findings.
+- `both` (the default): summarize AND hunt.
+
+A finding is a risk the judge points at one changed line for: a bug, an unsafe
+path, a missing check. When the mode reviews, a skeptic pass tries to REFUTE
+each located finding from the same net diff, and drops every finding it cannot
+confirm. A finding whose call errors, times out, or returns junk is dropped too,
+and a finding whose line the PR head does not change is dropped as a guessed
+location. The result is a short list that survived a refutation, not a nit flood.
+
+Findings are advisory. They render as inline annotations on the changed lines,
+but they never change the Check conclusion. Only the proof result and `fail-on`
+decide pass, fail, or neutral. If the whole analysis fails, the lane returns no
+Understanding and the Check is neutral with zero findings, never a false green.
+
+---
+
 ## Configuration
 
 | Variable | Default | Purpose |
@@ -404,6 +429,7 @@ instead, set `VERIT_LANE_PROVIDER=anthropic` and override the tier slugs, or set
 | `VERIT_FORCE_NEUTRAL` | unset | Incident freeze. Any non-empty reason forces every Check to `neutral`, whatever the proof said. Only downgrades a claim, never invents one. See [`docs/runbook.md`](docs/runbook.md) |
 | `VERIT_LANE_PROVIDER` | unset | `anthropic` or `openai-compat` turns on the built-in HTTP lane, the default path whenever it is set. An unknown value is an error, never a silent fallback |
 | `VERIT_LANE_TIER` | `balanced` | The one quality knob: `fast`, `balanced`, or `max`. `fast` is a single judge call; `balanced` and `max` add a cheap triage map pass first. Maps to models in [Choosing a tier](#choosing-a-tier); every slug is swappable per var. An unknown value falls back to `balanced`, never an error, so a tier typo softens the review, it never fails the run |
+| `VERIT_LANE_MODE` | `both` | What the lane produces: `understanding`, `review`, or `both`. `understanding` summarizes only. `review` and `both` also hunt located findings, then a skeptic pass refutes each one and drops the ones it cannot confirm. Findings are advisory: they annotate the diff, they never change the Check conclusion. See [Review mode](#review-mode). An unknown value falls back to `both` |
 | `VERIT_LANE_MODEL` | unset | Legacy single pin: one model, one pass. Overrides the judge for any tier and drops the triage pass, so an existing single-model setup makes the same one call it always did. Unset, the tier picks the judge. To keep triage with a custom judge, use the per-tier judge override. Also the model override for the legacy CLI harnesses |
 | `VERIT_LANE_BASE_URL` | provider default | API base URL override. `openai-compat` covers OpenAI, Grok (`https://api.x.ai/v1`), DeepSeek, GLM, and local vLLM |
 | `VERIT_LANE_API_KEY` | unset | Lane API key. Falls back to `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` to match the provider |

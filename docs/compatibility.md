@@ -27,6 +27,7 @@ Set under `with:` on the `EfeDurmaz16/verit` step.
 | `fail-on` | 0.1.0 | - | `failure` or `never`. `failure` maps an inconclusive proof to a failed Check |
 | `lane-provider` | 0.1.0 | - | `anthropic` or `openai-compat`. Empty disables the lane and the Check is neutral |
 | `lane-tier` | 0.4.0 | - | Review quality tier: `fast`, `balanced`, or `max`. Empty means `balanced` |
+| `lane-mode` | 0.5.0 | - | What the lane produces: `understanding`, `review`, or `both`. Empty means `both`. `review` and `both` add a skeptic-verified finding pass. Findings are advisory |
 | `lane-model` | 0.1.0 | - | Optional judge override. Pins one exact model whatever the tier. Empty lets the tier pick |
 | `lane-api-key` | 0.1.0 | - | API key for `lane-provider`. Falls back to `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` |
 | `lane-base-url` | 0.1.0 | - | Base URL for `openai-compat`. Covers OpenAI, Grok, DeepSeek, GLM, local vLLM |
@@ -61,6 +62,7 @@ inputs onto these. A non-empty input wins over the matching env var.
 | `VERIT_FORCE_NEUTRAL` | 0.1.0 | - | Incident freeze. Any non-empty reason forces every Check to neutral |
 | `VERIT_LANE_PROVIDER` | 0.1.0 | - | `anthropic` or `openai-compat` turns on the built-in HTTP lane |
 | `VERIT_LANE_TIER` | 0.4.0 | - | Quality tier: `fast`, `balanced`, or `max`. Default `balanced`. Maps to models, all swappable per tier |
+| `VERIT_LANE_MODE` | 0.5.0 | - | What the lane produces: `understanding`, `review`, or `both`. Default `both`. `review` and `both` add a skeptic-verified finding pass. Findings never change the Check conclusion |
 | `VERIT_LANE_MODEL` | 0.1.0 | - | Legacy single pin: one model, one pass. Pins the judge for any tier and drops the triage pass. Unset, the tier picks the judge |
 | `VERIT_LANE_BASE_URL` | 0.1.0 | - | API base URL override for `openai-compat` |
 | `VERIT_LANE_API_KEY` | 0.1.0 | - | Lane API key. Falls back to `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` |

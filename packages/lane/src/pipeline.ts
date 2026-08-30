@@ -2,6 +2,7 @@ import { Effect, Either, JSONSchema, Schema as S } from "effect";
 import type { Understanding } from "@verit/domain";
 import type { LaneClient, LaneRequest, LaneTool } from "./client";
 import { runLane, type RunLaneInput } from "./loop";
+import { modeReviews, verifyFindings, type LaneMode, type ProofStatus } from "./review";
 
 /*
  * The tiered lane: an optional cheap map pass in front of the judge.
@@ -105,23 +106,53 @@ ${lines.join("\n")}`;
 export interface TieredLaneInput extends RunLaneInput {
   /** The map-pass client, or null to skip triage and judge the full net diff. */
   readonly triageClient: LaneClient | null;
+  /**
+   * Review mode. "understanding" (the default here) skips the skeptic and
+   * leaves the judge prompt and output exactly as they were before review
+   * existed. "review" and "both" run the skeptic filter over the judge's
+   * findings.
+   */
+  readonly mode?: LaneMode;
+  /** The run's own test result, threaded into the skeptic prompt. */
+  readonly proofStatus?: ProofStatus;
+  /** The PR head's changed lines, per new-file path: what a located finding
+      must cite. A finding whose line is not in here is a guessed location and is
+      dropped. Empty when unset, which drops every located finding. */
+  readonly changedLines?: ReadonlyMap<string, ReadonlySet<number>>;
 }
 
 /**
- * Run the tiered lane: an optional triage map pass, then the judge loop. The
- * judge always sees the full net diff (input.user). A good FocusPlan is
- * appended as advisory focus; a failed or empty one changes nothing, so the
- * result is identical to judging the full diff with no triage at all.
+ * Run the tiered lane: an optional triage map pass, then the judge loop, then
+ * (when the mode reviews) the skeptic verify pass over the judge's findings.
+ *
+ * The judge always sees the full net diff (input.user). A good FocusPlan is
+ * appended as advisory focus; a failed or empty one changes nothing. When the
+ * judge fails, the result is null and no skeptic runs, so the lane stays
+ * honestly neutral with zero findings. The skeptic reuses the tier's cheap
+ * triage client when it has one, else the judge itself.
  */
 export const runTieredLane = async (
   judge: LaneClient,
   input: TieredLaneInput,
 ): Promise<Understanding | null> => {
-  const { triageClient, ...judgeInput } = input;
+  const {
+    triageClient,
+    mode = "understanding",
+    proofStatus = "neutral",
+    changedLines,
+    ...judgeInput
+  } = input;
   const plan = triageClient !== null ? await runTriage(triageClient, input.user) : null;
   const user =
     plan !== null && plan.regions.length > 0
       ? `${input.user}\n\n${renderFocusPlan(plan)}`
       : input.user;
-  return runLane(judge, { ...judgeInput, user });
+  const understanding = await runLane(judge, { ...judgeInput, user });
+  if (understanding === null || !modeReviews(mode)) return understanding;
+  return verifyFindings(triageClient ?? judge, {
+    understanding,
+    netDiff: input.user,
+    changedLines: changedLines ?? new Map(),
+    proofStatus,
+  });
 };

@@ -163,6 +163,63 @@ describe("risk annotations", () => {
   });
 });
 
+/* -------- Reviewer findings are ADVISORY: they annotate, but the proof result
+   plus fail-on drive the conclusion. A finding never turns a green or neutral
+   proof into a failure. -------- */
+describe("reviewer findings never change the Check conclusion", () => {
+  const highFinding = (line: number) =>
+    ({ area: "auth", note: "unguarded path", source: "reviewer" as const, file: "src/a.ts", line, severity: "high" as const });
+
+  it("a passing proof with high-severity reviewer findings still concludes success", () => {
+    const check = behaviorProofCheck({
+      understanding: u([highFinding(1), highFinding(2), highFinding(3)]),
+      outcome: passing,
+      changedLines: changed({ "src/a.ts": [1, 2, 3] }),
+    });
+    expect(check.conclusion).toBe("success");
+    // the findings still surface as annotations, they just do not gate.
+    expect(check.annotations).toHaveLength(3);
+    expect(check.annotations![0]!.annotationLevel).toBe("failure");
+  });
+
+  it("a neutral proof (no prove run) with findings stays neutral, never failure", () => {
+    const check = behaviorProofCheck({
+      understanding: u([highFinding(1)]),
+      outcome: null,
+      changedLines: changed({ "src/a.ts": [1] }),
+    });
+    expect(check.conclusion).toBe("neutral");
+  });
+
+  it("a refused proof with findings stays neutral, findings do not flip it to failure", () => {
+    const refused: ProveOutcome = {
+      ...passing,
+      exitCode: 1,
+      logTail: "",
+      log: "",
+      refused: "the working tree changed during analysis.",
+    };
+    const check = behaviorProofCheck({
+      understanding: u([highFinding(1), highFinding(2)]),
+      outcome: refused,
+      changedLines: changed({ "src/a.ts": [1, 2] }),
+    });
+    expect(check.conclusion).toBe("neutral");
+  });
+
+  it("the proof is the driver: a failing proof fails whether or not findings exist", () => {
+    const failing: ProveOutcome = { ...passing, exitCode: 1, logTail: "1 failed\n", log: "1 failed\n" };
+    const withFindings = behaviorProofCheck({
+      understanding: u([highFinding(1)]),
+      outcome: failing,
+      changedLines: changed({ "src/a.ts": [1] }),
+    });
+    const noFindings = behaviorProofCheck({ understanding: u([]), outcome: failing });
+    expect(withFindings.conclusion).toBe("failure");
+    expect(noFindings.conclusion).toBe("failure");
+  });
+});
+
 /* -------- Body: capped bullets, details_url, no PROOF_PAGE_URL nag. -------- */
 describe("Check body", () => {
   it("renders risks as capped bullets with an 'and N more' tail", () => {
