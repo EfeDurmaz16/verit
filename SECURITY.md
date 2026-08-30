@@ -60,10 +60,17 @@ verit runs code, so the sharp edges are worth naming.
   `pull_request_target` workflow that checks out the pull request head hands
   attacker-controlled code a token with write access. verit never needs that:
   on a fork pull request it expects the read-only token and degrades to a dry
-  run on purpose. This is enforced, not only advised: `prove` refuses to run a
-  repository's command at all under `pull_request_target`, `workflow_run` or
-  `issue_comment`, and the Check goes neutral with the reason. Nothing ran, so
-  nothing is claimed.
+  run on purpose. This is enforced, not only advised, and the enforcement is in
+  two places because one was not enough. The first step of the composite action
+  decides whether the event may run repository code at all, and every step that
+  could, the reviewed repository's dependency install included, is gated on that
+  decision. Installing a repository's dependencies already runs its code: a
+  `postinstall` script is a shell script its author chose. So the decision has to
+  come before the install, not after it. `prove` keeps its own refusal as a
+  second layer for any caller that reaches it another way. Under a declined
+  event verit publishes a neutral Check from its own checkout and exits non-zero
+  if it cannot, because a workflow that looks like it ran verit and did not is
+  worse than one that visibly stopped.
 - Pass the lane key through `lane-api-key` from a repository secret. GitHub
   withholds secrets from fork pull requests, the lane disables itself, and the
   Check is `neutral`. That is the designed behavior, not a failure to fix.

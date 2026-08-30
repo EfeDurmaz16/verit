@@ -73,6 +73,36 @@ inputs:
 runs:
   using: composite
   steps:
+    # THE FIRST THING THAT RUNS. Nothing above it, on purpose.
+    #
+    # Under pull_request_target, workflow_run or issue_comment the job holds a
+    # write-scoped token and the repository's secrets, and GITHUB_WORKSPACE may
+    # hold the pull request's own code. Installing that repository's
+    # dependencies is already running its code: a postinstall script is a shell
+    # script the author chose. So the decision is made here, before any step
+    # touches the workspace, and every step that could execute repository code
+    # is gated on this output.
+    #
+    # https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/
+    - name: Decide whether this event may run repository code
+      id: gate
+      shell: bash
+      run: |
+        case "${GITHUB_EVENT_NAME:-}" in
+          pull_request_target|workflow_run|issue_comment)
+            echo "safe=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "reason<<VERIT_EOF"
+              echo "verit declined to run under ${GITHUB_EVENT_NAME}. That event carries a write-scoped token and the repository's secrets, and running the reviewed code beside them is not a trade worth taking. Trigger verit with \"on: pull_request\" instead."
+              echo "VERIT_EOF"
+            } >> "$GITHUB_OUTPUT"
+            echo "verit: declining ${GITHUB_EVENT_NAME}, no reviewed code will run"
+            ;;
+          *)
+            echo "safe=true" >> "$GITHUB_OUTPUT"
+            echo "reason=" >> "$GITHUB_OUTPUT"
+            ;;
+        esac
     # verit runs from its own checkout, which is github.action_path. The repo
     # under review stays in GITHUB_WORKSPACE, which is where prove executes.
     - uses: actions/setup-node@v4
@@ -91,7 +121,7 @@ runs:
       working-directory: ${{ github.action_path }}
       run: pnpm install --frozen-lockfile
     - name: Install Claude Code
-      if: inputs.lane-harness == 'claude' && inputs.anthropic-api-key != ''
+      if: steps.gate.outputs.safe == 'true' && inputs.lane-harness == 'claude' && inputs.anthropic-api-key != ''
       shell: bash
       run: npm install -g @anthropic-ai/claude-code
     # Install the reviewed repo's OWN dependencies, in the caller's checkout, so
@@ -102,7 +132,7 @@ runs:
     # Passed through env, never inlined into the script, so a workflow input
     # cannot inject shell. Empty input skips this: the caller installs its own.
     - name: Install the reviewed repo's dependencies
-      if: inputs.install-command != ''
+      if: steps.gate.outputs.safe == 'true' && inputs.install-command != ''
       shell: bash
       working-directory: ${{ github.workspace }}
       env:
@@ -113,6 +143,7 @@ runs:
         $INSTALL_COMMAND
     - name: Review, prove and post the Check
       id: review
+      if: steps.gate.outputs.safe == 'true'
       shell: bash
       working-directory: ${{ github.action_path }}
       env:
@@ -188,6 +219,23 @@ runs:
         printf '%s' "${VERIT_INGEST_TOKEN:-}" > "$VERIT_TOKEN_DIR/ingest"
         unset GITHUB_TOKEN VERIT_INGEST_TOKEN
         exec pnpm exec tsx packages/cli/src/main.ts dogfood "$PR_SPEC"
+
+    # The declined path. Trusted code only: this runs in github.action_path,
+    # reads no reviewed checkout, installs nothing belonging to the repository
+    # under review, and runs no command that repository defined. If it cannot
+    # publish the neutral Check it exits non-zero, because a workflow that looks
+    # like it ran verit and did not is worse than one that visibly stopped.
+    - name: Publish the refusal
+      if: steps.gate.outputs.safe != 'true'
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        PR_SPEC: ${{ inputs.pr != '' && inputs.pr || format('{0}#{1}', github.repository, github.event.pull_request.number) }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        VERIT_CHECK_SHA: ${{ github.event.pull_request.head.sha }}
+        VERIT_REFUSAL_REASON: ${{ steps.gate.outputs.reason }}
+      run: pnpm exec tsx packages/cli/src/main.ts refuse "$PR_SPEC"
+
 
 # Declared after runs: on purpose. The review step writes these to
 # $GITHUB_OUTPUT (see writeActionOutputs in packages/cli/src/main.ts), so a

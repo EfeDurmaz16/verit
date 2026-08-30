@@ -554,6 +554,62 @@ const main = async () => {
     return;
   }
 
+  // The privileged-event refusal path. It exists so the composite action can
+  // still say something on a pull request it declined to touch, using only
+  // verit's own code: no reviewed checkout is read, no repository command runs,
+  // no dependency of the repo under review is installed. See the gate step in
+  // action.yml, which is the first thing that runs there.
+  if (cmd === "refuse") {
+    const spec = rest[0];
+    const reason = process.env.VERIT_REFUSAL_REASON ?? "verit declined to run in this context.";
+    if (!spec) {
+      console.error("usage: verit refuse <owner/repo#number>");
+      process.exitCode = 2;
+      return;
+    }
+    const outcome: ProveOutcome = {
+      command: "(refused)",
+      source: "privileged event gate",
+      cwd: "",
+      repo: spec.split("#")[0] ?? "",
+      exitCode: 1,
+      durationMs: 0,
+      timedOut: false,
+      logTail: "",
+      log: "",
+      startedAt: new Date().toISOString(),
+      headSha: null,
+      porcelainClean: false,
+      refused: reason,
+    };
+    const check = await postBehaviorProofCheck({ understanding: null, outcome, runId: "" });
+    await writeActionOutputs({
+      conclusion: check?.conclusion ?? "neutral",
+      "run-id": "",
+      "proof-page-url": "",
+    });
+    console.log(
+      JSON.stringify(
+        {
+          refused: reason,
+          check: check ? { conclusion: check.conclusion, posted: check.posted } : null,
+        },
+        null,
+        2,
+      ),
+    );
+    // Fail closed. Saying nothing is acceptable; saying nothing quietly is not,
+    // because a workflow that looks like it ran verit and did not is worse than
+    // one that visibly stopped.
+    if (check === null || check.posted !== true) {
+      console.error(
+        "verit refused this event and could not publish the neutral Check. Stopping so the refusal is visible.",
+      );
+      process.exitCode = 1;
+    }
+    return;
+  }
+
   if (cmd === "dogfood") {
     const spec = rest[0] ?? process.env.PR_SPEC ?? "solana-foundation/pay#415";
     console.error(`dogfood: ingest-pr ${spec}`);
