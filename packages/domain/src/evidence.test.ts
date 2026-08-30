@@ -14,6 +14,8 @@ import {
   groundClaims,
   isStable,
   readinessOf,
+  recomputeReadiness,
+  verifyBundle,
 } from "./evidence";
 
 /*
@@ -63,6 +65,7 @@ const result = (probeId: string, over: Partial<ProbeResult> = {}): ProbeResult =
   head: side("head", "pass"),
   classification: "no-differential",
   grade: "candidate",
+  gates: allGatesPass,
   disposition: "unreviewed",
   ...over,
 });
@@ -526,5 +529,121 @@ describe("claim grounding is what decides the state, not the model", () => {
         executionIntegrityClean: true,
       }),
     ).toBe("needs-claim");
+  });
+});
+
+describe("a bundle's conclusions are recomputed, never believed", () => {
+  const base = {
+    pullRequest: "EfeDurmaz16/verit#1",
+    probes: [],
+    edges: [{ claimId: "c1", probeId: "p1", role: "primary" as const }],
+    policy: { orchestration: "o", isolation: "i", digest: "d" },
+    jobSpec: { specHash: "h", signature: "s", probeHashes: [] },
+    sides: [
+      { side: "base" as const, sha: "a", selectedToolchain: "t", resolvedDependencies: "d", environmentDigest: "e" },
+      { side: "head" as const, sha: "b", selectedToolchain: "t", resolvedDependencies: "d", environmentDigest: "e" },
+    ] as [
+      { side: "base"; sha: string; selectedToolchain: string; resolvedDependencies: string; environmentDigest: string },
+      { side: "head"; sha: string; selectedToolchain: string; resolvedDependencies: string; environmentDigest: string },
+    ],
+    reproduction: {
+      environmentDigest: "e",
+      imageDigest: "i",
+      toolchainPins: [],
+      probeHashes: ["h1"],
+      artifactRefs: [],
+      replayCommand: "verit replay",
+    },
+  };
+
+  const honest = {
+    ...base,
+    claims: [claim("c1")],
+    results: [
+      result("p1", {
+        base: side("base", "fail"),
+        head: side("head", "pass"),
+        classification: "fix-confirmed" as const,
+      }),
+    ],
+    coverage: [{ claimId: "c1", status: "supported" as const, supportingResults: ["p1"] }],
+    readiness: "proof-ready" as const,
+  };
+
+  it("passes a bundle whose numbers reproduce from its own contents", () => {
+    expect(verifyBundle(honest)).toEqual([]);
+  });
+
+  it("catches a bundle that claims proof-ready over an ungrounded claim", () => {
+    const lying = { ...honest, claims: [claim("c1", { state: "ambiguous" as const })] };
+    const problems = verifyBundle(lying);
+    expect(problems.map((p) => p.where)).toContain("readiness");
+    expect(problems.find((p) => p.where === "readiness")?.recomputed).toBe("needs-claim");
+  });
+
+  it("catches a classification that does not follow from the outcomes", () => {
+    const lying = {
+      ...honest,
+      results: [
+        result("p1", {
+          base: side("base", "pass"),
+          head: side("head", "pass"),
+          classification: "regression" as const,
+        }),
+      ],
+    };
+    const problems = verifyBundle(lying);
+    expect(problems.find((p) => p.where.includes("classification"))?.recomputed).toBe(
+      "no-differential",
+    );
+  });
+
+  it("catches a grade that its own gates do not earn", () => {
+    const lying = {
+      ...honest,
+      results: [
+        result("p1", {
+          base: side("base", "fail"),
+          head: side("head", "pass"),
+          classification: "fix-confirmed" as const,
+          grade: "corroborated" as const,
+          gates: { ...allGatesPass, probeHeldOutside: false },
+        }),
+      ],
+    };
+    const problems = verifyBundle(lying);
+    expect(problems.find((p) => p.where.includes("grade"))?.recomputed).toBe("null");
+  });
+
+  it("catches an inconclusive result that does not say why", () => {
+    const lying = {
+      ...honest,
+      results: [
+        result("p1", {
+          base: side("base", "unstable", ["pass", "fail"]),
+          head: side("head", "pass"),
+          classification: "inconclusive" as const,
+        }),
+      ],
+    };
+    expect(verifyBundle(lying).map((p) => p.where)).toContain("result p1 inconclusiveReason");
+  });
+
+  it("catches coverage that does not match the results", () => {
+    const lying = {
+      ...honest,
+      coverage: [{ claimId: "c1", status: "contradicted" as const, supportingResults: ["p1"] }],
+    };
+    expect(verifyBundle(lying).find((p) => p.where.includes("coverage"))?.recomputed).toBe(
+      "supported",
+    );
+  });
+
+  it("recomputes readiness from the bundle without reading what it claims", () => {
+    // The signature is the proof: recomputeReadiness accepts only claims,
+    // coverage, results and reproduction, so the bundle's own readiness field
+    // is not in scope for it to read.
+    const { readiness: _ignored, ...withoutReadiness } = { ...honest, readiness: "inconclusive" as const };
+    expect(recomputeReadiness(withoutReadiness)).toBe("proof-ready");
   });
 });
