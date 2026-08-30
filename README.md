@@ -433,6 +433,8 @@ Understanding and the Check is neutral with zero findings, never a false green.
 | `VERIT_CORPUS_OPT_OUT` | unset | `1` keeps this repository's normalized run metadata out of the corpus |
 | `VERIT_CORPUS_OPT_IN` | unset | `1` lets a private repository's normalized run metadata join the corpus |
 | `VERIT_JOB_SPEC_SECRET` | unset | Secret the execution job spec is signed with |
+| `VERIT_JOB_SPEC_PRIVATE_KEY` | unset | Ed25519 private key the planner signs with. The runner only ever gets the public half |
+| `VERIT_PROBE_ENV` | unset | Extra environment keys a probe may see, comma separated. Secret-shaped names are refused |
 | `VERIT_LANE_PROVIDER` | unset | `anthropic` or `openai-compat` turns on the built-in HTTP lane, the default path whenever it is set. An unknown value is an error, never a silent fallback |
 | `VERIT_LANE_TIER` | `balanced` | The one quality knob: `fast`, `balanced`, or `max`. `fast` is a single judge call; `balanced` and `max` add a cheap triage map pass first. Maps to models in [Choosing a tier](#choosing-a-tier); every slug is swappable per var. An unknown value falls back to `balanced`, never an error, so a tier typo softens the review, it never fails the run |
 | `VERIT_LANE_MODE` | `both` | What the lane produces: `understanding`, `review`, or `both`. `understanding` summarizes only. `review` and `both` also hunt located findings, then a skeptic pass refutes each one and drops the ones it cannot confirm. Findings are advisory: they annotate the diff, they never change the Check conclusion. See [Review mode](#review-mode). An unknown value falls back to `both` |

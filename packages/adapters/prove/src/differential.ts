@@ -13,6 +13,7 @@ import type {
 } from "@verit/domain";
 import type { ProveCommand } from "@verit/ports";
 import { spawnCaptured } from "./index";
+import { runnerChildEnv, secretsIn } from "./runner-env";
 
 /*
  * Controlled base and head replay.
@@ -203,7 +204,7 @@ const runSide = async (input: {
 
   if (input.prepare) {
     try {
-      const prep = await spawnCaptured(input.prepare, dir, timeoutMs);
+      const prep = await spawnCaptured(input.prepare, dir, timeoutMs, runnerChildEnv());
       if (prep.exitCode !== 0) {
         // Preparation is infrastructure. A failed install is not the repository
         // failing its own behavior, so it must never read as a behavioral fail.
@@ -261,7 +262,7 @@ const runSide = async (input: {
   let log = "";
   for (let i = 0; i < runs; i++) {
     try {
-      const raw = await spawnCaptured(cmd, dir, timeoutMs);
+      const raw = await spawnCaptured(cmd, dir, timeoutMs, runnerChildEnv());
       observed.push(stateOf(raw));
       lastExit = raw.exitCode;
       log = raw.output;
@@ -298,6 +299,18 @@ const runSide = async (input: {
  * same experiment, and the caller must not grade the result.
  */
 export const runDifferential = async (input: DifferentialInput): Promise<DifferentialRun> => {
+  // Fail closed at the door. Scrubbing the probe's own environment is not
+  // enough: on Linux a probe reads /proc/<ppid>/environ, so the process that
+  // spawns it is as exposed as it is. If this process is carrying secrets, the
+  // caller wanted runDifferentialIsolated and did not use it, and running
+  // anyway would hide that rather than fix it.
+  const leaked = secretsIn(process.env);
+  if (leaked.length > 0) {
+    throw new Error(
+      `refusing to run a probe from a process holding ${leaked.length} secret(s) (${leaked.slice(0, 3).join(", ")}). A probe can read its parent's environment. Use runDifferentialIsolated, which starts the run in a process that never held one.`,
+    );
+  }
+
   const repoDir = resolve(input.repoDir);
   const runsPerSide = input.runsPerSide ?? DEFAULT_RUNS_PER_SIDE;
   const timeoutMs = input.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS;

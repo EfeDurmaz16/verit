@@ -37,6 +37,7 @@ import { runDoctor } from "./doctor";
 import {
   claimSourcesFrom,
   differentialAvailable,
+  jobSpecKeys,
   makeDifferentialDeps,
 } from "./differential";
 
@@ -320,12 +321,24 @@ const differentialSection = async (input: {
 
   try {
     const detected = await detectProveCommands(resolve(proveCwd));
-    const deps = makeDifferentialDeps({ repoDir: resolve(proveCwd), baseSha, headSha });
+    const jobId = process.env.GITHUB_RUN_ID ?? "local";
+    const pullRequest = `${input.repoSlug}#${input.prNumber}`;
+    const keys = jobSpecKeys();
+    const deps = makeDifferentialDeps({
+      repoDir: resolve(proveCwd),
+      baseSha,
+      headSha,
+      jobId,
+      repo: input.repoSlug,
+      pullRequest,
+      privateKey: keys.privateKey,
+      publicKey: keys.publicKey,
+    });
     const out = await runDifferentialReview(deps)({
       repoId: input.repoSlug,
       repo: input.repoSlug,
-      pullRequest: `${input.repoSlug}#${input.prNumber}`,
-      jobId: process.env.GITHUB_RUN_ID ?? "local",
+      pullRequest,
+      jobId,
       baseSha,
       headSha,
       sources: claimSourcesFrom({ title: input.title, body: input.body, diff: input.diff }),

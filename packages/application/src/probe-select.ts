@@ -148,6 +148,14 @@ export const selectRepoNativeProbes = (input: SelectInput): readonly ProbeCandid
  * probe silently stops measuring what it claims to.
  */
 export const scopeRunnerToFile = (cmd: ProveCommand, testPath: string): ProveCommand | null => {
+  // ponytail: this narrows the command but not the working directory, which is
+  // wrong in a workspace. Measured on verit itself: the probe was
+  // packages/cli/src/action-privileged-gate.test.ts, the command ran from the
+  // repository root, and vitest reported "No test files found" on both sides.
+  // The run classified honestly as unresolved, so nothing was invented, but the
+  // probe measured nothing. Fixing it means returning a cwd alongside the argv
+  // and running the probe in the package that owns the file. Until then a
+  // monorepo falls back to the whole suite, which is coarse but true.
   const argv = [cmd.command, ...cmd.args].join(" ");
 
   // Runners that take a path positionally and run only what they are given.

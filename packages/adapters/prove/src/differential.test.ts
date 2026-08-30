@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { classifyResult } from "@verit/domain";
 import { afterEach, describe, expect, it } from "vitest";
 import { PROBE_PATH_TOKEN, type ProbeSpec, probeHash, runDifferential } from "./differential";
+import { secretsIn } from "./runner-env";
 
 /*
  * These run real git and real subprocesses on purpose. The whole claim of this
@@ -60,6 +61,24 @@ afterEach(() => {
   for (const dir of created.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
+/*
+ * runDifferential refuses to start from a process holding secrets, because a
+ * probe reads its parent's environment. These tests exercise the mechanics
+ * directly rather than through the isolated runner, so they have to satisfy
+ * that precondition themselves: a clean environment for the duration, which is
+ * exactly the state the real runner process is started in.
+ */
+const withCleanEnv = async <T>(f: () => Promise<T>): Promise<T> => {
+  const saved = { ...process.env };
+  for (const key of secretsIn(process.env)) delete process.env[key];
+  try {
+    return await f();
+  } finally {
+    Object.assign(process.env, saved);
+  }
+};
+
+
 describe("runDifferential", () => {
   it("reports a regression when the behavior passed on base and fails on head", async () => {
     const repo = seedRepo({
@@ -73,13 +92,15 @@ describe("runDifferential", () => {
         'process.exit(readFileSync("answer.txt","utf8").trim()==="42"?0:1);',
     );
 
-    const run = await runDifferential({
-      repoDir: repo.dir,
-      baseSha: repo.baseSha,
-      headSha: repo.headSha,
-      probe,
-      policy,
-    });
+    const run = await withCleanEnv(() =>
+      runDifferential({
+        repoDir: repo.dir,
+        baseSha: repo.baseSha,
+        headSha: repo.headSha,
+        probe,
+        policy,
+      }),
+    );
 
     expect(run.base.state).toBe("pass");
     expect(run.head.state).toBe("fail");
@@ -97,13 +118,15 @@ describe("runDifferential", () => {
         'process.exit(readFileSync("answer.txt","utf8").trim()==="42"?0:1);',
     );
 
-    const run = await runDifferential({
-      repoDir: repo.dir,
-      baseSha: repo.baseSha,
-      headSha: repo.headSha,
-      probe,
-      policy,
-    });
+    const run = await withCleanEnv(() =>
+      runDifferential({
+        repoDir: repo.dir,
+        baseSha: repo.baseSha,
+        headSha: repo.headSha,
+        probe,
+        policy,
+      }),
+    );
 
     expect(classifyResult({ base: run.base, head: run.head }).classification).toBe("fix-confirmed");
   }, 60_000);
@@ -120,14 +143,16 @@ describe("runDifferential", () => {
       { id: "p-isolation" },
     );
 
-    const run = await runDifferential({
-      repoDir: repo.dir,
-      baseSha: repo.baseSha,
-      headSha: repo.headSha,
-      probe,
-      policy,
-      runsPerSide: 1,
-    });
+    const run = await withCleanEnv(() =>
+      runDifferential({
+        repoDir: repo.dir,
+        baseSha: repo.baseSha,
+        headSha: repo.headSha,
+        probe,
+        policy,
+        runsPerSide: 1,
+      }),
+    );
 
     expect(run.base.state).toBe("pass");
     expect(run.head.state).toBe("pass");
@@ -147,14 +172,16 @@ describe("runDifferential", () => {
       { id: "p-tamper" },
     );
 
-    const run = await runDifferential({
-      repoDir: repo.dir,
-      baseSha: repo.baseSha,
-      headSha: repo.headSha,
-      probe,
-      policy,
-      runsPerSide: 1,
-    });
+    const run = await withCleanEnv(() =>
+      runDifferential({
+        repoDir: repo.dir,
+        baseSha: repo.baseSha,
+        headSha: repo.headSha,
+        probe,
+        policy,
+        runsPerSide: 1,
+      }),
+    );
 
     expect(run.probeHeldOutside).toBe(false);
     expect(run.observedProbeHashes.base).not.toBe(probeHash(probe));
@@ -178,14 +205,16 @@ describe("runDifferential", () => {
       installPath: "check.js",
     });
 
-    const run = await runDifferential({
-      repoDir: repo.dir,
-      baseSha: repo.baseSha,
-      headSha: repo.headSha,
-      probe,
-      policy,
-      runsPerSide: 1,
-    });
+    const run = await withCleanEnv(() =>
+      runDifferential({
+        repoDir: repo.dir,
+        baseSha: repo.baseSha,
+        headSha: repo.headSha,
+        probe,
+        policy,
+        runsPerSide: 1,
+      }),
+    );
 
     // The repo's own check.js would have exited 0 on both sides. The canonical
     // probe does not, which is how we know ours ran.
@@ -203,14 +232,16 @@ describe("runDifferential", () => {
       args: [PROBE_PATH_TOKEN],
     });
 
-    const run = await runDifferential({
-      repoDir: repo.dir,
-      baseSha: repo.baseSha,
-      headSha: repo.headSha,
-      probe,
-      policy,
-      runsPerSide: 1,
-    });
+    const run = await withCleanEnv(() =>
+      runDifferential({
+        repoDir: repo.dir,
+        baseSha: repo.baseSha,
+        headSha: repo.headSha,
+        probe,
+        policy,
+        runsPerSide: 1,
+      }),
+    );
 
     expect(run.base.state).toBe("incompatible");
     expect(run.head.state).toBe("incompatible");
@@ -231,14 +262,16 @@ describe("runDifferential", () => {
       { id: "p-flaky" },
     );
 
-    const run = await runDifferential({
-      repoDir: repo.dir,
-      baseSha: repo.baseSha,
-      headSha: repo.headSha,
-      probe,
-      policy,
-      runsPerSide: 2,
-    });
+    const run = await withCleanEnv(() =>
+      runDifferential({
+        repoDir: repo.dir,
+        baseSha: repo.baseSha,
+        headSha: repo.headSha,
+        probe,
+        policy,
+        runsPerSide: 2,
+      }),
+    );
 
     expect(run.base.state).toBe("unstable");
     expect(run.base.observedStates).toEqual(["pass", "fail"]);
@@ -254,14 +287,16 @@ describe("runDifferential", () => {
     });
     const probe = nodeProbe("process.exit(0);", { id: "p-deps" });
 
-    const run = await runDifferential({
-      repoDir: repo.dir,
-      baseSha: repo.baseSha,
-      headSha: repo.headSha,
-      probe,
-      policy,
-      runsPerSide: 1,
-    });
+    const run = await withCleanEnv(() =>
+      runDifferential({
+        repoDir: repo.dir,
+        baseSha: repo.baseSha,
+        headSha: repo.headSha,
+        probe,
+        policy,
+        runsPerSide: 1,
+      }),
+    );
 
     const [base, head] = run.sides;
     expect(base.side).toBe("base");
@@ -277,15 +312,17 @@ describe("runDifferential", () => {
     const repo = seedRepo({ base: { "a.txt": "1\n" }, head: { "a.txt": "2\n" } });
     const probe = nodeProbe("process.exit(0);", { id: "p-prep" });
 
-    const run = await runDifferential({
-      repoDir: repo.dir,
-      baseSha: repo.baseSha,
-      headSha: repo.headSha,
-      probe,
-      policy,
-      runsPerSide: 1,
-      prepare: { command: process.execPath, args: ["-e", "process.exit(3)"], source: "install" },
-    });
+    const run = await withCleanEnv(() =>
+      runDifferential({
+        repoDir: repo.dir,
+        baseSha: repo.baseSha,
+        headSha: repo.headSha,
+        probe,
+        policy,
+        runsPerSide: 1,
+        prepare: { command: process.execPath, args: ["-e", "process.exit(3)"], source: "install" },
+      }),
+    );
 
     expect(run.base.state).toBe("execution-error");
     expect(run.head.state).toBe("execution-error");
