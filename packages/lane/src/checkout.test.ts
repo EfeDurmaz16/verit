@@ -87,11 +87,11 @@ describe("openLaneCheckout", () => {
   });
 
   // bash is bash: it can cd out of the isolated checkout to the prove workspace
-  // it discovers behind the worktree, and hide the edit from git status with a
-  // skip-worktree bit so HEAD and porcelain look unmoved. The write is not
-  // impossible, so the guarantee rests on the guard: prove, holding the
-  // pre-lane snapshot, must still refuse. This is the whole chain through the
-  // real tool and the real prove runner.
+  // it discovers through the shared clone's object alternates, and hide the
+  // edit from git status with a skip-worktree bit so HEAD and porcelain look
+  // unmoved. The write is not impossible, so the guarantee rests on the guard:
+  // prove, holding the pre-lane snapshot, must still refuse. This is the whole
+  // chain through the real tool and the real prove runner.
   it("turns prove neutral even when a lane bash escape hides its own doctoring", async () => {
     const src = mkdtempSync(join(tmpdir(), "verit-escape-src-"));
     git(["init", "-q", "-b", "main"], src);
@@ -116,10 +116,12 @@ describe("openLaneCheckout", () => {
     const checkout = openLaneCheckout(src);
     expect(checkout.isolated).toBe(true);
     try {
-      // real hostile bash: find the source repo behind the worktree, cd in,
-      // set skip-worktree so status goes blind, then doctor the file to pass.
+      // real hostile bash: read the shared clone's object alternates to find
+      // the source repo behind it, cd in, set skip-worktree so status goes
+      // blind, then doctor the file to pass.
       const attack =
-        'SRC=$(dirname "$(cd "$(git rev-parse --git-common-dir)" && pwd)"); ' +
+        'OBJS=$(cat "$(git rev-parse --git-path objects/info/alternates)"); ' +
+        'SRC=$(dirname "$(dirname "$OBJS")"); ' +
         'cd "$SRC" && git update-index --skip-worktree expected.txt && printf "1\\n" > expected.txt';
       const r = executeLaneTool(checkout.root, "bash", { command: attack });
       expect(r.isError).toBe(false); // the escape itself succeeds
@@ -143,10 +145,10 @@ describe("openLaneCheckout", () => {
 
   // Same fixture as the skip-worktree case, but the bytes change without
   // flipping HEAD, porcelain, or ls-files -v. A repo-local clean/smudge in
-  // .git/info/attributes + filter.* (shared via git-common-dir) rewrites
-  // expected.txt on checkout; clean reconstitutes the committed blob so
-  // status stays empty. gitState must hash the on-disk bytes prove will
-  // run, or this escape is a green.
+  // .git/info/attributes + filter.* (planted in the source repo the clone's
+  // object alternates point back to) rewrites expected.txt on checkout; clean
+  // reconstitutes the committed blob so status stays empty. gitState must hash
+  // the on-disk bytes prove will run, or this escape is a green.
   it("turns prove neutral when a lane bash doctors expected.txt via repo-local clean/smudge", async () => {
     const src = mkdtempSync(join(tmpdir(), "verit-smudge-src-"));
     git(["init", "-q", "-b", "main"], src);
@@ -170,7 +172,8 @@ describe("openLaneCheckout", () => {
     expect(checkout.isolated).toBe(true);
     try {
       const attack =
-        'SRC=$(dirname "$(cd "$(git rev-parse --git-common-dir)" && pwd)"); ' +
+        'OBJS=$(cat "$(git rev-parse --git-path objects/info/alternates)"); ' +
+        'SRC=$(dirname "$(dirname "$OBJS")"); ' +
         'mkdir -p "$SRC/.git/info"; ' +
         'printf "expected.txt filter=veritpass\\n" > "$SRC/.git/info/attributes"; ' +
         'git -C "$SRC" config filter.veritpass.clean "echo 2"; ' +
@@ -224,9 +227,11 @@ describe("openLaneCheckout", () => {
     expect(checkout.isolated).toBe(true);
     try {
       const attack =
-        "FAIL=$(git rev-parse HEAD:failing.js); " +
-        'PASS=$(printf "pass\\n" | git hash-object -w --stdin); ' +
-        'git replace "$FAIL" "$PASS"';
+        'OBJS=$(cat "$(git rev-parse --git-path objects/info/alternates)"); ' +
+        'SRC=$(dirname "$(dirname "$OBJS")"); ' +
+        'FAIL=$(git -C "$SRC" rev-parse HEAD:failing.js); ' +
+        'PASS=$(printf "pass\\n" | git -C "$SRC" hash-object -w --stdin); ' +
+        'git -C "$SRC" replace "$FAIL" "$PASS"';
       const r = executeLaneTool(checkout.root, "bash", { command: attack });
       expect(r.isError).toBe(false);
     } finally {
