@@ -16,3 +16,5 @@ export * from "./evidence-check";
 export * from "./probe-select";
 export * from "./jobspec";
 export * from "./claim-graph";
+export * from "./artifact-capability";
+export * from "./managed-execution";
