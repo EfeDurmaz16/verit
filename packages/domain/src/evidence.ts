@@ -547,13 +547,49 @@ const sourceText = (kind: SourceAnchor["kind"], sources: ClaimSources): string |
 // alignment if reflowing turns out to hide real fabrication.
 const normalizeForMatch = (s: string): string => s.replace(/\s+/g, " ").trim().toLowerCase();
 
-/** True when the anchor's span really appears in the material it names. */
+/**
+ * A diff with the marker git puts in column zero removed, so the body reads as
+ * the code someone actually wrote.
+ *
+ * This exists because of a measured failure, not a hypothetical one. On the
+ * first real run, against verit's own PR #11, the model produced fifteen claims
+ * and grounding kept three. Twelve quotes were correct and every one of them
+ * spanned more than one line: the model quotes the code, the diff carries a `+`
+ * in front of the second line, and the substring stops matching at the newline.
+ * Single line quotes survived only because a substring search still finds them
+ * inside the marked line.
+ *
+ * The gate was refusing what it could not verify, which is right, for a reason
+ * that had nothing to do with truth, which is worse than useless: an honest
+ * quote and a hallucinated one came back looking the same.
+ *
+ * File headers keep their markers. `--- a/x` and `+++ b/x` name files rather
+ * than carrying content, and stripping them would only change what a quote of a
+ * header matches, which is not worth reasoning about.
+ */
+const diffBodies = (diff: string): string =>
+  diff
+    .split("\n")
+    .map((line) =>
+      /^(\+\+\+|---)/.test(line) ? line : /^[+\- ]/.test(line) ? line.slice(1) : line,
+    )
+    .join("\n");
+
+/**
+ * True when the anchor's span really appears in the material it names.
+ *
+ * A diff is checked twice: as written, and with the line markers removed. Both
+ * are the same material, so matching either is honest, and a model that copies
+ * the `+` along with the code is not punished for it. A span in neither is
+ * still refused, which is the whole job.
+ */
 export const anchorResolves = (anchor: SourceAnchor, sources: ClaimSources): boolean => {
   const text = sourceText(anchor.kind, sources);
   if (text === undefined || text === "") return false;
   const span = normalizeForMatch(anchor.span);
   if (span === "") return false;
-  return normalizeForMatch(text).includes(span);
+  if (normalizeForMatch(text).includes(span)) return true;
+  return anchor.kind === "diff" && normalizeForMatch(diffBodies(text)).includes(span);
 };
 
 /**

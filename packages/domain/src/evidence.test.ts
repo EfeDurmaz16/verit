@@ -647,3 +647,99 @@ describe("a bundle's conclusions are recomputed, never believed", () => {
     expect(recomputeReadiness(withoutReadiness)).toBe("proof-ready");
   });
 });
+
+describe("an anchor quoting a diff resolves against the code, not the markers", () => {
+  /*
+   * Measured on the first real run, against verit's own PR #11: the model
+   * produced fifteen claims, twelve of them quoting the diff correctly, and
+   * grounding threw away every quote that spanned more than one line. A diff
+   * carries a + in column zero of every added line, the model quotes the code
+   * without it, and the newline in the middle is where the substring stops
+   * matching. Single line quotes survived because a substring search still
+   * finds them inside the marked line.
+   *
+   * The gate was doing its job and rejecting what it could not verify. It was
+   * rejecting for a formatting reason, which is worse than useless: it looks
+   * exactly like the model hallucinating.
+   */
+  const diff = [
+    "--- a/action.yml",
+    "+++ b/action.yml",
+    "@@ -74,6 +74,20 @@",
+    "     - name: Decide whether this event may run repository code",
+    "+      id: gate",
+    "+      shell: bash",
+    "+      run: |",
+    "+        case \"${GITHUB_EVENT_NAME:-}\" in",
+    "+          pull_request_target|workflow_run|issue_comment)",
+    "+            echo \"safe=false\" >> \"$GITHUB_OUTPUT\"",
+    "-        old line that went away",
+  ].join("\n");
+
+  const sources = { diff };
+
+  it("grounds a single line quote, as it always did", () => {
+    const c = claim("c1", {
+      state: "proposed",
+      anchors: [{ kind: "diff", ref: "action.yml", span: "id: gate" }],
+    });
+    expect(groundClaim(c, sources).state).toBe("source-grounded");
+  });
+
+  it("grounds a quote that spans lines, which is what the run lost", () => {
+    const c = claim("c1", {
+      state: "proposed",
+      anchors: [
+        {
+          kind: "diff",
+          ref: "action.yml",
+          span: 'pull_request_target|workflow_run|issue_comment)\n            echo "safe=false" >> "$GITHUB_OUTPUT"',
+        },
+      ],
+    });
+    expect(groundClaim(c, sources).state).toBe("source-grounded");
+  });
+
+  it("grounds a quote that kept the markers, since a model may copy them", () => {
+    const c = claim("c1", {
+      state: "proposed",
+      anchors: [
+        { kind: "diff", ref: "action.yml", span: '+      id: gate\n+      shell: bash' },
+      ],
+    });
+    expect(groundClaim(c, sources).state).toBe("source-grounded");
+  });
+
+  it("grounds a quote from a removed line", () => {
+    const c = claim("c1", {
+      state: "proposed",
+      anchors: [{ kind: "diff", ref: "action.yml", span: "old line that went away" }],
+    });
+    expect(groundClaim(c, sources).state).toBe("source-grounded");
+  });
+
+  it("still refuses a quote nobody wrote", () => {
+    const c = claim("c1", {
+      state: "proposed",
+      modelConfidence: 1,
+      anchors: [
+        {
+          kind: "diff",
+          ref: "action.yml",
+          span: 'pull_request_target)\n            echo "safe=true"',
+        },
+      ],
+    });
+    expect(groundClaim(c, sources).state).toBe("ambiguous");
+  });
+
+  it("refuses a span that appears in neither the raw diff nor the stripped code", () => {
+    // The point of stripping is to see the code as written. It must not invent
+    // text: a quote that is in no line, marked or unmarked, stays ambiguous.
+    const c = claim("c1", {
+      state: "proposed",
+      anchors: [{ kind: "diff", ref: "action.yml", span: "echo \"safe=maybe\"" }],
+    });
+    expect(groundClaim(c, sources).state).toBe("ambiguous");
+  });
+});
