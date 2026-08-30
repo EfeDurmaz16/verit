@@ -9,6 +9,8 @@ import {
 } from "@verit/application";
 import type { DifferentialReviewDeps, ProbeExecution } from "@verit/application";
 import { runDifferentialIsolated } from "@verit/adapter-prove";
+import { makeTreeSitterParser } from "@verit/adapter-treesitter";
+import { Effect } from "effect";
 import type { CorpusStore } from "@verit/ports";
 import { laneClientFor, laneConfigFromEnv, runClaimPass, runProbePass, toProbeSpec } from "@verit/lane";
 
@@ -25,6 +27,9 @@ import { laneClientFor, laneConfigFromEnv, runClaimPass, runProbePass, toProbeSp
 const exec = promisify(execFile);
 const GIT_TIMEOUT_MS = 60_000;
 const GIT_BUFFER = 16 * 1024 * 1024;
+/** Ceilings on the index. A slice is context, not a reason to read the repo. */
+const MAX_INDEXED_FILES = 400;
+const MAX_INDEXED_BYTES = 400_000;
 
 const git = async (args: readonly string[], cwd: string): Promise<string | null> => {
   try {
@@ -130,6 +135,49 @@ export const makeDifferentialDeps = (input: DifferentialCliDeps): DifferentialRe
       // `git show` rather than the working tree: the bytes that belong to the
       // head commit, not whatever a previous step left on disk.
       return git(["show", `${input.headSha}:${path}`], input.repoDir);
+    },
+
+    /**
+     * Symbols and imports for the files a slice can reach.
+     *
+     * Two phases, because parsing a repository to answer a question about six
+     * files is the wrong trade. First the files the claims name. Then the ones
+     * that mention them, found with a literal search rather than a parse, and
+     * only those get parsed.
+     */
+    buildIndex: async ({ focusPaths }) => {
+      const parser = makeTreeSitterParser();
+      const stems = [
+        ...new Set(
+          focusPaths
+            .map((p) => (p.split("/").pop() ?? p).replace(/\.[^.]+$/, ""))
+            .filter((x) => x !== ""),
+        ),
+      ];
+      const candidates = new Set<string>(focusPaths);
+      for (const stem of stems) {
+        // -F: the stem is a literal, not a pattern. A file name with a dot or a
+        // dash would otherwise quietly become a wildcard.
+        const hits = await git(["grep", "-l", "-F", "--", stem, input.headSha], input.repoDir);
+        if (hits === null) continue;
+        for (const line of hits.split("\n")) {
+          // `git grep <rev>` prefixes each path with the revision.
+          const path = line.includes(":") ? line.slice(line.indexOf(":") + 1) : line;
+          if (path !== "" && candidates.size < MAX_INDEXED_FILES) candidates.add(path);
+        }
+      }
+
+      const files = [];
+      for (const path of candidates) {
+        const source = await git(["show", `${input.headSha}:${path}`], input.repoDir);
+        if (source === null || source.length > MAX_INDEXED_BYTES) continue;
+        const symbols = await Effect.runPromise(
+          Effect.either(parser.extractSymbols(path, source)),
+        );
+        if (symbols._tag === "Left") continue;
+        files.push({ path, symbols: [...symbols.right] });
+      }
+      return { files };
     },
 
     execute: async ({ probe, policy, runsPerSide, prepare }): Promise<ProbeExecution> => {

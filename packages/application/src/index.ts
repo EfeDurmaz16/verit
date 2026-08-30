@@ -19,3 +19,4 @@ export * from "./claim-graph";
 export * from "./artifact-capability";
 export * from "./managed-execution";
 export * from "./differential-review";
+export * from "./code-slice";
