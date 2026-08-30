@@ -4,7 +4,17 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { Effect } from "effect";
-import { makeSqliteDocumentStore, makeSqliteStores } from "./index";
+import {
+  normalizeDecision,
+  normalizeExecutionMemory,
+  normalizeOutcome,
+} from "@verit/domain";
+import {
+  makeSqliteCorpusStore,
+  makeSqliteDocumentStore,
+  makeSqliteStores,
+  migrateSqlite,
+} from "./index";
 
 describe("sqlite document store", () => {
   it("persists run + understanding", async () => {
@@ -134,5 +144,104 @@ describe("sqlite session store", () => {
     expect(latest?.id).toBe("wr:2");
     expect(latest?.status).toBe("done");
     expect(latest?.reviewRunId).toBe("run:abc");
+  });
+});
+
+describe("the corpus store remembers facts and forgets on request", () => {
+  const AT = "2026-08-30T00:00:00.000Z";
+  const open = () => {
+    const db = new DatabaseSync(":memory:");
+    migrateSqlite(db);
+    return { db, corpus: makeSqliteCorpusStore(db) };
+  };
+
+  it("recalls the last install that worked for a dependency set", async () => {
+    const { corpus } = open();
+    await Effect.runPromise(
+      corpus.recordExecutionMemory(
+        normalizeExecutionMemory({
+          repoId: "r1",
+          dependencyDigest: "dep-a",
+          installCommand: "pnpm install --frozen-lockfile",
+          installOutcome: "ok",
+          installMillis: 4000,
+          observedAt: AT,
+        }),
+      ),
+    );
+    await Effect.runPromise(
+      corpus.recordExecutionMemory(
+        normalizeExecutionMemory({
+          repoId: "r1",
+          dependencyDigest: "dep-a",
+          installCommand: "npm ci",
+          installOutcome: "failed",
+          observedAt: "2026-08-31T00:00:00.000Z",
+        }),
+      ),
+    );
+    const found = await Effect.runPromise(corpus.lastGoodInstall("r1", "dep-a"));
+    expect(found?.installCommand).toBe("pnpm install --frozen-lockfile");
+  });
+
+  it("returns nothing for a dependency set it has never seen", async () => {
+    const { corpus } = open();
+    expect(await Effect.runPromise(corpus.lastGoodInstall("r1", "unknown"))).toBeNull();
+  });
+
+  it("counts how often a probe disagreed with itself", async () => {
+    const { corpus } = open();
+    const record = (stable: boolean, at: string) =>
+      corpus.recordOutcome(
+        normalizeOutcome({
+          repoId: "r1",
+          probeHash: "h1",
+          probeOrigin: "repo-native",
+          baseState: "pass",
+          headState: "fail",
+          classification: stable ? "regression" : "inconclusive",
+          runsPerSide: 2,
+          stable,
+          observedAt: at,
+        }),
+      );
+    await Effect.runPromise(record(true, AT));
+    await Effect.runPromise(record(false, "2026-08-31T00:00:00.000Z"));
+    await Effect.runPromise(record(false, "2026-09-01T00:00:00.000Z"));
+    expect(await Effect.runPromise(corpus.probeStability("r1", "h1"))).toEqual({
+      runs: 3,
+      unstable: 2,
+    });
+  });
+
+  it("exports and then deletes everything for one repository, and nothing else", async () => {
+    const { corpus } = open();
+    await Effect.runPromise(
+      corpus.recordExecutionMemory(normalizeExecutionMemory({ repoId: "r1", observedAt: AT })),
+    );
+    await Effect.runPromise(
+      corpus.recordExecutionMemory(normalizeExecutionMemory({ repoId: "r2", observedAt: AT })),
+    );
+    await Effect.runPromise(
+      corpus.recordDecision(
+        normalizeDecision({
+          repoId: "r1",
+          probeHash: "h1",
+          classification: "regression",
+          disposition: "accepted",
+          readiness: "proof-ready",
+          observedAt: AT,
+        }),
+      ),
+    );
+
+    const exported = await Effect.runPromise(corpus.exportRepo("r1"));
+    expect(exported.execution).toHaveLength(1);
+    expect(exported.decisions[0]?.disposition).toBe("accepted");
+
+    const removed = await Effect.runPromise(corpus.deleteRepo("r1"));
+    expect(removed).toBe(2);
+    expect((await Effect.runPromise(corpus.exportRepo("r1"))).execution).toHaveLength(0);
+    expect((await Effect.runPromise(corpus.exportRepo("r2"))).execution).toHaveLength(1);
   });
 });
