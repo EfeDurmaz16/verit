@@ -60,6 +60,7 @@ inputs onto these. A non-empty input wins over the matching env var.
 | `VERIT_FAIL_ON` | 0.1.0 | - | `failure` gates the Check. `never` keeps the neutral default |
 | `VERIT_CHECK_DRY_RUN` | 0.1.0 | - | `1` prints the Check body instead of posting it |
 | `VERIT_FORCE_NEUTRAL` | 0.1.0 | - | Incident freeze. Any non-empty reason forces every Check to neutral |
+| `VERIT_REFUSAL_REASON` | 0.6.0 | - | Why verit declined a privileged event. Set by the action gate, rendered in the neutral Check |
 | `VERIT_LANE_PROVIDER` | 0.1.0 | - | `anthropic` or `openai-compat` turns on the built-in HTTP lane |
 | `VERIT_LANE_TIER` | 0.4.0 | - | Quality tier: `fast`, `balanced`, or `max`. Default `balanced`. Maps to models, all swappable per tier |
 | `VERIT_LANE_MODE` | 0.5.0 | - | What the lane produces: `understanding`, `review`, or `both`. Default `both`. `review` and `both` add a skeptic-verified finding pass. Findings never change the Check conclusion |
