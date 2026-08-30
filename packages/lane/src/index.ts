@@ -254,3 +254,5 @@ export type {
   LaneTurn,
   LaneUsage,
 } from "./client";
+export { CLAIMS_TOOL_NAME, claimsJsonSchema, needsAuthorClaim, renderClaimSources, runClaimPass } from "./claims";
+export type { ClaimSubmission } from "./claims";
