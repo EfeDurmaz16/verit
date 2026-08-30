@@ -1,5 +1,8 @@
 import type {
+  DecisionRecord,
+  ExecutionMemoryRecord,
   FileNode,
+  OutcomeRecord,
   IndexChunk,
   PREdge,
   ProofArtifact,
@@ -62,6 +65,41 @@ export interface GraphStore {
   readonly getPullRequest: (id: string) => Effect.Effect<PullRequest | null, StoreError>;
   readonly listPullRequests: (repoId: string) => Effect.Effect<readonly PullRequest[], StoreError>;
   readonly linkRunToPr: (runId: string, prId: string) => Effect.Effect<void, StoreError>;
+}
+
+/**
+ * What verit remembers across runs.
+ *
+ * Only normalized, non-sensitive facts reach here: the shapes in
+ * @verit/domain/corpus have no field a log line or a line of code could be
+ * dropped into, and `normalizeForCorpus` is the only way to build one. Consent
+ * is decided before a call is made, never inside the store.
+ */
+export interface CorpusStore {
+  readonly recordExecutionMemory: (r: ExecutionMemoryRecord) => Effect.Effect<void, StoreError>;
+  readonly recordOutcome: (r: OutcomeRecord) => Effect.Effect<void, StoreError>;
+  readonly recordDecision: (r: DecisionRecord) => Effect.Effect<void, StoreError>;
+  /** The most recent install that worked for this repository, if any. */
+  readonly lastGoodInstall: (
+    repoId: string,
+    dependencyDigest: string,
+  ) => Effect.Effect<ExecutionMemoryRecord | null, StoreError>;
+  /** How often this probe disagreed with itself, over its recorded history. */
+  readonly probeStability: (
+    repoId: string,
+    probeHash: string,
+  ) => Effect.Effect<{ runs: number; unstable: number }, StoreError>;
+  /** Everything stored for one repository, for an export or a deletion. */
+  readonly exportRepo: (repoId: string) => Effect.Effect<
+    {
+      execution: readonly ExecutionMemoryRecord[];
+      outcomes: readonly OutcomeRecord[];
+      decisions: readonly DecisionRecord[];
+    },
+    StoreError
+  >;
+  /** Customer controlled deletion. Removes every record for the repository. */
+  readonly deleteRepo: (repoId: string) => Effect.Effect<number, StoreError>;
 }
 
 export interface ParserPort {

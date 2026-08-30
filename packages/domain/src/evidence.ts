@@ -218,6 +218,12 @@ export const ProbeResult = S.Struct({
   head: SideOutcome,
   classification: Classification,
   grade: S.NullOr(EvidenceGrade),
+  /**
+   * The gates this result cleared, carried so the bundle can be checked by
+   * someone who did not run it. Without them a reader has to take the grade on
+   * trust, which is the opposite of the point.
+   */
+  gates: IntegrityGates,
   /** Ids of the independent results that agree. Empty means single-probe. */
   corroboratedBy: S.optional(S.Array(S.String)),
   disposition: MaintainerDisposition,
@@ -569,3 +575,102 @@ export const groundClaims = (
   claims: readonly Claim[],
   sources: ClaimSources,
 ): readonly Claim[] => claims.map((c) => groundClaim(c, sources));
+
+/* -------------------------------------------------------------------------- */
+/* Bundle verification. A bundle states its own conclusions; this recomputes    */
+/* them, so nothing a producer wrote has to be taken on trust.                  */
+/* -------------------------------------------------------------------------- */
+
+/** One thing a bundle claims that its own contents do not support. */
+export interface BundleProblem {
+  readonly where: string;
+  readonly claimed: string;
+  readonly recomputed: string;
+}
+
+/** Readiness recomputed from the bundle alone, ignoring what it says it is. */
+export const recomputeReadiness = (
+  bundle: Pick<EvidenceBundle, "claims" | "coverage" | "results" | "reproduction">,
+  requiredGrade?: EvidenceGrade,
+): Readiness =>
+  readinessOf({
+    claims: bundle.claims,
+    coverage: bundle.coverage,
+    results: bundle.results,
+    outcomesStable: bundle.results.every((r) => isStable(r.base) && isStable(r.head)),
+    reproductionComplete:
+      bundle.reproduction.environmentDigest !== "" &&
+      bundle.reproduction.imageDigest !== "" &&
+      bundle.reproduction.probeHashes.length > 0 &&
+      bundle.reproduction.replayCommand !== "",
+    executionIntegrityClean: bundle.results.every(
+      (r) => r.gates.jobSpecVerified && r.gates.probeHeldOutside && r.gates.sameProbeHashBothSides,
+    ),
+    ...(requiredGrade !== undefined ? { requiredGrade } : {}),
+  });
+
+/**
+ * Recompute every conclusion a bundle carries and report what does not match.
+ *
+ * Readiness, classification, grade and coverage are all derived, so a bundle
+ * that arrived from somewhere else can be checked rather than believed. An
+ * empty list means the bundle's own numbers reproduce from its own contents.
+ */
+export const verifyBundle = (
+  bundle: EvidenceBundle,
+  requiredGrade?: EvidenceGrade,
+): readonly BundleProblem[] => {
+  const problems: BundleProblem[] = [];
+
+  for (const r of bundle.results) {
+    const precondition = r.base.state === "absent-by-design" ? { probeId: r.probeId, baseAbsenceProven: r.gates.preconditionChecked } : null;
+    const again = classifyResult({ base: r.base, head: r.head, precondition });
+    if (again.classification !== r.classification) {
+      problems.push({
+        where: `result ${r.probeId} classification`,
+        claimed: r.classification,
+        recomputed: again.classification,
+      });
+    }
+    if (r.classification === "inconclusive" && (r.inconclusiveReason ?? "") === "") {
+      problems.push({
+        where: `result ${r.probeId} inconclusiveReason`,
+        claimed: "(missing)",
+        recomputed: "an inconclusive result must say why",
+      });
+    }
+    const grade = gradeResult({ gates: r.gates, corroboratedBy: r.corroboratedBy ?? [] });
+    if (grade !== r.grade) {
+      problems.push({
+        where: `result ${r.probeId} grade`,
+        claimed: String(r.grade),
+        recomputed: String(grade),
+      });
+    }
+  }
+
+  for (const claim of bundle.claims) {
+    const again = coverageForClaim({ claim, edges: bundle.edges, results: bundle.results });
+    const claimed = bundle.coverage.find((c) => c.claimId === claim.id);
+    if (claimed === undefined) {
+      problems.push({
+        where: `claim ${claim.id} coverage`,
+        claimed: "(missing)",
+        recomputed: again.status,
+      });
+    } else if (claimed.status !== again.status) {
+      problems.push({
+        where: `claim ${claim.id} coverage`,
+        claimed: claimed.status,
+        recomputed: again.status,
+      });
+    }
+  }
+
+  const readiness = recomputeReadiness(bundle, requiredGrade);
+  if (readiness !== bundle.readiness) {
+    problems.push({ where: "readiness", claimed: bundle.readiness, recomputed: readiness });
+  }
+
+  return problems;
+};

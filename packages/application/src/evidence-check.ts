@@ -78,24 +78,23 @@ const resultFor = (run: ProbeRun, reproductionComplete: boolean, jobSpecVerified
     precondition: run.precondition ?? null,
   });
   const corroboratedBy = run.corroboratedBy ?? [];
-  const grade = gradeResult({
-    gates: {
-      probeHeldOutside: run.probeHeldOutside,
-      sameProbeHashBothSides: run.sameProbeHashBothSides,
-      stabilityChecked: isStable(run.base) && isStable(run.head),
-      preconditionChecked:
-        run.base.state !== "absent-by-design" || (run.precondition?.baseAbsenceProven ?? false),
-      reproductionComplete,
-      jobSpecVerified,
-    },
-    corroboratedBy,
-  });
+  const gates = {
+    probeHeldOutside: run.probeHeldOutside,
+    sameProbeHashBothSides: run.sameProbeHashBothSides,
+    stabilityChecked: isStable(run.base) && isStable(run.head),
+    preconditionChecked:
+      run.base.state !== "absent-by-design" || (run.precondition?.baseAbsenceProven ?? false),
+    reproductionComplete,
+    jobSpecVerified,
+  };
+  const grade = gradeResult({ gates, corroboratedBy });
   return {
     probeId: run.probe.id,
     base: run.base,
     head: run.head,
     classification: classified.classification,
     grade,
+    gates,
     ...(corroboratedBy.length > 0 ? { corroboratedBy } : {}),
     disposition: run.disposition ?? "unreviewed",
     ...(classified.inconclusiveReason !== undefined

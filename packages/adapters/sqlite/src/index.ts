@@ -4,12 +4,15 @@ import { DatabaseSync } from "node:sqlite";
 import { Effect, Either } from "effect";
 import { decodeUnderstanding } from "@verit/domain";
 import type {
+  DecisionRecord,
+  ExecutionMemoryRecord,
   IndexChunk,
+  OutcomeRecord,
   ProofArtifact,
   ReviewRun,
   WorkspaceRun,
 } from "@verit/domain";
-import type { DocumentStore, SessionStore } from "@verit/ports";
+import type { CorpusStore, DocumentStore, SessionStore } from "@verit/ports";
 import { StoreError } from "@verit/ports";
 
 export const migrateSqlite = (db: DatabaseSync): void => {
@@ -24,6 +27,37 @@ export const migrateSqlite = (db: DatabaseSync): void => {
       focus TEXT,
       created_at TEXT NOT NULL,
       understanding_json TEXT
+    );
+    CREATE TABLE IF NOT EXISTS corpus_execution (
+      repo_id TEXT NOT NULL,
+      toolchain_digest TEXT NOT NULL,
+      dependency_digest TEXT NOT NULL,
+      install_command TEXT NOT NULL,
+      install_outcome TEXT NOT NULL,
+      install_millis INTEGER NOT NULL,
+      policy_digest TEXT NOT NULL,
+      observed_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS corpus_outcomes (
+      repo_id TEXT NOT NULL,
+      probe_hash TEXT NOT NULL,
+      probe_origin TEXT NOT NULL,
+      base_state TEXT NOT NULL,
+      head_state TEXT NOT NULL,
+      classification TEXT NOT NULL,
+      grade TEXT,
+      runs_per_side INTEGER NOT NULL,
+      stable INTEGER NOT NULL,
+      observed_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS corpus_decisions (
+      repo_id TEXT NOT NULL,
+      probe_hash TEXT NOT NULL,
+      classification TEXT NOT NULL,
+      grade TEXT,
+      disposition TEXT NOT NULL,
+      readiness TEXT NOT NULL,
+      observed_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS proof_artifacts (
       id TEXT PRIMARY KEY,
@@ -322,3 +356,173 @@ const documentStoreOn = (db: DatabaseSync): DocumentStore => {
       }),
   };
 };
+
+/**
+ * The corpus store on SQLite.
+ *
+ * Append only by design: a record is a thing that happened, and rewriting
+ * history is how a calibration corpus starts lying to itself. Deletion is the
+ * one exception and it is whole-repository, because a customer asking to be
+ * forgotten means all of it.
+ */
+export const makeSqliteCorpusStore = (db: DatabaseSync): CorpusStore => {
+  const attempt = <A>(label: string, f: () => A) =>
+    Effect.try({ try: f, catch: (e) => new StoreError(label, e) });
+
+  return {
+    recordExecutionMemory: (r) =>
+      attempt("corpus recordExecutionMemory", () => {
+        db.prepare(
+          `INSERT INTO corpus_execution
+             (repo_id, toolchain_digest, dependency_digest, install_command,
+              install_outcome, install_millis, policy_digest, observed_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).run(
+          r.repoId,
+          r.toolchainDigest,
+          r.dependencyDigest,
+          r.installCommand,
+          r.installOutcome,
+          r.installMillis,
+          r.policyDigest,
+          r.observedAt,
+        );
+      }),
+
+    recordOutcome: (r) =>
+      attempt("corpus recordOutcome", () => {
+        db.prepare(
+          `INSERT INTO corpus_outcomes
+             (repo_id, probe_hash, probe_origin, base_state, head_state,
+              classification, grade, runs_per_side, stable, observed_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).run(
+          r.repoId,
+          r.probeHash,
+          r.probeOrigin,
+          r.baseState,
+          r.headState,
+          r.classification,
+          r.grade,
+          r.runsPerSide,
+          r.stable ? 1 : 0,
+          r.observedAt,
+        );
+      }),
+
+    recordDecision: (r) =>
+      attempt("corpus recordDecision", () => {
+        db.prepare(
+          `INSERT INTO corpus_decisions
+             (repo_id, probe_hash, classification, grade, disposition, readiness, observed_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        ).run(
+          r.repoId,
+          r.probeHash,
+          r.classification,
+          r.grade,
+          r.disposition,
+          r.readiness,
+          r.observedAt,
+        );
+      }),
+
+    lastGoodInstall: (repoId, dependencyDigest) =>
+      attempt("corpus lastGoodInstall", () => {
+        const row = db
+          .prepare(
+            `SELECT * FROM corpus_execution
+             WHERE repo_id = ? AND dependency_digest = ? AND install_outcome = 'ok'
+             ORDER BY observed_at DESC LIMIT 1`,
+          )
+          .get(repoId, dependencyDigest) as Record<string, unknown> | undefined;
+        return row === undefined ? null : rowToExecution(row);
+      }),
+
+    probeStability: (repoId, probeHash) =>
+      attempt("corpus probeStability", () => {
+        const row = db
+          .prepare(
+            `SELECT COUNT(*) AS runs, SUM(CASE WHEN stable = 0 THEN 1 ELSE 0 END) AS unstable
+             FROM corpus_outcomes WHERE repo_id = ? AND probe_hash = ?`,
+          )
+          .get(repoId, probeHash) as { runs?: number; unstable?: number } | undefined;
+        return { runs: Number(row?.runs ?? 0), unstable: Number(row?.unstable ?? 0) };
+      }),
+
+    exportRepo: (repoId) =>
+      attempt("corpus exportRepo", () => ({
+        execution: (
+          db.prepare("SELECT * FROM corpus_execution WHERE repo_id = ?").all(repoId) as Record<
+            string,
+            unknown
+          >[]
+        ).map(rowToExecution),
+        outcomes: (
+          db.prepare("SELECT * FROM corpus_outcomes WHERE repo_id = ?").all(repoId) as Record<
+            string,
+            unknown
+          >[]
+        ).map(rowToOutcome),
+        decisions: (
+          db.prepare("SELECT * FROM corpus_decisions WHERE repo_id = ?").all(repoId) as Record<
+            string,
+            unknown
+          >[]
+        ).map(rowToDecision),
+      })),
+
+    deleteRepo: (repoId) =>
+      attempt("corpus deleteRepo", () => {
+        let removed = 0;
+        for (const table of ["corpus_execution", "corpus_outcomes", "corpus_decisions"]) {
+          const out = db.prepare(`DELETE FROM ${table} WHERE repo_id = ?`).run(repoId);
+          removed += Number(out.changes ?? 0);
+        }
+        return removed;
+      }),
+  };
+};
+
+const str = (v: unknown): string => (typeof v === "string" ? v : "");
+
+const rowToExecution = (r: Record<string, unknown>): ExecutionMemoryRecord => ({
+  repoId: str(r["repo_id"]),
+  toolchainDigest: str(r["toolchain_digest"]),
+  dependencyDigest: str(r["dependency_digest"]),
+  installCommand: str(r["install_command"]),
+  installOutcome: (str(r["install_outcome"]) || "skipped") as "ok" | "failed" | "skipped",
+  installMillis: Number(r["install_millis"] ?? 0),
+  policyDigest: str(r["policy_digest"]),
+  observedAt: str(r["observed_at"]),
+});
+
+const rowToOutcome = (r: Record<string, unknown>): OutcomeRecord => ({
+  repoId: str(r["repo_id"]),
+  probeHash: str(r["probe_hash"]),
+  probeOrigin: (str(r["probe_origin"]) || "generated") as
+    | "repo-native"
+    | "generated"
+    | "maintainer-supplied",
+  baseState: str(r["base_state"]),
+  headState: str(r["head_state"]),
+  classification: str(r["classification"]),
+  grade: r["grade"] === null || r["grade"] === undefined ? null : str(r["grade"]),
+  runsPerSide: Number(r["runs_per_side"] ?? 1),
+  stable: Number(r["stable"] ?? 0) === 1,
+  observedAt: str(r["observed_at"]),
+});
+
+const rowToDecision = (r: Record<string, unknown>): DecisionRecord => ({
+  repoId: str(r["repo_id"]),
+  probeHash: str(r["probe_hash"]),
+  classification: str(r["classification"]),
+  grade: r["grade"] === null || r["grade"] === undefined ? null : str(r["grade"]),
+  disposition: (str(r["disposition"]) || "unreviewed") as
+    | "accepted"
+    | "rejected"
+    | "needs-work"
+    | "unreviewed",
+  readiness: str(r["readiness"]),
+  observedAt: str(r["observed_at"]),
+});
