@@ -60,7 +60,6 @@ const BEHAVIOR_SIGNALS: readonly RegExp[] = [
   /\brequire\s*\(\s*["'`]\.{1,2}\//,
   /\bimport\s+.*\s+from\s+["'`]\.{1,2}\//,
   /\bfetch\s*\(/,
-  /\bprocess\.exitCode\b/,
 ];
 
 /** Opening a file and looking at the characters in it is reading, not running. */
@@ -101,15 +100,6 @@ export const classifyAssertion = (source: string): AssertionKind => {
   if (text === 0) return "behavior";
   return "mixed";
 };
-
-/**
- * True when a result rests only on reading files.
- *
- * Kept as its own predicate rather than folded into the grade, because a text
- * check is not weakly corroborated, it is answering a different question. A
- * reader deserves to be told which one they are looking at.
- */
-export const readsRatherThanRuns = (kind: AssertionKind): boolean => kind === "text";
 
 /** The line the evidence body uses, in the reader's language rather than ours. */
 export const describeAssertion = (kind: AssertionKind): string => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyAssertion, describeAssertion, readsRatherThanRuns } from "./assertion-kind";
+import { classifyAssertion, describeAssertion } from "./assertion-kind";
 
 /*
  * The fixtures are probe shapes, not toys. Each one is close to something a
@@ -41,7 +41,6 @@ const yml = readFileSync("action.yml", "utf8");
 process.exit(yml.includes("id: gate") ? 0 : 1);
 `;
     expect(classifyAssertion(src)).toBe("text");
-    expect(readsRatherThanRuns(classifyAssertion(src))).toBe(true);
   });
 
   it("catches a regex over a file", () => {
@@ -61,10 +60,8 @@ import { spawnSync } from "node:child_process";
 const r = spawnSync("bash", ["gate.sh"], { encoding: "utf8" });
 process.exit(r.stdout.includes("safe=false") ? 0 : 1);
 `;
-    const kind = classifyAssertion(src);
-    expect(kind).toBe("mixed");
     // the code under test ran, so this is not the shape we are warning about
-    expect(readsRatherThanRuns(kind)).toBe(false);
+    expect(classifyAssertion(src)).toBe("mixed");
   });
 });
 
@@ -101,9 +98,7 @@ awk '/id: gate/,/^$/' action.yml > /tmp/gate.sh
 grep -m1 '^safe=' "$out"`;
 
   it("does not call a script that runs the extracted code unknown", () => {
-    const kind = classifyAssertion(extractsAndRuns);
-    expect(kind).toBe("mixed");
-    expect(readsRatherThanRuns(kind)).toBe(false);
+    expect(classifyAssertion(extractsAndRuns)).toBe("mixed");
   });
 
   it("still calls a pure grep over a file text", () => {
