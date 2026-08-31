@@ -10,9 +10,9 @@ import type {
 import { describe, expect, it } from "vitest";
 import { behaviorProofCheck } from "./check";
 import {
-  READINESS_LABELS,
-  type ProbeRun,
   assembleEvidence,
+  type ProbeRun,
+  READINESS_LABELS,
   readinessLabel,
   renderEvidenceSection,
 } from "./evidence-check";
@@ -283,5 +283,56 @@ describe("the evidence section is body text and nothing more", () => {
     const a = behaviorProofCheck({ understanding, outcome: passingProof, evidenceSection: "" });
     const b = behaviorProofCheck({ understanding, outcome: passingProof });
     expect(a.summary).toBe(b.summary);
+  });
+});
+
+describe("the body says what the probe was looking at", () => {
+  const withSource = (source: string) =>
+    assembleEvidence({
+      pullRequest: "EfeDurmaz16/verit#1",
+      claims: [claim("c1")],
+      edges: [{ claimId: "c1", probeId: "p1", role: "primary" }],
+      runs: [{ ...run(), probe: { ...probe("p1"), source } }],
+      policy: { orchestration: "two worktrees", isolation: "ephemeral", digest: "policy-1" },
+      jobSpec: { specHash: "spec", signature: "sig", probeHashes: ["hash-p1"] },
+      jobSpecVerified: true,
+      sides,
+      reproduction: manifest,
+    });
+
+  it("warns when a fix-confirmed rests on reading a file", () => {
+    const bundle = withSource(
+      'import {readFileSync} from "node:fs";\nprocess.exit(readFileSync("action.yml","utf8").includes("id: gate") ? 0 : 1);',
+    );
+    const section = renderEvidenceSection(bundle);
+    expect(section).toContain("read the file rather than running it");
+    expect(section).toContain("not that behavior did");
+  });
+
+  it("says plainly when the probe ran the code", () => {
+    const bundle = withSource(
+      'import {spawnSync} from "node:child_process";\nconst r = spawnSync("node", ["cli.js"]);\nprocess.exit(r.status === 0 ? 0 : 1);',
+    );
+    expect(renderEvidenceSection(bundle)).toContain("ran the code");
+  });
+
+  it("does not demote a probe that ran something and then read its output", () => {
+    const bundle = withSource(
+      'import {spawnSync} from "node:child_process";\nconst r = spawnSync("bash",["g.sh"],{encoding:"utf8"});\nprocess.exit(r.stdout.includes("safe=false") ? 0 : 1);',
+    );
+    const section = renderEvidenceSection(bundle);
+    expect(section).toContain("ran the code and read its output");
+    expect(section).not.toContain("not that behavior did");
+  });
+
+  it("changes nothing that was measured", () => {
+    // reading a file changes what the reader is told, never what was measured:
+    // classification comes from two outcomes and the grade from corroboration,
+    // and neither of those knows what the probe was looking at
+    const reading = withSource('import {readFileSync} from "node:fs"; readFileSync("x").includes("y");');
+    const running = withSource('import {spawnSync} from "node:child_process"; spawnSync("x");');
+    expect(reading.results[0]?.classification).toBe(running.results[0]?.classification);
+    expect(reading.results[0]?.grade).toBe(running.results[0]?.grade);
+    expect(reading.readiness).toBe(running.readiness);
   });
 });

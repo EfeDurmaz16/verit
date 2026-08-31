@@ -1,10 +1,16 @@
 import {
   type Claim,
-  type ClaimProbeEdge,
   type ClaimCoverage,
+  type ClaimProbeEdge,
+  classifyAssertion,
+  classifyResult,
+  coverageForClaim,
+  describeAssertion,
   type EvidenceBundle,
   type EvidenceGrade,
   type ExecutionPolicy,
+  gradeResult,
+  isStable,
   type JobSpec,
   type MaintainerDisposition,
   type PreconditionEvidence,
@@ -12,13 +18,9 @@ import {
   type ProbeResult,
   type Readiness,
   type ReproductionManifest,
+  readinessOf,
   type SideOutcome,
   type SideRecord,
-  classifyResult,
-  coverageForClaim,
-  gradeResult,
-  isStable,
-  readinessOf,
 } from "@verit/domain";
 
 /*
@@ -220,6 +222,15 @@ export const renderEvidenceSection = (bundle: EvidenceBundle): string => {
       const what = CLASSIFICATION_LABEL[r.classification] ?? r.classification;
       const grade = r.grade === null ? "not graded" : r.grade;
       lines.push(`- \`${r.probeId}\`: ${r.classification}, ${what}. Evidence ${grade}.`);
+      // What the probe was looking at is a separate fact from what it found.
+      // A file read that flips between two commits is a true result about a
+      // question the diff already answered, and it should not arrive looking
+      // like the other kind.
+      const probe = bundle.probes.find((p) => p.id === r.probeId);
+      if (probe !== undefined) {
+        const kind = classifyAssertion(probe.source);
+        lines.push(`  The probe ${describeAssertion(kind)}.`);
+      }
       if (r.inconclusiveReason !== undefined) {
         lines.push(`  Why not settled: ${r.inconclusiveReason}`);
       }
