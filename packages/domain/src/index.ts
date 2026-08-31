@@ -478,3 +478,4 @@ export type ReviewSkill = (typeof REVIEW_SKILLS)[number];
 
 export * from "./evidence";
 export * from "./corpus";
+export * from "./assertion-kind";
